@@ -21,6 +21,7 @@
 	import { recargosStore } from '$lib/stores/recargos';
 	import { recursos } from '$lib/stores/recursos';
 	import { recargosApi } from '$lib/api/recargos';
+	import { socketStore, socketUtils } from '$lib/socket';
 	import { toast } from 'svelte-sonner';
 	import {
 		esDomingo,
@@ -82,6 +83,10 @@
 	let selectedRow: string | null = null;
 	let fromServicio = false; // Indica si el recargo viene de un servicio
 	let planillaGenerada = false; // Flag para evitar regenerar automáticamente
+	let planillaGeneracionIntentada = false;
+	let numeroPlanillaAutogenerado: string | null = null;
+	let reservaPlanillaId: string | null = null;
+	let liberacionPendiente: Promise<void> = Promise.resolve();
 
 	// Toggle para mostrar sección de servicio opcional en creación
 	let mostrarServicioInfo = false;
@@ -501,14 +506,12 @@
 		}
 	}
 
-	// Función para obtener el siguiente número de planilla desde el backend
-	// (endpoint ligero: NO trae todos los recargos, solo el campo numero_planilla).
+	// El ID estable permite revalidar la misma reserva sin avanzar el contador.
 	//
 	// Modos:
 	//   - Auto (al abrir modal): respeta lo que el usuario haya tipeado,
 	//     corre una sola vez por sesión del modal.
-	//   - Manual (botón Regenerar): { force: true } siempre sobrescribe,
-	//     esté o no el campo lleno. Es el "retry" manual que pediste.
+	//   - Manual (botón Regenerar): toma un hueco anterior liberado, si existe.
 	async function generarNumeroPlanilla(opts: { force?: boolean } = {}) {
 		if (isGenerandoPlanilla) return; // Evitar múltiples llamadas simultáneas
 
@@ -518,19 +521,34 @@
 			if (formData.tmNumber) return;
 		}
 
+		// Un fallo no debe volver a disparar este bloque reactivo sin límite.
+		// El usuario conserva el botón Regenerar para reintentar explícitamente.
+		if (!opts.force) planillaGeneracionIntentada = true;
 		isGenerandoPlanilla = true;
+		const idReserva = reservaPlanillaId ?? crypto.randomUUID();
+		reservaPlanillaId = idReserva;
+		socketUtils.emit('recargos-planilla:entrar', { reserva_id: idReserva });
 
 		try {
-			const numero = await recargosApi.obtenerSiguienteNumeroPlanilla();
+			await liberacionPendiente;
+			if (!isOpen || reservaPlanillaId !== idReserva) return;
+			const numero = await recargosApi.obtenerSiguienteNumeroPlanilla(idReserva);
+			if (!isOpen || reservaPlanillaId !== idReserva) {
+				void liberarReservaPlanilla(idReserva);
+				return;
+			}
+			const yaEraSuNumero = numero === numeroPlanillaAutogenerado;
 
 			formData.tmNumber = numero;
+			numeroPlanillaAutogenerado = numero;
 			planillaGenerada = true;
 			await tick();
 
 			if (opts.force) {
-				toast.success(`Número regenerado: ${numero}`);
+				toast.success(`${yaEraSuNumero ? 'Número aún disponible' : 'Número asignado'}: ${numero}`);
 			}
 		} catch (error) {
+			if (!isOpen || reservaPlanillaId !== idReserva) return;
 			console.error('Error al generar número de planilla:', error);
 			toast.error(
 				opts.force
@@ -538,8 +556,22 @@
 					: 'No se pudo generar el número. Reintentá o escribilo manualmente.'
 			);
 		} finally {
-			isGenerandoPlanilla = false;
+			if (reservaPlanillaId === idReserva) isGenerandoPlanilla = false;
 		}
+	}
+
+	function liberarReservaPlanilla(id: string) {
+		socketUtils.emit('recargos-planilla:salir', { reserva_id: id });
+		liberacionPendiente = recargosApi.liberarReservaPlanilla(id).catch((error) => {
+			console.warn('No se pudo liberar la reserva; caducará automáticamente.', error);
+		});
+		return liberacionPendiente;
+	}
+
+	function cambiarNumeroPlanillaManualmente() {
+		if (reservaPlanillaId) void liberarReservaPlanilla(reservaPlanillaId);
+		reservaPlanillaId = null;
+		numeroPlanillaAutogenerado = null;
 	}
 
 	// Calcular progreso
@@ -1347,12 +1379,20 @@
 		servicioProposito = 'personal';
 		servicioFechaRealizacion = '';
 		planillaGenerada = false; // Resetear flag para permitir nueva generación
+		planillaGeneracionIntentada = false;
+		numeroPlanillaAutogenerado = null;
+		reservaPlanillaId = null;
 		isGenerandoPlanilla = false; // Resetear loading de planilla
 		lastLoadedRecargoId = null; // Resetear ID del último recargo cargado
 	}
 
 	// Handle submit
 	async function handleSubmit() {
+		if (isGenerandoPlanilla) {
+			toast.info('Espera a que termine la reserva del número de planilla.');
+			return;
+		}
+
 		// Validaciones
 		if (!formData.conductorId || !formData.vehiculoId || !formData.empresaId) {
 			toast.error('Por favor, complete conductor, vehículo y empresa');
@@ -1593,8 +1633,10 @@
 
 	// Handle close
 	function handleClose() {
+		const idReserva = reservaPlanillaId;
 		resetearFormulario();
 		isOpen = false;
+		if (idReserva) void liberarReservaPlanilla(idReserva);
 		dispatch('close');
 	}
 
@@ -1642,13 +1684,47 @@
 		await municipios.cargarTodos();
 	});
 
+	onMount(() => {
+		let estabaConectado = false;
+		const dejarDeEscuchar = socketStore.subscribe(({ connected }) => {
+			if (connected && !estabaConectado && isOpen && !recargoId && reservaPlanillaId) {
+				socketUtils.emit('recargos-planilla:entrar', { reserva_id: reservaPlanillaId });
+				if (planillaGenerada) void generarNumeroPlanilla({ force: true });
+			}
+			estabaConectado = connected;
+		});
+		const latido = setInterval(() => {
+			if (isOpen && !recargoId && reservaPlanillaId) {
+				socketUtils.emit('recargos-planilla:renovar', { reserva_id: reservaPlanillaId });
+			}
+		}, 2 * 60 * 1000);
+		return () => {
+			dejarDeEscuchar();
+			clearInterval(latido);
+			if (reservaPlanillaId) void liberarReservaPlanilla(reservaPlanillaId);
+		};
+	});
+
+	// El padre también puede cerrar el modal sin pasar por handleClose.
+	$: if (!isOpen && reservaPlanillaId) {
+		const idReserva = reservaPlanillaId;
+		reservaPlanillaId = null;
+		void liberarReservaPlanilla(idReserva);
+	}
+
 	// Cargar datos al abrir en modo edición o generar número de planilla en modo creación
 	$: {
 		if (isOpen && recargoId && !isLoadingData && lastLoadedRecargoId !== recargoId) {
 			editMode = true;
 			cargarDatosRecargo(recargoId);
 		} else if (isOpen && recargoId && isLoadingData) {
-		} else if (isOpen && !recargoId && !planillaGenerada && !isGenerandoPlanilla) {
+		} else if (
+			isOpen &&
+			!recargoId &&
+			!planillaGenerada &&
+			!planillaGeneracionIntentada &&
+			!isGenerandoPlanilla
+		) {
 			editMode = false;
 			// Auto-generar número de planilla para nuevo recargo
 			generarNumeroPlanilla();
@@ -1985,7 +2061,6 @@
 						<Campo
 							id="tm-number"
 							label="Número de Planilla"
-							ayuda="Se genera automáticamente; puede escribirlo o regenerarlo."
 						>
 							<div class="rf-fila-control">
 								<div class="rf-buscador">
@@ -1993,15 +2068,10 @@
 										id="tm-number"
 										type="text"
 										bind:value={formData.tmNumber}
-										placeholder={isGenerandoPlanilla ? 'Generando...' : 'TM-0001'}
+										oninput={cambiarNumeroPlanillaManualmente}
 										class="rf-input rf-input-planilla"
 										class:lleno={!!formData.tmNumber}
 									/>
-									{#if isGenerandoPlanilla}
-										<span class="rf-input-spinner" aria-hidden="true">
-											<LoaderCircle class="rf-spin" size={18} />
-										</span>
-									{/if}
 								</div>
 								<button
 									type="button"
@@ -2010,7 +2080,7 @@
 									aria-label="Regenerar número de planilla"
 									title={isGenerandoPlanilla
 										? 'Generando...'
-										: 'Regenerar número de planilla (consulta el siguiente disponible en el backend)'}
+										: 'Tomar el primer consecutivo disponible si se liberó uno anterior'}
 									class="btn-secondary rf-btn-regenerar"
 								>
 									{#if isGenerandoPlanilla}
@@ -3261,7 +3331,6 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.rf-input-planilla {
-		padding-right: 40px;
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 	}
@@ -3269,15 +3338,6 @@
 		border-color: color-mix(in srgb, var(--accion) 45%, var(--border-default));
 		background: color-mix(in srgb, var(--accion) 5%, var(--bg-surface));
 	}
-	.rf-input-spinner {
-		position: absolute;
-		top: 50%;
-		right: 12px;
-		display: grid;
-		transform: translateY(-50%);
-		color: var(--accion);
-	}
-
 	.rf-fila-control {
 		display: flex;
 		align-items: flex-start;

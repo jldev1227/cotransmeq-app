@@ -22,7 +22,10 @@ export default defineConfig({
 			// doble mínimo para poder probar módulos de `$lib` que lo importan
 			// —el cliente de socket, sin ir más lejos— en vez de dejarlos sin
 			// test por una cuestión de fontanería.
-			'$app/environment': fileURLToPath(new URL('./tests/dobles/app-environment.ts', import.meta.url))
+			'$app/environment': fileURLToPath(
+				new URL('./tests/dobles/app-environment.ts', import.meta.url)
+			),
+			'$app/navigation': fileURLToPath(new URL('./tests/dobles/app-navigation.ts', import.meta.url))
 		}
 	},
 	test: {

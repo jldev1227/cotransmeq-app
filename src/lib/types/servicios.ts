@@ -49,6 +49,7 @@ export interface Conductor {
 	fecha_nacimiento?: string;
 	foto_url?: string;
 	foto_signed_url?: string;
+	vencimiento_licencia?: string | null;
 	estado?: 'activo' | 'inactivo' | 'suspendido';
 	documentos?: Documento[];
 	created_at?: string;

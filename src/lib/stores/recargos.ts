@@ -163,8 +163,10 @@ function createRecargosStore() {
 				update((s) => ({ ...s, error: errorMsg, loading: false }));
 				toast.error(errorMsg);
 			} finally {
-				disarmLoadingWatchdog();
 				if (inflightController === controller) {
+					// Un request viejo puede terminar después de que el nuevo
+					// haya armado su watchdog. Solo el dueño actual puede apagarlo.
+					disarmLoadingWatchdog();
 					inflightController = null;
 				}
 			}

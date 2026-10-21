@@ -88,6 +88,35 @@
 	let selectedRows = $state(new Set<string>());
 	let sortField = $state('');
 	let sortDirection: 'asc' | 'desc' = $state('asc');
+	// El backend difunde el evento también a la pestaña que inició el borrado.
+	// Guardamos el eco breve para no duplicar su recarga ni su notificación local.
+	const ecosDeEliminacionLocal = new Set<string>();
+	const temporizadoresEcoEliminacion = new Map<string, ReturnType<typeof setTimeout>>();
+
+	function recordarEcoDeEliminacionLocal(ids: string[]) {
+		for (const id of ids) ecosDeEliminacionLocal.add(id);
+	}
+
+	function programarOlvidoEcoEliminacionLocal(ids: string[]) {
+		for (const id of ids) {
+			if (!ecosDeEliminacionLocal.has(id)) continue;
+			const timerAnterior = temporizadoresEcoEliminacion.get(id);
+			if (timerAnterior) clearTimeout(timerAnterior);
+			const timer = setTimeout(() => {
+				if (temporizadoresEcoEliminacion.get(id) !== timer) return;
+				temporizadoresEcoEliminacion.delete(id);
+				ecosDeEliminacionLocal.delete(id);
+			}, 10_000);
+			temporizadoresEcoEliminacion.set(id, timer);
+		}
+	}
+
+	function olvidarEcoDeEliminacionLocal(id: string) {
+		const timer = temporizadoresEcoEliminacion.get(id);
+		if (timer) clearTimeout(timer);
+		temporizadoresEcoEliminacion.delete(id);
+		ecosDeEliminacionLocal.delete(id);
+	}
 
 	// Highlight states - para resaltar recargos nuevos o actualizados
 	let recentlyCreated = $state(new Set<string>());
@@ -856,10 +885,10 @@
 	async function handleConfirmDelete() {
 		if (selectedRows.size === 0) return;
 
+		const idsToDelete = Array.from(selectedRows);
+		recordarEcoDeEliminacionLocal(idsToDelete);
 		deleteLoading = true;
 		try {
-			const idsToDelete = Array.from(selectedRows);
-
 			if (idsToDelete.length === 1) {
 				// Eliminar un solo recargo
 				await recargosApi.eliminar(idsToDelete[0]);
@@ -875,10 +904,12 @@
 
 			// Recargar datos
 			await recargosStore.fetchRecargos();
+			programarOlvidoEcoEliminacionLocal(idsToDelete);
 
 			// Cerrar modal
 			modalDeleteIsOpen = false;
 		} catch (error) {
+			for (const id of idsToDelete) olvidarEcoDeEliminacionLocal(id);
 			console.error('Error eliminando recargos:', error);
 			toast.error('Error al eliminar recargos');
 		} finally {
@@ -1291,6 +1322,9 @@
 		socketUtils.off('recargos-estado-actualizado', handleRecargosEstadoActualizado);
 		socketUtils.off('recargos-bulk-recalc:progress', handleBulkRecalcProgress);
 		socketUtils.off('recargos-bulk-recalc:done', handleBulkRecalcDone);
+		for (const timer of temporizadoresEcoEliminacion.values()) clearTimeout(timer);
+		temporizadoresEcoEliminacion.clear();
+		ecosDeEliminacionLocal.clear();
 
 		// Limpiar timers pendientes y abortar fetch en vuelo para no leakear
 		if (urlSyncTimer) clearTimeout(urlSyncTimer);
@@ -1373,6 +1407,11 @@
 	}
 
 	function handleRecargoEliminado(data: any) {
+		if (data?.recargoId && ecosDeEliminacionLocal.has(data.recargoId)) {
+			olvidarEcoDeEliminacionLocal(data.recargoId);
+			return;
+		}
+
 		// Recargar datos
 		recargosStore.fetchRecargos();
 
@@ -1381,6 +1420,12 @@
 	}
 
 	function handleRecargosEliminados(data: any) {
+		const recargoIds: string[] = Array.isArray(data?.recargoIds) ? data.recargoIds : [];
+		if (recargoIds.length > 0 && recargoIds.every((id) => ecosDeEliminacionLocal.has(id))) {
+			for (const id of recargoIds) olvidarEcoDeEliminacionLocal(id);
+			return;
+		}
+
 		// Recargar datos
 		recargosStore.fetchRecargos();
 

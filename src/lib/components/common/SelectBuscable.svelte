@@ -7,6 +7,7 @@
 		labelSecundario?: string;
 		labelTerciario?: string;
 		searchLabel?: string;
+		siempreVisible?: boolean;
 	};
 
 	type Props = {
@@ -35,12 +36,15 @@
 	let inputEl: HTMLInputElement | null = $state(null);
 	let wrapperEl: HTMLDivElement | null = $state(null);
 	let dropdownId = `dropdown-${Math.random().toString(36).slice(2, 9)}`;
+	const normalizarBusqueda = (texto: string) =>
+		texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 	let opcionesFiltradas = $derived.by(() => {
-		const q = busqueda.trim().toLowerCase();
+		const q = normalizarBusqueda(busqueda.trim());
 		if (!q) return opciones;
 		return opciones.filter((o) =>
-			(o.searchLabel || `${o.label} ${o.labelSecundario || ''}`).toLowerCase().includes(q)
+			o.siempreVisible ||
+			normalizarBusqueda(o.searchLabel || `${o.label} ${o.labelSecundario || ''}`).includes(q)
 		);
 	});
 

@@ -33,12 +33,14 @@
 
 	interface Conductor {
 		id: string | null;
+		manual: boolean;
 		nombre: string;
 		cedula: string;
 		licencia_vigencia: string;
 	}
 	const conductorVacio = (): Conductor => ({
 		id: null,
+		manual: false,
 		nombre: '',
 		cedula: '',
 		licencia_vigencia: ''
@@ -59,6 +61,7 @@
 	let hasta = $state('');
 	let placa = $state('');
 	let vehiculoId = $state<string | null>(null);
+	let vehiculoManual = $state(false);
 	let modelo = $state('');
 	let marca = $state('');
 	let clase = $state('');
@@ -96,6 +99,26 @@
 			searchLabel: 'nuevo contratante crear agregar'
 		}
 	]);
+	const opcionesVehiculo = $derived([
+		...opciones.vehiculos.map((v) => ({
+			value: v.id,
+			label: v.placa,
+			labelSecundario: [v.marca, v.modelo, v.numero_interno && `Interno ${v.numero_interno}`]
+				.filter(Boolean)
+				.join(' · '),
+			searchLabel: `${v.placa} ${v.marca ?? ''} ${v.modelo ?? ''} ${v.numero_interno ?? ''}`
+		})),
+		{ value: NUEVO, label: '+ Placa fuera de la flota…', siempreVisible: true }
+	]);
+	const opcionesConductor = $derived([
+		...opciones.conductores.map((c) => ({
+			value: c.id,
+			label: c.nombre,
+			labelSecundario: c.cedula ? `C.C. ${c.cedula}` : '',
+			searchLabel: `${c.nombre} ${c.cedula ?? ''}`
+		})),
+		{ value: NUEVO, label: '+ Conductor fuera de la ficha…', siempreVisible: true }
+	]);
 	const sugerenciasObjeto: AutocompleteOption[] = $derived(
 		opciones.catalogos.OBJETO.map((o) => ({ id: o.texto, label: o.texto }))
 	);
@@ -121,6 +144,7 @@
 		hasta = opciones.vigencia_defecto.hasta;
 		placa = '';
 		vehiculoId = null;
+		vehiculoManual = false;
 		modelo = marca = clase = numeroInterno = tarjeta = '';
 		conductores = [conductorVacio()];
 		actualizarFichas = true;
@@ -147,6 +171,7 @@
 		hasta = b.vigencia_hasta;
 		placa = b.placa ?? '';
 		aplicarVehiculo(placa);
+		vehiculoManual = !!placa && !vehiculoId;
 		modelo = b.modelo ?? modelo;
 		marca = b.marca ?? marca;
 		clase = b.clase ?? clase;
@@ -155,6 +180,7 @@
 		conductores = b.conductores.length
 			? b.conductores.map((d) => ({
 					id: d.conductor_id,
+					manual: !d.conductor_id,
 					nombre: d.nombre,
 					cedula: d.cedula ?? '',
 					licencia_vigencia: d.licencia_vigencia ?? ''
@@ -205,24 +231,33 @@
 		convenio = v.empresa_afiliacion ?? 'N/A';
 	}
 
-	function cambiarPlaca(e: Event) {
-		placa = normPlaca((e.currentTarget as HTMLInputElement).value);
-		aplicarVehiculo(placa);
+	function elegirVehiculo(id: string | null) {
+		if (!id || id === NUEVO) {
+			vehiculoId = null;
+			vehiculoManual = id === NUEVO;
+			placa = '';
+			modelo = marca = clase = numeroInterno = tarjeta = '';
+			return;
+		}
+		const elegido = opciones.vehiculos.find((v) => v.id === id);
+		if (elegido) {
+			vehiculoManual = false;
+			placa = normPlaca(elegido.placa);
+			aplicarVehiculo(placa);
+		}
 	}
 
-	function cambiarConductor(i: number, e: Event) {
-		const nombre = (e.currentTarget as HTMLInputElement).value;
-		const c = opciones.conductores.find(
-			(x) => x.nombre.toUpperCase() === nombre.trim().toUpperCase()
-		);
+	function elegirConductor(i: number, id: string | null) {
+		const c = opciones.conductores.find((x) => x.id === id);
 		conductores[i] = c
 			? {
 					id: c.id,
+					manual: false,
 					nombre: c.nombre,
 					cedula: c.cedula ?? '',
 					licencia_vigencia: c.licencia_vigencia ?? ''
 				}
-			: { ...conductores[i], id: null, nombre };
+			: { ...conductorVacio(), manual: id === NUEVO };
 	}
 
 	const vehiculoNuevo = $derived(placa.length >= 5 && !vehiculoId);
@@ -231,6 +266,7 @@
 		`${opciones.empresa.prefijo}${opciones.anio}${pad4(contrato || '0')}${String(opciones.siguiente_consecutivo).padStart(4, '0')}`
 	);
 	const conductoresValidos = $derived(conductores.filter((c) => c.nombre.trim().length >= 3));
+	const licenciaVigente = (fecha: string) => !!fecha && fecha >= opciones.hoy;
 	const valido = $derived(
 		contratanteNombre.trim().length >= 2 &&
 			contrato.trim().length > 0 &&
@@ -240,7 +276,8 @@
 			!!hasta &&
 			hasta >= desde &&
 			placa.length >= 5 &&
-			conductoresValidos.length > 0
+			conductoresValidos.length > 0 &&
+			conductoresValidos.every((c) => licenciaVigente(c.licencia_vigencia))
 	);
 
 	function sumarDias(ymd: string, n: number) {
@@ -254,7 +291,12 @@
 	}
 
 	async function emitir() {
-		if (!valido || enviando) return;
+		if (enviando) return;
+		if (conductoresValidos.some((c) => !licenciaVigente(c.licencia_vigencia))) {
+			toast.error('Actualice la fecha de licencia vencida o faltante antes de emitir el extracto');
+			return;
+		}
+		if (!valido) return;
 		enviando = true;
 		try {
 			const input: EmitirExtractoInput = {
@@ -440,26 +482,23 @@
 		<section class="fx-bloque">
 			<h3>Vehículo</h3>
 			<div class="fx-grid">
-				<label class="fx-campo">
+				<div class="fx-campo">
 					<span>Placa <b>*</b></span>
-					<input
-						class="fx-input fx-placa"
-						value={placa}
-						oninput={cambiarPlaca}
-						list="fx-placas"
-						maxlength="8"
-						placeholder="LLQ895"
-						autocomplete="off"
+					<SelectBuscable
+						opciones={opcionesVehiculo}
+						valor={vehiculoId ?? (vehiculoManual ? NUEVO : null)}
+						ariaLabel="Placa del vehículo"
+						placeholder="Buscar placa…"
+						placeholderBusqueda="Placa, marca o número interno"
+						onSeleccionar={elegirVehiculo}
 					/>
-					<datalist id="fx-placas">
-						{#each opciones.vehiculos as v (v.id)}<option value={v.placa}
-								>{v.marca ?? ''} {v.modelo ?? ''} · {v.numero_interno ?? 'sin interno'}</option
-							>{/each}
-					</datalist>
+					{#if vehiculoManual}
+						<input class="fx-input fx-placa" bind:value={placa} oninput={() => (placa = normPlaca(placa))} maxlength="8" placeholder="LLQ895" aria-label="Placa fuera de la flota" />
+					{/if}
 					{#if vehiculoNuevo}<small class="fx-aviso"
 							>No está en la flota: se imprime sin ficha.</small
 						>{/if}
-				</label>
+				</div>
 				<label class="fx-campo">
 					<span>Modelo</span>
 					<input class="fx-input" bind:value={modelo} maxlength="20" />
@@ -506,36 +545,44 @@
 
 		<section class="fx-bloque">
 			<h3>Conductores <small>(hasta tres)</small></h3>
-			<datalist id="fx-conductores">
-				{#each opciones.conductores as c (c.id)}<option value={c.nombre}>{c.cedula ?? ''}</option
-					>{/each}
-			</datalist>
 			{#each conductores as c, i (i)}
 				<div class="fx-grid fx-conductor">
-					<label class="fx-campo fx-ancho2">
+					<div class="fx-campo fx-ancho2">
 						<span
 							>Conductor {i + 1}
 							{#if i === 0}<b>*</b>{/if}</span
 						>
-						<input
-							class="fx-input"
-							value={c.nombre}
-							oninput={(e) => cambiarConductor(i, e)}
-							list="fx-conductores"
-							maxlength="255"
-							autocomplete="off"
+						<SelectBuscable
+							opciones={opcionesConductor}
+							valor={c.id ?? (c.manual ? NUEVO : null)}
+							ariaLabel={`Conductor ${i + 1}`}
+							placeholder="Buscar conductor…"
+							placeholderBusqueda="Nombre o cédula"
+							onSeleccionar={(id) => elegirConductor(i, id)}
 						/>
+						{#if c.manual}
+							<input class="fx-input" bind:value={c.nombre} maxlength="255" placeholder="Nombre tal como se imprimirá" aria-label={`Nombre del conductor ${i + 1}`} />
+						{/if}
 						{#if c.nombre.trim().length >= 3 && !c.id}<small class="fx-aviso"
 								>No está en conductores: se imprime tal cual.</small
 							>{/if}
-					</label>
+					</div>
 					<label class="fx-campo">
 						<span>Cédula</span>
 						<input class="fx-input" bind:value={c.cedula} maxlength="50" />
 					</label>
 					<label class="fx-campo">
-						<span>Vigencia licencia</span>
-						<input class="fx-input" type="date" bind:value={c.licencia_vigencia} />
+						<span>Vigencia licencia <b>*</b></span>
+						<input class="fx-input" type="date" bind:value={c.licencia_vigencia} aria-invalid={c.nombre.trim().length >= 3 && !licenciaVigente(c.licencia_vigencia)} />
+						{#if c.nombre.trim().length >= 3}
+							<small class:fx-vencida={!licenciaVigente(c.licencia_vigencia)} class="fx-estado-licencia">
+								{c.licencia_vigencia
+									? c.licencia_vigencia < opciones.hoy
+										? 'Licencia vencida: indique la nueva fecha para emitir'
+										: 'Licencia vigente'
+									: 'Indique la fecha de vigencia para emitir'}
+							</small>
+						{/if}
 					</label>
 					{#if conductores.length > 1}
 						<button
@@ -560,8 +607,7 @@
 		<label class="fx-check">
 			<input type="checkbox" bind:checked={actualizarFichas} />
 			<span
-				>Guardar en la ficha del vehículo y de los conductores lo que corregí aquí (número interno,
-				tarjeta, vigencia de licencia…)</span
+				>Actualizar otros datos de las fichas (número interno, tarjeta y cédula). La fecha de licencia siempre se sincroniza para conductores vinculados.</span
 			>
 		</label>
 	</form>
@@ -655,6 +701,13 @@
 	.fx-aviso {
 		font-size: 0.72rem;
 		color: #b45309;
+	}
+	.fx-estado-licencia {
+		font-size: 0.72rem;
+		color: #166534;
+	}
+	.fx-estado-licencia.fx-vencida {
+		color: #b91c1c;
 	}
 	.fx-atajos > div {
 		display: flex;

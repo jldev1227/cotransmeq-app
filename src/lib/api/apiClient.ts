@@ -231,7 +231,9 @@ type AxiosMethod = 'get' | 'delete' | 'head' | 'options';
 (['get', 'delete', 'head', 'options'] as AxiosMethod[]).forEach((method) => {
 	const original = (apiClient as any)[method].bind(apiClient);
 	(apiClient as any)[method] = (url: string, config: any = {}) => {
-		if (config._noDedup) {
+		// Una petición cancelable tiene dueño: compartir su promesa haría que
+		// abortar un consumidor cancelara también a los demás.
+		if (config._noDedup || config.signal) {
 			delete config._noDedup;
 			return original(url, config);
 		}

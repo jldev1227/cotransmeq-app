@@ -159,9 +159,11 @@ documentos.
 `get`, `delete`, `head` y `options` están parcheados: dos llamadas idénticas en
 vuelo (mismo método, URL, `params` y cuerpo) comparten la misma promesa.
 Evita que dos componentes que montan a la vez pidan lo mismo dos veces.
-`withoutDedup()` fuerza una petición nueva. La clave **no** incluye cabeceras
-ni `responseType`: dos `GET` a la misma URL, uno como `blob` y otro como JSON,
-compartirían respuesta.
+Las llamadas con `AbortSignal` no se deduplican: cada consumidor conserva su
+propio ciclo de vida y cancelar una lectura no cancela la promesa compartida de
+otro componente. `withoutDedup()` también fuerza una petición nueva. La clave
+**no** incluye cabeceras ni `responseType`: dos `GET` a la misma URL, uno como
+`blob` y otro como JSON, compartirían respuesta.
 
 ### Tiempos
 
@@ -407,7 +409,7 @@ está en `backend-cotransmeq/docs/api/<x>.md`. Todas las rutas cuelgan de `/api`
 | `nomina-canvas.ts` | [nomina-canvas](../../backend-cotransmeq/docs/api/nomina-canvas.md) (`/api/nomina/*`) | `nominaCanvasAPI`, `nominaEnviosAPI`, `nominaNotificacionesAPI`, `nominaBorradoresAPI` | `apiClient` |
 | `nomina.ts` | [liquidaciones](../../backend-cotransmeq/docs/api/liquidaciones.md) (incluye `/configuraciones-liquidacion` y `/firmas/liquidacion`), [primas](../../backend-cotransmeq/docs/api/primas.md), [conductor-portal](../../backend-cotransmeq/docs/api/conductor-portal.md) (primas y desprendibles), [conductores](../../backend-cotransmeq/docs/api/conductores.md), [vehiculos](../../backend-cotransmeq/docs/api/vehiculos.md), [clientes](../../backend-cotransmeq/docs/api/clientes.md) (`/api/empresas`) | `obtenerLiquidaciones`, `crearLiquidacion`, `editarLiquidacion`, `previewDesprendibles`, `enviarDesprendibles`, `generatePayslipsZip`, `obtenerPrimas`, `firmarPrima`… | `apiClient` |
 | `notificaciones.ts` | [notificaciones](../../backend-cotransmeq/docs/api/notificaciones.md) | `notificacionesApi` | `fetchConSesion` |
-| `recargos.ts` | [recargos](../../backend-cotransmeq/docs/api/recargos.md) (y `/api/liquidaciones/preview-recargos` de [liquidaciones](../../backend-cotransmeq/docs/api/liquidaciones.md)) | `recargosApi`, incluida la importación desde Transmeralda (`previewImportarTransmeralda`, `crearEntidadesFaltantesTransmeralda`, `importarDesdeTransmeralda`, `sincronizarConductoresCotransmeqTransmeralda`) | `apiClient` |
+| `recargos.ts` | [recargos](../../backend-cotransmeq/docs/api/recargos.md) (y `/api/liquidaciones/preview-recargos` de [liquidaciones](../../backend-cotransmeq/docs/api/liquidaciones.md)) | `recargosApi`, incluida la importación desde Transmeralda (`previewImportarTransmeralda`, `crearEntidadesFaltantesTransmeralda`, `importarDesdeTransmeralda`, `sincronizarConductoresCotransmeqTransmeralda`); `obtenerSiguienteNumeroPlanilla` revalida y `liberarReservaPlanilla` devuelve el número al cerrar | `apiClient` |
 | `recorridos-canvas.ts` | [recorridos-canvas](../../backend-cotransmeq/docs/api/recorridos-canvas.md) (`/api/recorridos`) | `recorridosCanvasAPI`, `recorridosSnapshotsAPI` | `apiClient` |
 | `salidas-nc.ts` | [salidas-nc](../../backend-cotransmeq/docs/api/salidas-nc.md) | `salidasNCAPI`, etiquetas | `fetchConSesion` |
 | `sarlaft.ts` | [formularios-sarlaft](../../backend-cotransmeq/docs/api/formularios-sarlaft.md) | `sarlaftAPI`, etiquetas, `CONTACTO_POR_TIPO` | `apiClient` |

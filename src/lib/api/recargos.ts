@@ -51,18 +51,20 @@ export const recargosApi = {
 	},
 
 	/**
-	 * Devuelve el siguiente número de planilla libre (TM-XXXX).
-	 * Endpoint ligero: NO trae recargos, solo el campo numero_planilla.
-	 * Se usa en ModalFormRecargo para auto-generar el número al abrir
-	 * un nuevo recargo. El backend lo calcula leyendo solo numero_planilla
-	 * (sin joins), así que retorna en ms aunque haya miles de planillas.
+	 * Reserva o revalida el consecutivo de este formulario. El mismo ID
+	 * devuelve el mismo número mientras siga disponible.
 	 */
-	async obtenerSiguienteNumeroPlanilla(): Promise<string> {
-		const response = await apiClient.get<{
+	async obtenerSiguienteNumeroPlanilla(reservaId: string): Promise<string> {
+		const response = await apiClient.post<{
 			success: boolean;
 			data: { numero_planilla: string };
-		}>(`${BASE_URL}/next-numero-planilla`);
+		}>(`${BASE_URL}/next-numero-planilla`, { reserva_id: reservaId });
 		return response.data.data.numero_planilla;
+	},
+
+	/** Un formulario cerrado deja de ocupar su consecutivo sugerido. */
+	async liberarReservaPlanilla(reservaId: string): Promise<void> {
+		await apiClient.delete(`${BASE_URL}/reservas-planilla/${reservaId}`);
 	},
 
 	/**

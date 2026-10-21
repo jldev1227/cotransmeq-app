@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
-	import Select from 'svelte-select';
+	import SelectBuscable from '$lib/components/common/SelectBuscable.svelte';
 	import { serviciosStore } from '$lib/stores/servicios';
 	import {
 		recursos,
@@ -17,25 +17,19 @@
 	import ModalNuevaEmpresa from './ModalNuevaEmpresa.svelte';
 	import ModalNuevoConductor from './ModalNuevoConductor.svelte';
 	import ModalNuevoVehiculo from './ModalNuevoVehiculo.svelte';
-	import ModalSelectCliente from '$lib/components/ui/ModalSelectCliente.svelte';
 	import MapboxSearch from '$lib/components/ui/MapboxSearch.svelte';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import Campo from '$lib/components/directorio/Campo.svelte';
 	import Dato from '$lib/components/directorio/Dato.svelte';
 	import { formularioAbierto } from '$lib/stores/formularioAbierto';
 	import {
-		Building2,
 		Check,
-		ChevronDown,
-		ChevronRight,
 		CircleCheck,
 		Info,
 		LoaderCircle,
 		MapPin,
 		Package,
 		Plus,
-		Truck,
-		UserRound,
 		Users,
 		X
 	} from 'lucide-svelte';
@@ -84,11 +78,6 @@
 	let mostrarModalEmpresa = false;
 	let mostrarModalConductor = false;
 	let mostrarModalVehiculo = false;
-	let mostrarModalSelectCliente = false;
-	let mostrarModalSelectConductor = false;
-	let mostrarModalSelectVehiculo = false;
-	let mostrarModalSelectOrigen = false;
-	let mostrarModalSelectDestino = false;
 
 	// Computed - Usar los stores reactivos
 	$: municipioOptions = $municipiosOptions;
@@ -106,10 +95,7 @@
 	$: subModalAbierto =
 		mostrarModalEmpresa ||
 		mostrarModalConductor ||
-		mostrarModalVehiculo ||
-		mostrarModalSelectCliente ||
-		mostrarModalSelectOrigen ||
-		mostrarModalSelectDestino;
+		mostrarModalVehiculo;
 
 	// Escape dentro de un campo (buscador de direcciones, svelte-select) cierra su
 	// lista, no el modal: se marca en captura, antes de que ModalBase lo vea.
@@ -117,7 +103,7 @@
 	function marcarEscapeInterno(e: KeyboardEvent) {
 		if (e.key !== 'Escape' || !isOpen) return;
 		const target = e.target as HTMLElement | null;
-		if (!target?.closest?.('.fs-form input, .fs-form textarea, .fs-form .svelte-select')) return;
+		if (!target?.closest?.('.fs-form input, .fs-form textarea, .fs-form [role="combobox"]')) return;
 		escapeInterno = true;
 		setTimeout(() => (escapeInterno = false));
 	}
@@ -579,24 +565,16 @@
 				<div class="fs-card fs-grid">
 					<Campo id="cliente" label="Cliente / Empresa" requerido error={errors.cliente} completo>
 						<div class="fs-fila">
-							<button
-								type="button"
-								id="cliente"
-								class="fs-input fs-picker"
-								class:fs-input--error={!!errors.cliente}
-								onclick={() => (mostrarModalSelectCliente = true)}
-							>
-								<Building2 size={18} class="fs-picker-icono" />
-								{#if clienteSelected}
-									<span class="fs-picker-valor">
-										{empresaOptions.find((o) => o.value === clienteSelected)?.label ||
-											'Seleccionar empresa'}
-									</span>
-								{:else}
-									<span class="fs-picker-vacio">Buscar o seleccionar empresa...</span>
-								{/if}
-								<ChevronRight size={16} class="fs-picker-flecha" />
-							</button>
+							<div class="fs-select">
+								<SelectBuscable
+								opciones={empresaOptions}
+								valor={clienteSelected || null}
+								ariaLabel="Cliente o empresa"
+								placeholder="Buscar o seleccionar empresa..."
+								placeholderBusqueda="Nombre o NIT"
+								onSeleccionar={(value) => (clienteSelected = value ?? '')}
+								/>
+							</div>
 							<button
 								type="button"
 								class="fs-btn-crear"
@@ -646,24 +624,14 @@
 					<!-- Origen -->
 					<div class="fs-columna">
 						<Campo id="origen" label="Municipio de Origen" requerido error={errors.origen}>
-							<button
-								type="button"
-								id="origen"
-								class="fs-input fs-picker"
-								class:fs-input--error={!!errors.origen}
-								onclick={() => (mostrarModalSelectOrigen = true)}
-							>
-								<MapPin size={18} class="fs-picker-icono" />
-								{#if selectedOriginMun}
-									<span class="fs-picker-valor">
-										{municipioOptions.find((o) => o.value === selectedOriginMun)?.label ||
-											'Seleccionado'}
-									</span>
-								{:else}
-									<span class="fs-picker-vacio">Buscar municipio de origen...</span>
-								{/if}
-								<ChevronDown size={16} class="fs-picker-flecha" />
-							</button>
+							<SelectBuscable
+								opciones={municipioOptions}
+								valor={selectedOriginMun || null}
+								ariaLabel="Municipio de origen"
+								placeholder="Buscar municipio de origen..."
+								placeholderBusqueda="Municipio o departamento"
+								onSeleccionar={(value) => (selectedOriginMun = value ?? '')}
+							/>
 						</Campo>
 
 						<div class="fs-mapbox">
@@ -688,24 +656,14 @@
 					<!-- Destino -->
 					<div class="fs-columna">
 						<Campo id="destino" label="Municipio de Destino" requerido error={errors.destino}>
-							<button
-								type="button"
-								id="destino"
-								class="fs-input fs-picker"
-								class:fs-input--error={!!errors.destino}
-								onclick={() => (mostrarModalSelectDestino = true)}
-							>
-								<MapPin size={18} class="fs-picker-icono" />
-								{#if selectedDestMun}
-									<span class="fs-picker-valor">
-										{municipioOptions.find((o) => o.value === selectedDestMun)?.label ||
-											'Seleccionado'}
-									</span>
-								{:else}
-									<span class="fs-picker-vacio">Buscar municipio de destino...</span>
-								{/if}
-								<ChevronDown size={16} class="fs-picker-flecha" />
-							</button>
+							<SelectBuscable
+								opciones={municipioOptions}
+								valor={selectedDestMun || null}
+								ariaLabel="Municipio de destino"
+								placeholder="Buscar municipio de destino..."
+								placeholderBusqueda="Municipio o departamento"
+								onSeleccionar={(value) => (selectedDestMun = value ?? '')}
+							/>
 						</Campo>
 
 						<div class="fs-mapbox">
@@ -789,27 +747,13 @@
 					<Campo id="vehiculo" label="Vehículo Asignado">
 						<div class="fs-fila">
 							<div class="fs-select">
-								<span class="fs-select-icono" aria-hidden="true"><Truck size={18} /></span>
-								<Select
-									id="vehiculo"
-									items={vehiculoOptions}
-									value={vehiculoOptions.find((o) => o.value === vehicleSelected)}
-									on:change={(e) => (vehicleSelected = e.detail?.value || '')}
-									on:clear={() => (vehicleSelected = '')}
-									placeholder="Buscar o seleccionar vehículo..."
-									--height="42px"
-									--padding="0 0 0 40px"
-									--border="1px solid var(--border-default)"
-									--border-hover="1px solid var(--border-emphasis)"
-									--border-focused="1px solid var(--accion)"
-									--border-radius="12px"
-									--border-radius-focused="12px"
-									--background="var(--bg-surface)"
-									--placeholder-color="var(--text-very-muted)"
-									--font-size="14px"
-									--item-is-active-bg="var(--accion)"
-									--item-hover-bg="var(--bg-base)"
-									--list-border-radius="12px"
+								<SelectBuscable
+								opciones={vehiculoOptions}
+								valor={vehicleSelected || null}
+								ariaLabel="Vehículo asignado"
+								placeholder="Buscar o seleccionar vehículo..."
+								placeholderBusqueda="Placa, marca o modelo"
+								onSeleccionar={(value) => (vehicleSelected = value ?? '')}
 								/>
 							</div>
 							<button
@@ -826,27 +770,13 @@
 					<Campo id="conductor" label="Conductor Asignado">
 						<div class="fs-fila">
 							<div class="fs-select">
-								<span class="fs-select-icono" aria-hidden="true"><UserRound size={18} /></span>
-								<Select
-									id="conductor"
-									items={conductorOptions}
-									value={conductorOptions.find((o) => o.value === conductorSelected)}
-									on:change={(e) => (conductorSelected = e.detail?.value || '')}
-									on:clear={() => (conductorSelected = '')}
-									placeholder="Buscar o seleccionar conductor..."
-									--height="42px"
-									--padding="0 0 0 40px"
-									--border="1px solid var(--border-default)"
-									--border-hover="1px solid var(--border-emphasis)"
-									--border-focused="1px solid var(--accion)"
-									--border-radius="12px"
-									--border-radius-focused="12px"
-									--background="var(--bg-surface)"
-									--placeholder-color="var(--text-very-muted)"
-									--font-size="14px"
-									--item-is-active-bg="var(--accion)"
-									--item-hover-bg="var(--bg-base)"
-									--list-border-radius="12px"
+								<SelectBuscable
+								opciones={conductorOptions}
+								valor={conductorSelected || null}
+								ariaLabel="Conductor asignado"
+								placeholder="Buscar o seleccionar conductor..."
+								placeholderBusqueda="Nombre o identificación"
+								onSeleccionar={(value) => (conductorSelected = value ?? '')}
 								/>
 							</div>
 							<button
@@ -952,42 +882,6 @@
 <!-- Sub-modales: van en una capa sobre ModalBase (z-index 10040) y bajo los
      diálogos de confirmación (10050); sin ella quedarían tapados por el modal. -->
 <div class="fs-capa-submodales">
-	<ModalSelectCliente
-		isOpen={mostrarModalSelectCliente}
-		items={empresaOptions}
-		selectedValue={clienteSelected}
-		title="Seleccionar Cliente / Empresa"
-		icon="building"
-		searchPlaceholder="Buscar por nombre de empresa..."
-		emptyMessage="No se encontraron empresas"
-		onClose={() => (mostrarModalSelectCliente = false)}
-		onSelect={(value) => (clienteSelected = value)}
-	/>
-
-	<ModalSelectCliente
-		isOpen={mostrarModalSelectOrigen}
-		items={municipioOptions}
-		selectedValue={selectedOriginMun}
-		title="Seleccionar Municipio de Origen"
-		icon="location"
-		searchPlaceholder="Buscar municipio..."
-		emptyMessage="No se encontraron municipios"
-		onClose={() => (mostrarModalSelectOrigen = false)}
-		onSelect={(value) => (selectedOriginMun = value)}
-	/>
-
-	<ModalSelectCliente
-		isOpen={mostrarModalSelectDestino}
-		items={municipioOptions}
-		selectedValue={selectedDestMun}
-		title="Seleccionar Municipio de Destino"
-		icon="location"
-		searchPlaceholder="Buscar municipio..."
-		emptyMessage="No se encontraron municipios"
-		onClose={() => (mostrarModalSelectDestino = false)}
-		onSelect={(value) => (selectedDestMun = value)}
-	/>
-
 	<ModalNuevaEmpresa
 		isOpen={mostrarModalEmpresa}
 		onClose={() => (mostrarModalEmpresa = false)}
@@ -1117,53 +1011,13 @@
 		border-color: var(--accion);
 		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
-	.fs-input[aria-invalid='true'],
-	.fs-input--error {
+	.fs-input[aria-invalid='true'] {
 		border-color: #dc2626;
 		background: #fff8f7;
 	}
 	.fs-input:disabled {
 		background: var(--bg-base);
 		color: var(--text-muted);
-	}
-
-	/* Botón que abre el selector con buscador (cliente, municipios). */
-	.fs-picker {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		text-align: left;
-		cursor: pointer;
-	}
-	.fs-picker:hover:not(:disabled) {
-		border-color: var(--border-emphasis);
-	}
-	.fs-picker :global(.fs-picker-icono) {
-		flex-shrink: 0;
-		color: var(--text-muted);
-	}
-	.fs-picker:hover :global(.fs-picker-icono) {
-		color: var(--accion);
-	}
-	.fs-picker :global(.fs-picker-flecha) {
-		flex-shrink: 0;
-		color: var(--text-very-muted);
-	}
-	.fs-picker-valor {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		color: var(--text-primary);
-		font-weight: 600;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.fs-picker-vacio {
-		flex: 1;
-		min-width: 0;
-		color: var(--text-very-muted);
 	}
 
 	.fs-btn-crear {
@@ -1190,23 +1044,12 @@
 		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
 
-	/* svelte-select con ícono a la izquierda. */
+	/* Reserva el ancho del buscador al lado del botón de creación. */
 	.fs-select {
 		position: relative;
 		flex: 1;
 		min-width: 0;
 	}
-	.fs-select-icono {
-		position: absolute;
-		z-index: 2;
-		top: 50%;
-		left: 12px;
-		display: flex;
-		color: var(--text-muted);
-		pointer-events: none;
-		transform: translateY(-50%);
-	}
-
 	/* MapboxSearch trae su propia etiqueta e input: se alinean con `Campo`. */
 	.fs-mapbox :global(label[for='address-search-input']) {
 		display: block;

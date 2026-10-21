@@ -57,13 +57,13 @@ Todas exigen sesión administrativa. Las que no están en el menú se marcan.
 | `/dashboard/conductores` | Directorio de conductores; el alta y la edición van en modal. | `conductores` | `conductores` |
 | `/dashboard/conductores/[id]` | Ficha del conductor con sus documentos. | `conductores` | `conductores`, `conductores-documentos`, `viaticos` |
 | `/dashboard/conductores/recorridos` | Canvas de recorridos (Univer): un libro por corte, una hoja por conductor, una fila por recorrido; alimenta bonos y pernoctes. Se abre desde Conductores. | Servidor: `conductores`. Canvas: `recorridos`. Marcar bonos exige además `bonos-planilla`. | `recorridos-canvas`, `dias-laborados`, `liquidaciones` (configuraciones de liquidación) |
-| `/dashboard/servicios` | Servicios en lista, calendario o canvas; alta y edición en modal, ticket. | `servicios` | `servicios` |
-| `/dashboard/servicios/[id]` | Detalle del servicio con mapa (Mapbox y estaciones Distracom), ruta azul (`#2563eb`) entre origen y destino dibujada sobre el tráfico, y ejecución del conductor y enlace para compartir. | `servicios` | `servicios` |
+| `/dashboard/servicios` | Servicios en lista, calendario o canvas; alta y edición en modal con buscador unificado para cliente, municipios, vehículo y conductor; ticket. | `servicios` | `servicios` |
+| `/dashboard/servicios/[id]` | Detalle con título de origen, destino y propósito, indicaciones de operaciones bajo el título, programación (fecha/horas), descarga del rutograma PDF, mapa con capa agrupada de paradas seguras (restaurantes, estaciones y hospedajes), vigencia de la licencia del conductor y días para vencer, ejecución y modal para compartir enlace o ticket. | `servicios` | `servicios` |
 | `/dashboard/recargos` | Planillas de recargos del mes, con la importación de planillas desde la base de Transmeralda (vista previa, alta de vehículos y empresas que falten, sincronización de conductores). | `recargos` | `recargos` (rutas `importar-desde-transmeralda`), `liquidaciones` (vista previa de recargos) |
 | `/dashboard/recargos/configuracion` | Configuración de salarios para recargos. | `recargos` | `recargos` |
 | `/dashboard/viaticos` | Anticipos a conductores, su legalización y los gastos de la empresa. | `viaticos` | `viaticos` |
 | `/dashboard/solicitudes` | Bandeja de las solicitudes del formulario público de la landing, con radicado y prioridad. | `solicitudes` | `solicitudes-web` |
-| `/dashboard/extractos` | Extractos de contrato (FUEC) y catálogo de contratantes. | `extractos` | `extractos` |
+| `/dashboard/extractos` | Extractos de contrato (FUEC) y catálogo de contratantes. El formulario busca placas y conductores como contratantes, muestra si la licencia está vigente y exige actualizar su fecha antes de emitir si venció; la fecha confirmada actualiza la ficha del conductor. | `extractos` | `extractos` |
 
 ### Clientes, terceros y cumplimiento
 

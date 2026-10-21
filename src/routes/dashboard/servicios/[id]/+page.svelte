@@ -3,7 +3,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { User } from 'lucide-svelte';
+	import { Download, Share2, Ticket, User } from 'lucide-svelte';
 	import { listadoServicios } from '$lib/stores/volverListado';
 	import { toast } from '$lib/stores/toast';
 	import { fade } from 'svelte/transition';
@@ -15,7 +15,9 @@
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import distracomLocations from '$lib/data/distracomlocations';
 	import EjecucionConductor from '$lib/components/servicios/EjecucionConductor.svelte';
+	import ModalTicket from '$lib/components/servicios/ModalTicket.svelte';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import { fetchConSesion } from '$lib/api/fetchConSesion';
 
 	const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 	const OVERPASS_API = 'https://overpass-api.de/api/interpreter';
@@ -89,8 +91,10 @@
 	let duracion = '—';
 	let isNavigating = false;
 	let showShareModal = false;
+	let showTicketModal = false;
 	let generatedShareUrl = '';
 	let copySuccess = false;
+	let descargandoRutograma = false;
 
 	// POIs
 	let peajes: PeajeInfo[] = [];
@@ -132,9 +136,7 @@
 
 	// Toggles leyenda
 	let showPeajes = true;
-	let showRestaurantes = true;
-	let showEstaciones = true;
-	let showHospedajes = true;
+	let showParadasSeguras = true;
 	let showDistracom = true;
 
 	// ─── HELPERS ──────────────────────────────────────────────────
@@ -178,23 +180,70 @@
 		alto: { fondo: '#FFEDD5', texto: '#9A3412' },
 		critico: { fondo: '#FEE2E2', texto: '#991B1B' }
 	};
-	const fmtDate = (d: any) =>
-		d
-			? new Intl.DateTimeFormat('es-CO', {
-					day: 'numeric',
-					month: 'short',
-					year: 'numeric'
-				}).format(new Date(d))
-			: '—';
-	const fmtTime = (d: any) =>
-		d
-			? new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit' }).format(new Date(d))
-			: '—';
+	const fmtDate = (d: any) => {
+		if (!d) return '—';
+		/// Las fechas de calendario llegan como AAAA-MM-DD; parsearlas como UTC las
+		/// mostraba el día anterior en Colombia.
+		const fecha =
+			typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)
+				? new Date(`${d}T12:00:00`)
+				: new Date(d);
+		if (Number.isNaN(fecha.getTime())) return '—';
+		return new Intl.DateTimeFormat('es-CO', {
+			day: 'numeric',
+			month: 'short',
+			year: 'numeric'
+		}).format(fecha);
+	};
+	const formateadorFechaBogota = new Intl.DateTimeFormat('en-US', {
+		timeZone: 'America/Bogota',
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit'
+	});
+	const fechaCalendario = (fecha: string | null | undefined) => {
+		const fechaYmd = fecha?.slice(0, 10);
+		return fechaYmd && /^\d{4}-\d{2}-\d{2}$/.test(fechaYmd) ? fechaYmd : null;
+	};
+	const diasHastaVencimiento = (fechaYmd: string) => {
+		const [anio, mes, dia] = fechaYmd.split('-').map(Number);
+		const hoyPartes = formateadorFechaBogota.formatToParts(new Date());
+		const hoyParte = (tipo: string) =>
+			Number(hoyPartes.find((parte) => parte.type === tipo)?.value);
+		const fechaHoy = Date.UTC(hoyParte('year'), hoyParte('month') - 1, hoyParte('day'));
+		const fechaVencimiento = Date.UTC(anio, mes - 1, dia);
+		return Math.round((fechaVencimiento - fechaHoy) / 86_400_000);
+	};
+	const etiquetaDias = (dias: number) => `${dias} ${dias === 1 ? 'día' : 'días'}`;
+	let fechaLicencia: string | null = null;
+	let diasLicencia: number | null = null;
+	$: fechaLicencia = fechaCalendario(servicio?.conductor?.vencimiento_licencia);
+	$: diasLicencia = fechaLicencia ? diasHastaVencimiento(fechaLicencia) : null;
+	const fmtTime = (d: any) => {
+		if (d === null || d === undefined || d === '') return '—';
+		if (typeof d === 'string') {
+			const hora = d.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+			if (hora) return `${hora[1].padStart(2, '0')}:${hora[2]}`;
+		}
+		const fecha = d instanceof Date ? d : new Date(d);
+		if (Number.isNaN(fecha.getTime())) return '—';
+		return new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit' }).format(fecha);
+	};
 	const fmtMin = (m: number) => {
 		const h = Math.floor(m / 60),
 			r = Math.round(m % 60);
 		return h > 0 ? `${h}h ${r}min` : `${r}min`;
 	};
+	$: fechaProgramacion = (servicio as any)?.fecha_servicio || servicio?.fecha_realizacion || null;
+	$: horaInicioProgramacion = (servicio as any)?.hora_inicio
+		? fmtTime((servicio as any).hora_inicio)
+		: servicio?.fecha_realizacion
+			? fmtTime(servicio.fecha_realizacion)
+			: '';
+	$: horaFinProgramacion = (servicio as any)?.hora_fin
+		? fmtTime((servicio as any).hora_fin)
+		: '';
+	$: horarioProgramado = [horaInicioProgramacion, horaFinProgramacion].filter(Boolean).join(' – ');
 
 	// ─── GEOMETRÍA: DISTANCIA PUNTO → SEGMENTO DE POLILÍNEA ────────
 	// Calcula la distancia mínima en km desde un punto (lat/lon)
@@ -1146,16 +1195,11 @@
 	function pintarParadas() {
 		paradaMarkersArr.forEach((m) => m.remove());
 		paradaMarkersArr = [];
-		if (!map) return;
-		const cfg = {
-			restaurante: { color: '#2196f3', letra: 'R', show: () => showRestaurantes },
-			estacion_servicio: { color: '#9c27b0', letra: 'S', show: () => showEstaciones },
-			hospedaje: { color: '#009688', letra: 'H', show: () => showHospedajes }
-		};
+		if (!map || !showParadasSeguras) return;
 		for (const p of paradasSeguras) {
-			const c = cfg[p.tipo];
-			if (!c.show()) continue;
-			const el = circuloEl(c.color, c.letra);
+			/// El tipo concreto sigue en el popup; en el mapa las tres categorías
+			/// comparten un único marcador para que la leyenda no se fragmente.
+			const el = circuloEl('#0f766e', 'S');
 			const popup = new mapboxgl.Popup({
 				offset: [0, -16],
 				maxWidth: '240px',
@@ -1417,6 +1461,31 @@
 
 	// ─── COMPARTIR ────────────────────────────────────────────────
 
+	async function handleDescargarRutograma() {
+		if (!servicio || descargandoRutograma) return;
+		descargandoRutograma = true;
+		try {
+			const response = await fetchConSesion(`/api/servicios/${servicio.id}/rutograma`);
+			if (!response.ok) {
+				const errorData = await response.json().catch(() => null);
+				throw new Error(errorData?.message || `Error ${response.status}`);
+			}
+			const blobUrl = URL.createObjectURL(await response.blob());
+			const a = document.createElement('a');
+			a.href = blobUrl;
+			a.download = `rutograma-${servicio.id.slice(0, 8)}.pdf`;
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+			toast.success('Rutograma descargado');
+		} catch (error: any) {
+			toast.error(`No se pudo descargar el rutograma: ${error?.message || 'Error desconocido'}`);
+		} finally {
+			descargandoRutograma = false;
+		}
+	}
+
 	async function handleCompartir() {
 		if (!servicio) return;
 		try {
@@ -1437,6 +1506,11 @@
 		copySuccess = false;
 	}
 
+	function abrirTicketCompartir() {
+		showShareModal = false;
+		showTicketModal = true;
+	}
+
 	async function copyLink() {
 		try {
 			await navigator.clipboard.writeText(generatedShareUrl);
@@ -1451,10 +1525,8 @@
 		}
 	}
 
-	// Contadores reactivos
-	$: countRestaurantes = paradasSeguras.filter((p) => p.tipo === 'restaurante').length;
-	$: countEstaciones = paradasSeguras.filter((p) => p.tipo === 'estacion_servicio').length;
-	$: countHospedajes = paradasSeguras.filter((p) => p.tipo === 'hospedaje').length;
+	// Contador de la capa unificada de restaurantes, estaciones y hospedajes.
+	$: countParadasSeguras = paradasSeguras.length;
 
 	// 🔹 Variables derivadas del servicio (reactivas)
 	$: rc = (servicio as any)?.recargos_planillas?.[0];
@@ -1509,7 +1581,7 @@
 			</div>
 		</div>
 	{:else if servicio}
-		<!-- ── ENCABEZADO (como la app móvil) ── -->
+		<!-- ── ENCABEZADO DEL SERVICIO ── -->
 		<header class="detalle-header">
 			<button
 				onclick={() => {
@@ -1530,26 +1602,49 @@
 					<path stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7" />
 				</svg>
 			</button>
-			<div class="min-w-0 flex-1">
-				<h1 class="detalle-header-titulo">Detalle del servicio</h1>
-				<p class="detalle-header-id">{servicio.id.slice(0, 8).toUpperCase()}</p>
+			<div class="detalle-header-contenido">
+				<h1 class="detalle-header-titulo">
+					Servicio con desplazamiento
+					{servicio.origen_especifico?.trim() ||
+						servicio.origen?.nombre_municipio ||
+						'origen por definir'} -
+					{servicio.destino_especifico?.trim() ||
+						servicio.destino?.nombre_municipio ||
+						'destino por definir'}
+					de {servicio.proposito_servicio
+						? labelPropositoServicio(servicio.proposito_servicio)
+						: 'tipo por definir'}
+				</h1>
+				{#if servicio.observaciones?.trim()}
+					<div class="detalle-header-indicaciones">
+						<span class="detalle-header-indicaciones-etiqueta">Indicaciones de operaciones</span>
+						<p class="detalle-header-indicaciones-texto">{servicio.observaciones}</p>
+					</div>
+				{/if}
 			</div>
-			<button onclick={handleCompartir} class="btn-primary">
-				<svg
-					class="h-3.5 w-3.5"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-					stroke-width="2"
+			<div class="detalle-header-acciones">
+				<button
+					type="button"
+					onclick={handleDescargarRutograma}
+					disabled={descargandoRutograma}
+					class="detalle-accion detalle-accion--secundaria"
+					title="Descargar rutograma PDF"
+					aria-label="Descargar rutograma PDF"
 				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-					/>
-				</svg>
-				<span class="hidden sm:inline">Compartir</span>
-			</button>
+					<Download size={16} strokeWidth={2.2} />
+					<span class="hidden sm:inline">{descargandoRutograma ? 'Generando…' : 'Rutograma PDF'}</span>
+				</button>
+				<button
+					type="button"
+					onclick={handleCompartir}
+					class="detalle-accion detalle-accion--principal"
+					title="Compartir servicio"
+					aria-label="Compartir servicio"
+				>
+					<Share2 size={16} strokeWidth={2.2} />
+					<span class="hidden sm:inline">Compartir</span>
+				</button>
+			</div>
 		</header>
 
 		<!-- ── ÁREA DESPLAZABLE (estilo de la app móvil) ── -->
@@ -1569,13 +1664,6 @@
 						>
 					{/if}
 				</div>
-
-				{#if servicio.observaciones}
-					<div class="detalle-card detalle-indicaciones">
-						<p class="detalle-indicaciones-titulo">Indicaciones de operaciones</p>
-						<p class="detalle-indicaciones-texto">{servicio.observaciones}</p>
-					</div>
-				{/if}
 
 				<div class="detalle-columnas">
 					<div class="detalle-columna">
@@ -1676,77 +1764,27 @@
 										{/if}
 									</button>
 
-									<!-- Restaurantes -->
+									<!-- Categorías agrupadas como una sola capa de paradas seguras. -->
 									<button
 										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-										class:opacity-40={!showRestaurantes}
+										class:opacity-40={!showParadasSeguras}
 										onclick={() => {
-											showRestaurantes = !showRestaurantes;
+											showParadasSeguras = !showParadasSeguras;
 											pintarParadas();
 										}}
 									>
 										<div
-											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-blue-500"
-										>
-											<span style="color:#fff;font-weight:700;font-size:9px;">R</span>
-										</div>
-										<span class="flex-1 text-left text-xs font-medium text-gray-700"
-											>Restaurantes</span
-										>
-										{#if countRestaurantes > 0}
-											<span
-												class="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
-												>{countRestaurantes}</span
-											>
-										{/if}
-									</button>
-
-									<!-- Estaciones de servicio -->
-									<button
-										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-										class:opacity-40={!showEstaciones}
-										onclick={() => {
-											showEstaciones = !showEstaciones;
-											pintarParadas();
-										}}
-									>
-										<div
-											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-purple-500"
+											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-teal-600"
 										>
 											<span style="color:#fff;font-weight:700;font-size:9px;">S</span>
 										</div>
 										<span class="flex-1 text-left text-xs font-medium text-gray-700"
-											>Est. Servicio</span
+											>Paradas seguras</span
 										>
-										{#if countEstaciones > 0}
-											<span
-												class="rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700"
-												>{countEstaciones}</span
-											>
-										{/if}
-									</button>
-
-									<!-- Hospedajes -->
-									<button
-										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-										class:opacity-40={!showHospedajes}
-										onclick={() => {
-											showHospedajes = !showHospedajes;
-											pintarParadas();
-										}}
-									>
-										<div
-											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-teal-500"
-										>
-											<span style="color:#fff;font-weight:700;font-size:9px;">H</span>
-										</div>
-										<span class="flex-1 text-left text-xs font-medium text-gray-700"
-											>Hospedajes</span
-										>
-										{#if countHospedajes > 0}
+										{#if countParadasSeguras > 0}
 											<span
 												class="rounded-md bg-teal-50 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700"
-												>{countHospedajes}</span
+												>{countParadasSeguras}</span
 											>
 										{/if}
 									</button>
@@ -1959,14 +1997,14 @@
 									>
 								</div>
 							{/if}
-							{#if (servicio as any).hora_inicio}
+							{#if (servicio as any).hora_inicio && !servicio.fecha_realizacion}
 								<div class="detalle-dato">
 									<span class="detalle-etiqueta">Hora inicio</span><span class="detalle-valor"
 										>{fmtTime((servicio as any).hora_inicio)}</span
 									>
 								</div>
 							{/if}
-							{#if (servicio as any).hora_fin}
+							{#if horaFinProgramacion && !servicio.fecha_realizacion}
 								<div class="detalle-dato">
 									<span class="detalle-etiqueta">Hora fin</span><span class="detalle-valor"
 										>{fmtTime((servicio as any).hora_fin)}</span
@@ -1975,9 +2013,10 @@
 							{/if}
 							{#if servicio.fecha_realizacion}
 								<div class="detalle-dato">
-									<span class="detalle-etiqueta">Realización</span><span class="detalle-valor"
-										>{fmtDate(servicio.fecha_realizacion)}</span
-									>
+									<span class="detalle-etiqueta">Realización</span>
+									<span class="detalle-valor">
+										{fmtDate(servicio.fecha_realizacion)} · {horarioProgramado}
+									</span>
 								</div>
 							{/if}
 							{#if servicio.fecha_finalizacion}
@@ -2059,6 +2098,35 @@
 										]
 											.filter(Boolean)
 											.join(' · ')}
+									</p>
+								{/if}
+								{#if servicio.conductor?.vencimiento_licencia}
+									<p
+										class="detalle-licencia"
+										class:detalle-licencia--alerta={diasLicencia !== null &&
+											diasLicencia >= 0 &&
+											diasLicencia <= 30}
+										class:detalle-licencia--vencida={diasLicencia !== null && diasLicencia < 0}
+									>
+										{#if fechaLicencia && diasLicencia !== null}
+											{#if diasLicencia < 0}
+												Licencia vencida desde {fmtDate(fechaLicencia)} · Hace {etiquetaDias(
+													Math.abs(diasLicencia)
+												)}
+											{:else if diasLicencia === 0}
+												Licencia vence hoy ({fmtDate(fechaLicencia)}) · 0 días restantes
+											{:else}
+												Licencia vigente hasta {fmtDate(fechaLicencia)} · {etiquetaDias(
+													diasLicencia
+												)} restantes
+											{/if}
+										{:else}
+											Fecha de vigencia de licencia no disponible.
+										{/if}
+									</p>
+								{:else}
+									<p class="detalle-muted detalle-licencia">
+										Sin fecha de vigencia de licencia registrada.
 									</p>
 								{/if}
 							</div>
@@ -2171,15 +2239,49 @@
 		<ModalBase
 			open={showShareModal}
 			eyebrow="Compartir"
-			title="Enlace del servicio"
-			subtitle="Quien tenga el enlace ve el detalle público del servicio, sin iniciar sesión."
-			tamano="sm"
+			title="Comparte este servicio"
+			subtitle="Envía el enlace público o comparte el ticket como imagen."
+			tamano="md"
 			oncerrar={cerrarCompartir}
 		>
-			<button type="button" onclick={copyLink} class="compartir-enlace">
-				<span class="compartir-enlace-etiqueta">Toca para copiar</span>
-				<span class="compartir-enlace-url">{generatedShareUrl}</span>
-			</button>
+			<section class="compartir-ticket">
+				<div class="compartir-ticket-cabecera">
+					<div class="compartir-ticket-icono"><Ticket size={18} strokeWidth={2.1} /></div>
+					<div class="min-w-0 flex-1">
+						<p class="compartir-ticket-eyebrow">TICKET · {servicio.id.slice(0, 8).toUpperCase()}</p>
+						<p class="compartir-ticket-conductor">
+							{servicio.conductor
+								? `${servicio.conductor.nombre} ${servicio.conductor.apellido}`
+								: 'Conductor por asignar'}
+						</p>
+					</div>
+					<span class="compartir-ticket-estado">{STATUS_LABEL[servicio.estado] ?? servicio.estado}</span>
+				</div>
+				<div class="compartir-ticket-ruta">
+					<span>{servicio.origen?.nombre_municipio || servicio.origen_especifico || 'Origen'}</span>
+					<span aria-hidden="true">→</span>
+					<span>{servicio.destino?.nombre_municipio || servicio.destino_especifico || 'Destino'}</span>
+				</div>
+				<div class="compartir-ticket-meta">
+					{#if servicio.vehiculo?.placa}
+						<span>Vehículo {servicio.vehiculo.placa}</span>
+					{/if}
+					<span>{fechaProgramacion ? fmtDate(fechaProgramacion) : 'Fecha por confirmar'}</span>
+					<span>{horarioProgramado || 'Horario por confirmar'}</span>
+				</div>
+				<button type="button" class="compartir-ticket-abrir" onclick={abrirTicketCompartir}>
+					<Ticket size={16} strokeWidth={2.1} />
+					Ver ticket y compartir imagen
+				</button>
+			</section>
+
+			<div class="compartir-enlace-bloque">
+				<p class="compartir-enlace-titulo">Enlace público</p>
+				<button type="button" onclick={copyLink} class="compartir-enlace">
+					<span class="compartir-enlace-etiqueta">Toca para copiar</span>
+					<span class="compartir-enlace-url">{generatedShareUrl}</span>
+				</button>
+			</div>
 			{#snippet pie()}
 				<button type="button" class="btn-secondary" onclick={cerrarCompartir}>Cerrar</button>
 				<button type="button" class="btn-primary" onclick={copyLink}>
@@ -2187,6 +2289,9 @@
 				</button>
 			{/snippet}
 		</ModalBase>
+		{#if showTicketModal}
+			<ModalTicket {servicio} onClose={() => (showTicketModal = false)} />
+		{/if}
 	{/if}
 </div>
 
@@ -2288,14 +2393,17 @@
 	   que cada web define: verde en Transmeralda, naranja en Cotransmeq. */
 	.detalle-header {
 		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 0.75rem 1rem;
+		align-items: flex-start;
+		gap: 0.875rem;
+		padding: 0.85rem 1rem;
 		background: var(--color-emerald-50);
+		border-bottom: 1px solid var(--color-emerald-100);
 	}
 	@media (min-width: 768px) {
 		.detalle-header {
-			padding: 0.85rem 1.5rem;
+			align-items: center;
+			gap: 1rem;
+			padding: 1rem 1.5rem;
 		}
 	}
 	.detalle-volver {
@@ -2318,16 +2426,91 @@
 		opacity: 0.5;
 	}
 	.detalle-header-titulo {
+		min-width: 0;
+		margin: 0;
 		font-size: 1.3125rem;
 		line-height: 1.65rem;
 		font-weight: 800;
 		letter-spacing: -0.02em;
 		color: var(--color-gray-950);
+		overflow-wrap: anywhere;
 	}
-	.detalle-header-id {
-		font-size: 0.75rem;
-		font-weight: 600;
+	.detalle-header-indicaciones {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		min-width: 0;
+	}
+	.detalle-header-indicaciones-etiqueta {
 		color: var(--color-gray-600);
+		font-size: 0.65rem;
+		font-weight: 800;
+		letter-spacing: 0.055em;
+		line-height: 1.2;
+		text-transform: uppercase;
+	}
+	.detalle-header-indicaciones-texto {
+		margin: 0;
+		color: var(--color-gray-700);
+		font-size: 0.78rem;
+		font-weight: 500;
+		line-height: 1.35;
+		overflow-wrap: anywhere;
+		white-space: pre-line;
+	}
+	.detalle-header-contenido {
+		display: flex;
+		flex: 1;
+		min-width: 0;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.detalle-header-acciones {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 0.45rem;
+	}
+	.detalle-accion {
+		display: inline-flex;
+		min-height: 2.625rem;
+		align-items: center;
+		justify-content: center;
+		gap: 0.45rem;
+		padding: 0.625rem 0.75rem;
+		border: 1px solid transparent;
+		border-radius: 0.9rem;
+		font-size: 0.8rem;
+		font-weight: 800;
+		white-space: nowrap;
+		transition:
+			background-color 0.15s ease,
+			color 0.15s ease,
+			transform 0.15s ease;
+	}
+	.detalle-accion:hover:not(:disabled) {
+		transform: translateY(-1px);
+	}
+	.detalle-accion:disabled {
+		cursor: wait;
+		opacity: 0.65;
+	}
+	.detalle-accion--secundaria {
+		border-color: var(--color-emerald-100);
+		background: #fff;
+		color: var(--color-emerald-900);
+		box-shadow: 0 3px 10px rgba(1, 67, 57, 0.06);
+	}
+	.detalle-accion--secundaria:hover:not(:disabled) {
+		background: var(--color-emerald-50);
+	}
+	.detalle-accion--principal {
+		background: var(--color-emerald-900);
+		color: #fff;
+		box-shadow: 0 4px 12px rgba(1, 67, 57, 0.16);
+	}
+	.detalle-accion--principal:hover:not(:disabled) {
+		background: var(--color-emerald-800);
 	}
 	.detalle-fondo {
 		background: var(--color-emerald-50);
@@ -2453,23 +2636,6 @@
 		justify-content: space-between;
 		gap: 0.75rem;
 	}
-	/* Indicaciones de operaciones: tarjeta ámbar con borde a la izquierda, como en la app. */
-	.detalle-indicaciones {
-		border-left: 4px solid #d97706;
-		background: #fffbeb;
-	}
-	.detalle-indicaciones-titulo {
-		font-size: 0.8125rem;
-		font-weight: 900;
-		letter-spacing: 0.025em;
-		color: #92400e;
-	}
-	.detalle-indicaciones-texto {
-		font-size: 0.9375rem;
-		line-height: 1.375rem;
-		color: var(--color-gray-950);
-		white-space: pre-line;
-	}
 	.detalle-condicion {
 		display: flex;
 		flex-direction: column;
@@ -2556,10 +2722,23 @@
 		gap: 0.875rem;
 	}
 	.detalle-avatar {
-		width: 3rem;
-		height: 3rem;
+		width: 4.5rem;
+		height: 4.5rem;
 		flex-shrink: 0;
 		border-radius: 16px;
+	}
+	.detalle-licencia {
+		margin-top: 0.25rem;
+		font-size: 0.75rem;
+		line-height: 1.125rem;
+		font-weight: 600;
+		color: var(--color-gray-600);
+	}
+	.detalle-licencia--alerta {
+		color: #92400e;
+	}
+	.detalle-licencia--vencida {
+		color: #b91c1c;
 	}
 	.detalle-avatar--iniciales {
 		display: flex;
@@ -2578,6 +2757,110 @@
 		border-top: 1px solid var(--color-gray-100);
 	}
 
+	.compartir-ticket {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 1rem;
+		border: 1px solid var(--color-gray-100);
+		border-radius: 20px;
+		background: #fff;
+		box-shadow: 0 5px 16px rgba(0, 29, 23, 0.055);
+	}
+	.compartir-ticket-cabecera {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+	}
+	.compartir-ticket-icono {
+		display: flex;
+		width: 2.5rem;
+		height: 2.5rem;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		border-radius: 0.85rem;
+		background: var(--color-emerald-50);
+		color: var(--color-emerald-800);
+	}
+	.compartir-ticket-eyebrow,
+	.compartir-enlace-titulo {
+		margin: 0;
+		color: var(--color-gray-600);
+		font-size: 0.68rem;
+		font-weight: 900;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+	.compartir-ticket-conductor {
+		margin: 0.15rem 0 0;
+		overflow: hidden;
+		color: var(--color-gray-950);
+		font-size: 0.95rem;
+		font-weight: 850;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.compartir-ticket-estado {
+		flex-shrink: 0;
+		padding: 0.28rem 0.55rem;
+		border-radius: 999px;
+		background: var(--color-emerald-50);
+		color: var(--color-emerald-800);
+		font-size: 0.67rem;
+		font-weight: 850;
+	}
+	.compartir-ticket-ruta {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.65rem 0.75rem;
+		border-radius: 12px;
+		background: var(--color-gray-50);
+		color: var(--color-gray-900);
+		font-size: 0.8rem;
+		font-weight: 800;
+	}
+	.compartir-ticket-ruta span:first-child,
+	.compartir-ticket-ruta span:last-child {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.compartir-ticket-ruta span:nth-child(2) {
+		flex-shrink: 0;
+		color: var(--color-emerald-700);
+	}
+	.compartir-ticket-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem 0.8rem;
+		color: var(--color-gray-600);
+		font-size: 0.72rem;
+		font-weight: 650;
+	}
+	.compartir-ticket-abrir {
+		display: inline-flex;
+		min-height: 2.625rem;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		border-radius: 12px;
+		background: var(--color-emerald-900);
+		color: #fff;
+		font-size: 0.8rem;
+		font-weight: 800;
+		transition: background-color 0.15s ease;
+	}
+	.compartir-ticket-abrir:hover {
+		background: var(--color-emerald-800);
+	}
+	.compartir-enlace-bloque {
+		display: flex;
+		flex-direction: column;
+		gap: 0.45rem;
+	}
 	/* Enlace del modal de compartir: tarjeta blanca de la app que se copia al tocarla. */
 	.compartir-enlace {
 		display: flex;
