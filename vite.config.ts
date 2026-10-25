@@ -5,6 +5,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit(), devtoolsJson()],
+	// Los mensajes de diagnóstico sirven en desarrollo; en producción dejamos visibles los errores.
+	esbuild: { pure: ['console.log', 'console.info', 'console.debug', 'console.warn'] },
 	worker: {
 		// OBLIGATORIO para `src/lib/editor/univer/formula.worker.ts`.
 		//

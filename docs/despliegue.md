@@ -65,6 +65,19 @@ claves de mapas hay que añadirlas aquí; ponerlas solo en el archivo de entorno
 del servidor no hace nada. Tampoco se define `ADDRESS_HEADER`, lo que afecta a
 los frenos por IP (ver [variables-de-entorno.md](./variables-de-entorno.md#trampas)).
 
+## Seguridad del navegador
+
+El frontend aplica CSP desde `svelte.config.js`: SvelteKit genera nonces para
+las páginas dinámicas y hashes para las prerenderizadas. La política permite
+los orígenes usados por la API, Socket.IO, Iconify, mapas y almacenamiento de
+archivos. Así se protegen scripts sin bloquear los SVG, imágenes ni workers que
+usa la app. `hooks.server.ts` añade HSTS y las cabeceras de tipo, framing,
+referer y permisos a las respuestas de la aplicación. Cloudflare fuerza HTTPS
+para `app.cotransmeq.com` con una regla que conserva ruta y consulta.
+
+En producción Vite elimina las llamadas de la app a `console.log`, `console.info`,
+`console.debug` y `console.warn`; `console.error` sigue disponible para errores.
+
 ## El workflow
 
 [.github/workflows/deploy-proxmox.yml](../.github/workflows/deploy-proxmox.yml)
