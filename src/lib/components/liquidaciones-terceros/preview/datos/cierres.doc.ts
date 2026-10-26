@@ -487,12 +487,21 @@ function basesDelReparto(
 		.reduce((s, c) => s + n(c.valor_total), 0);
 
 	// Los EXCLUIDOS no suman, igual que en la tabla de items.
+	const itemsConValorALiquidar = items.filter((it) => n(it.valor_liquidar) !== 0);
+	const adicionalesConValorALiquidar = adicionales.filter((a) => n(a.valor_liquidar) !== 0);
 	const totalServicio =
-		items.filter((it) => !it.excluido).reduce((s, it) => s + n(it.valor_liquidar), 0) +
-		adicionales.reduce((s, a) => s + n(a.valor_liquidar), 0);
+		itemsConValorALiquidar
+			.filter((it) => !it.excluido)
+			.reduce((s, it) => s + n(it.valor_liquidar), 0) +
+		adicionalesConValorALiquidar.reduce((s, a) => s + n(a.valor_liquidar), 0);
 	const totalServicios =
-		items.filter((it) => !it.excluido).reduce((s, it) => s + n(it.total_facturado), 0) +
-		adicionales.reduce((s, a) => s + n(a.valor_unitario) * (n(a.cantidad) || 1), 0);
+		itemsConValorALiquidar
+			.filter((it) => !it.excluido)
+			.reduce((s, it) => s + n(it.total_facturado), 0) +
+		adicionalesConValorALiquidar.reduce(
+			(s, a) => s + n(a.valor_unitario) * (n(a.cantidad) || 1),
+			0
+		);
 
 	return {
 		totalServicio,
@@ -701,7 +710,9 @@ export function documentoCierre(o: {
 	// Los excluidos siguen visibles (tachados, para poder restaurarlos) pero
 	// NO suman. Es la misma regla del `SUMIF(...,"NO",...)` de la hoja: si
 	// sumaran, el papel daría un total distinto del que se ve en el canvas.
-	const vivos = items.filter((it) => !it.excluido);
+	const itemsConValorALiquidar = items.filter((it) => n(it.valor_liquidar) !== 0);
+	const adicionalesConValorALiquidar = adicionales.filter((a) => n(a.valor_liquidar) !== 0);
+	const vivos = itemsConValorALiquidar.filter((it) => !it.excluido);
 
 	const filaDeItem = (it: ItemCierre, i: number): FilaPreview => ({
 		excluida: !!it.excluido,
@@ -766,22 +777,25 @@ export function documentoCierre(o: {
 	};
 
 	const filasItems = [
-		...items.map(filaDeItem),
-		...adicionales.map(filaDeAdicional)
+		...itemsConValorALiquidar.map(filaDeItem),
+		...adicionalesConValorALiquidar.map(filaDeAdicional)
 	];
 
-	const totalAdicionales = adicionales.reduce((s, a) => s + n(a.valor_liquidar), 0);
-	const totalAdicionalesBruto = adicionales.reduce(
+	const totalAdicionales = adicionalesConValorALiquidar.reduce(
+		(s, a) => s + n(a.valor_liquidar),
+		0
+	);
+	const totalAdicionalesBruto = adicionalesConValorALiquidar.reduce(
 		(s, a) => s + n(a.valor_unitario) * (n(a.cantidad) || 1),
 		0
 	);
 	const totalesItems = {
 		cantidad:
 			vivos.reduce((s, it) => s + (n(it.cantidad) || 1), 0) +
-			adicionales.reduce((s, a) => s + (n(a.cantidad) || 1), 0),
+			adicionalesConValorALiquidar.reduce((s, a) => s + (n(a.cantidad) || 1), 0),
 		admon: enRojo(
 			vivos.reduce((s, it) => s + n(it.valor_admin), 0) +
-				adicionales.reduce((s, a) => s + n(a.valor_admin), 0)
+				adicionalesConValorALiquidar.reduce((s, a) => s + n(a.valor_admin), 0)
 		),
 		total:
 			vivos.reduce((s, it) => s + n(it.total_facturado), 0) + totalAdicionalesBruto,
@@ -834,8 +848,14 @@ export function documentoCierre(o: {
 			id: 'items',
 			titulo: 'Liquidación de transporte',
 			nota: `${vivos.length} item(s)${
-				items.length !== vivos.length ? `  ·  ${items.length - vivos.length} excluido(s)` : ''
-			}${adicionales.length ? `  ·  ${adicionales.length} adicional(es)` : ''}`,
+				itemsConValorALiquidar.length !== vivos.length
+					? `  ·  ${itemsConValorALiquidar.length - vivos.length} excluido(s)`
+					: ''
+			}${
+				adicionalesConValorALiquidar.length
+					? `  ·  ${adicionalesConValorALiquidar.length} adicional(es)`
+					: ''
+			}`,
 			columnas: COLS_ITEMS,
 			filas: filasItems,
 			vacio: 'Esta hoja no tiene items.',

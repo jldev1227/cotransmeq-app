@@ -61,6 +61,28 @@
 		return String(v);
 	}
 
+	function valorNetoAdicional(adicional: any): number {
+		const bruto = (Number(adicional?.valor_unitario) || 0) * (Number(adicional?.cantidad) || 1);
+		const porcentaje = Number(adicional?.porcentaje_admin) || 0;
+		const admon =
+			adicional?.valor_admin != null
+				? Number(adicional.valor_admin) || 0
+				: Math.round((bruto * porcentaje) / 100);
+		return bruto - admon;
+	}
+
+	$: itemsConValorALiquidar = (item?.items || []).filter(
+		(it: any) => Number(it?.liquidacion_tercero?.valor_liquidar ?? 0) !== 0
+	);
+	$: adicionalesConValorALiquidar = (Array.isArray(item?.items_adicionales)
+		? item.items_adicionales
+		: []
+	).filter((adicional: any) => valorNetoAdicional(adicional) !== 0);
+	$: mostrarItemRaiz =
+		(!Array.isArray(item?.items) || item.items.length === 0) &&
+		Number(item?.valor_liquidar ?? 0) !== 0 &&
+		adicionalesConValorALiquidar.length === 0;
+
 	function getEstadoBadge(estado: string) {
 		const map: Record<string, { bg: string; text: string; border: string; label: string }> = {
 			BORRADOR: { bg: 'rgba(0,0,0,0.04)', text: '#4a4a4a', border: 'rgba(0,0,0,0.10)', label: 'Borrador' },
@@ -467,8 +489,8 @@
 	$: badge = getEstadoBadge(item.estado || 'BORRADOR');
 
 	$: pdfTotales = (() => {
-		const items = item.items || [];
-		const adicionales = Array.isArray(item.items_adicionales) ? item.items_adicionales : [];
+		const items = itemsConValorALiquidar;
+		const adicionales = adicionalesConValorALiquidar;
 		// Bruto = Σ (valor_unitario × cantidad) de los adicionales.
 		// Es el TOTAL facturado (antes de admon).
 		const adicionalesBruto = adicionales.reduce(
@@ -831,13 +853,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each (item.items || []).filter((it: any) => {
-							const lt = it.liquidacion_tercero || {};
-							const vAdmin = lt.valor_admin || 0;
-							const total = lt.total_facturado || 0;
-							const vLiq = lt.valor_liquidar || 0;
-							return !(vAdmin === 0 && total === 0 && vLiq === 0);
-						}) as it, idx (it.id ?? idx)}
+						{#each itemsConValorALiquidar as it, idx (it.id ?? idx)}
 							{@const lt = it.liquidacion_tercero || ({} as any)}
 							{@const liq = lt.liquidacion || {}}
 							{@const terc = lt.tercero || {}}
@@ -867,7 +883,7 @@
 								<td class="col-internal num-cell">{numFactura}</td>
 							</tr>
 						{:else}
-							{#if (item.items_adicionales || []).length === 0}
+							{#if mostrarItemRaiz}
 								<tr>
 									<td class="num-cell">1</td>
 									<td>{item.liquidacion?.cliente?.nombre || ''}</td>
@@ -893,7 +909,7 @@
 							{/if}
 						{/each}
 						<!-- Filas virtuales adicionales (COTRANSMEQ) — siempre al final -->
-						{#each item.items_adicionales || [] as adc, adcIdx ((adc.id || 'adc') + ':' + adcIdx)}
+						{#each adicionalesConValorALiquidar as adc, adcIdx ((adc.id || 'adc') + ':' + adcIdx)}
 							{@const vLiqGross = (adc.valor_unitario || 0) * (adc.cantidad || 1)}
 							{@const pctAdc = Number(adc.porcentaje_admin) || 0}
 							{@const vAdminAdc = adc.valor_admin != null ? adc.valor_admin : Math.round((vLiqGross * pctAdc) / 100)}
