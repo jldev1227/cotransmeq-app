@@ -31,44 +31,6 @@ const config = {
 	preprocess: vitePreprocess(),
 	kit: {
 		adapter,
-		csp: {
-			mode: 'auto',
-			directives: {
-				'default-src': ['self'],
-				'base-uri': ['self'],
-				'object-src': ['none'],
-				'form-action': ['self'],
-				'frame-ancestors': ['self'],
-				'script-src': ['self', 'wasm-unsafe-eval', 'https://static.cloudflareinsights.com'],
-				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
-				'img-src': ['self', 'data:', 'blob:', 'https:'],
-				'font-src': ['self', 'data:', 'https://fonts.gstatic.com', 'https://api.mapbox.com'],
-				'connect-src': [
-					'self',
-					apiOrigin,
-					socketOrigin,
-					socketWebOrigin,
-					'https://api.iconify.design',
-					'https://api.mapbox.com',
-					'https://events.mapbox.com',
-					'https://*.tiles.mapbox.com',
-					'https://*.blob.core.windows.net',
-					'https://autocomplete.search.hereapi.com',
-					'https://lookup.search.hereapi.com',
-					'https://atlas.microsoft.com',
-					'https://overpass-api.de',
-					'https://geoportal.sgc.gov.co',
-					'https://cloudflareinsights.com',
-					...localConnections
-				],
-				'media-src': ['self', 'data:', 'blob:', 'https:'],
-				'frame-src': ['self', 'blob:', 'data:'],
-				'worker-src': ['self', 'blob:'],
-				'child-src': ['self', 'blob:'],
-				'manifest-src': ['self'],
-				'upgrade-insecure-requests': true
-			}
-		}
 	}
 };
 
