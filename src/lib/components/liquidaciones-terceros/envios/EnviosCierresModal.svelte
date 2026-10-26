@@ -163,6 +163,8 @@
 		/** Ficha del catálogo donde vive el correo por defecto. */
 		terceroId: string | null;
 		correoDefecto: string;
+		/** Total a facturar de la placa, igual al resumen del PDF previo. */
+		totalFacturable: number | null;
 		/** Su parte del reparto. `null` en hojas de un solo propietario. */
 		facturar: number | null;
 		porcentaje: number | null;
@@ -196,6 +198,7 @@
 						nombre: p.nombre || '— sin nombre —',
 						terceroId: p.tercero_id,
 						correoDefecto: p.correo ?? '',
+						totalFacturable: reparto.totalFacturable,
 						facturar: p.facturar,
 						porcentaje: p.porcentaje,
 						esConcepto: !p.aplica_retenciones,
@@ -210,6 +213,7 @@
 					nombre: h.tercero_nombre || '— sin tercero —',
 					terceroId: h.tercero_id,
 					correoDefecto: h.tercero_correo ?? '',
+					totalFacturable: reparto?.totalFacturable ?? null,
 					facturar: null,
 					porcentaje: null,
 					esConcepto: false,
@@ -473,26 +477,28 @@
 	/**
 	 * Las líneas de la tarjeta del correo, bajo Vehículo y Periodo.
 	 *
-	 * En una placa de varios propietarios el destinatario abre el correo antes
-	 * que el PDF, y lo que busca es cuánto le toca a ÉL —no el total de la
-	 * placa, que es de todos—. Por eso va su valor a facturar y su
-	 * participación, y va ya formateado: la cifra tiene que ser exactamente la
-	 * de su card en el PDF adjunto, y recalcularla en el servidor sería una
-	 * segunda aritmética que acabaría discrepando del papel.
-	 *
-	 * En una hoja de un solo propietario no hay reparto que contar y la
-	 * tarjeta se queda como estaba.
+	 * El valor total de la placa sale del mismo reparto usado por la vista
+	 * previa. En una hoja multi-propietario también se muestra la parte del
+	 * destinatario y su participación; el HTML del correo recibe cifras ya
+	 * formateadas, sin recalcularlas en el servidor.
 	 */
-	function resumenDe(d: Destino): Array<{ etiqueta: string; valor: string }> | undefined {
-		if (d.facturar == null) return undefined;
-		const lineas = [
-			{
-				// Un pago interno no se factura: se abona. Llamarlo «valor a
-				// facturar» en el correo del banco sería decirle otra cosa.
-				etiqueta: d.esConcepto ? 'Valor proporcional' : 'Valor a facturar',
+	function resumenDe(
+		d: Destino,
+		valorFacturablePreview?: number | null
+	): Array<{ etiqueta: string; valor: string }> | undefined {
+		const totalFacturable = valorFacturablePreview ?? d.totalFacturable;
+		if (totalFacturable == null && d.facturar == null) return undefined;
+		const lineas: Array<{ etiqueta: string; valor: string }> = [];
+		if (totalFacturable != null) {
+			lineas.push({ etiqueta: 'VALOR A FACTURAR', valor: COP(totalFacturable) });
+		}
+		if (d.facturar != null) {
+			lineas.push({
+				// Un pago interno se abona a un concepto; no se paga a un tercero.
+				etiqueta: d.esConcepto ? 'Valor proporcional' : 'Valor proporcional a facturar',
 				valor: COP(d.facturar)
-			}
-		];
+			});
+		}
 		if (d.porcentaje != null) {
 			lineas.push({ etiqueta: 'Participación', valor: `${d.porcentaje.toFixed(2)}%` });
 		}
@@ -527,6 +533,13 @@
 				documento: documentoCierre({ cierre: detalles[h.id], mes, anio })
 			}));
 			const nombrePorHoja = new Map(hojasUnicas.map((h, i) => [h.id, hojas[i].nombreArchivo]));
+			const valorFacturablePreviewPorHoja = new Map(
+				hojasUnicas.map((h, i) => [
+					h.id,
+					hojas[i].documento.resumen?.find((r) => r.label.toUpperCase() === 'VALOR A FACTURAR')
+						?.valor ?? null
+				])
+			);
 
 			const { documentos, fallidas } = await componerHojasHtml('cierres', hojas, {
 				onProgreso: (hechas, total) => {
@@ -564,7 +577,7 @@
 					cc: f.copias.length > 0 ? f.copias : undefined,
 					filename,
 					html,
-					resumen: resumenDe(d)
+					resumen: resumenDe(d, valorFacturablePreviewPorHoja.get(f.hoja.id))
 				});
 			}
 

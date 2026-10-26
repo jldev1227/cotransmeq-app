@@ -9,7 +9,7 @@
  *   3. Gastos de vehículo
  *   4. Anticipos del vehículo
  *   5. Impuestos y retenciones (o el reparto por copropietario)
- *   6. TOTAL DESCUENTOS y TOTAL A PAGAR
+ *   6. DESCUENTOS ANTICIPO y TOTAL A PAGAR
  *
  * ── De dónde salen los números ──
  * De `detalles[cierreId]`, es decir de lo que el canvas tiene EN MEMORIA,
@@ -333,43 +333,53 @@ export interface PropietarioReparto {
 	porcentaje_efectivo: number;
 	/** `false` = pago interno por concepto: no tributa ni genera egreso. */
 	aplica_retenciones: boolean;
-	/** Su parte del valor servicio, por el porcentaje efectivo. */
+	/** Su parte del valor a facturar (servicios menos gastos de vehículo). */
 	facturar: number;
+	/** Su parte liquidable después de los descuentos generales. */
+	valorNetoBase: number;
 	/** Suma de SUS retenciones. 0 en los pagos internos. */
 	retenciones: number;
-	/** `facturar − retenciones`. NO se recorta a cero: si es negativo, se ve. */
+	/** Valor liquidable menos retenciones. NO se recorta a cero. */
 	neto: number;
 }
 
 export interface RepartoCierre {
 	esMulti: boolean;
-	/** Bruto de la hoja (items + adicionales, sin los excluidos). */
+	/** Suma de `valor_liquidar` de items y adicionales vivos. */
 	totalServicio: number;
 	/** Nómina + gastos + anticipos: se descuentan ANTES de repartir. */
 	descuentosGlobales: number;
-	/** `totalServicio − descuentosGlobales`. Lo que se reparte. */
+	/** `totalServicio − descuentosGlobales`, base del pago por propietario. */
 	valorServicio: number;
+	/** Anticipos, único concepto del resumen DESCUENTOS ANTICIPO. */
+	totalAnticipos: number;
+	/** Servicios menos gastos del vehículo. */
+	totalFacturable: number;
 	propietarios: PropietarioReparto[];
 }
 
 /**
  * El reparto, a partir de lo ya totalizado.
  *
- * Los descuentos generales se totalizan ANTES de repartir; lo que queda es
- * el VALOR SERVICIO, y ese se divide por el porcentaje EFECTIVO de la
- * cascada (ver `$lib/editor/business/reparto-propietarios.ts`, cuadre al
- * peso). Las retenciones son de cada propietario —las calcula y persiste el
- * servidor sobre SU valor a facturar— y solo aplican a quienes tributan.
+ * `facturar` reparte servicios menos gastos de vehículo. `valorNetoBase`
+ * conserva la base de pago actual, que resta todos los descuentos generales;
+ * las retenciones por propietario se descuentan de esa base.
  */
 function repartoCore(
 	copropietarios: CopropietarioCierre[],
 	impuestos: ConceptoDescuento[],
 	totalServicio: number,
-	descuentosGlobales: number
+	descuentosGlobales: number,
+	totalFacturable: number,
+	totalAnticipos: number
 ): RepartoCierre {
 	const ordenados = [...copropietarios].sort((a, b) => a.orden - b.orden);
 	const valorServicio = totalServicio - descuentosGlobales;
 	const facturarMap = repartirValor(
+		totalFacturable,
+		ordenados.map((p) => ({ id: p.id, efectivo: n(p.porcentaje_efectivo), orden: p.orden }))
+	);
+	const valorNetoBaseMap = repartirValor(
 		valorServicio,
 		ordenados.map((p) => ({ id: p.id, efectivo: n(p.porcentaje_efectivo), orden: p.orden }))
 	);
@@ -379,8 +389,11 @@ function repartoCore(
 		totalServicio,
 		descuentosGlobales,
 		valorServicio,
+		totalAnticipos,
+		totalFacturable,
 		propietarios: ordenados.map((p): PropietarioReparto => {
 			const facturar = facturarMap.get(p.id) ?? 0;
+			const valorNetoBase = valorNetoBaseMap.get(p.id) ?? 0;
 			// Un pago interno no tributa: aunque el servidor le hubiera dejado
 			// una fila de impuesto colgada, aquí no cuenta.
 			const retenciones = p.aplica_retenciones
@@ -399,8 +412,9 @@ function repartoCore(
 				porcentaje_efectivo: n(p.porcentaje_efectivo),
 				aplica_retenciones: p.aplica_retenciones,
 				facturar,
+				valorNetoBase,
 				retenciones,
-				neto: facturar - retenciones
+				neto: valorNetoBase - retenciones
 			};
 		})
 	};
@@ -422,6 +436,8 @@ export function repartoDeCierre(cierre: CierreFinalCompleto): RepartoCierre {
 			totalServicio: 0,
 			descuentosGlobales: 0,
 			valorServicio: 0,
+			totalAnticipos: 0,
+			totalFacturable: 0,
 			propietarios: []
 		};
 	}
@@ -433,12 +449,14 @@ export function repartoDeCierre(cierre: CierreFinalCompleto): RepartoCierre {
 		copropietarios,
 		bases.impuestos,
 		bases.totalServicio,
-		bases.descuentosGlobales
+		bases.descuentosGlobales,
+		bases.totalFacturable,
+		bases.totalAnticipos
 	);
 }
 
 /**
- * Las dos cifras de las que cuelga el reparto, y los impuestos ya ordenados.
+ * Las cifras del reparto y los impuestos ya ordenados.
  *
  * Vive aparte porque la calculan DOS caminos —el documento y el modal de
  * envíos— y con dos copias acabarían discrepando en el peso, que es
@@ -452,7 +470,13 @@ function basesDelReparto(
 	items: ItemCierre[],
 	adicionales: AdicionalCierre[],
 	propietarios: Record<string, boolean>
-): { totalServicio: number; descuentosGlobales: number; impuestos: ConceptoDescuento[] } {
+): {
+	totalServicio: number;
+	descuentosGlobales: number;
+	totalFacturable: number;
+	totalAnticipos: number;
+	impuestos: ConceptoDescuento[];
+} {
 	// Normaliza los conceptos de nómina, igual que hace el documento al
 	// pintar sus bloques de conductor.
 	bloquesConductores(conceptos, propietarios);
@@ -466,9 +490,14 @@ function basesDelReparto(
 	const totalServicio =
 		items.filter((it) => !it.excluido).reduce((s, it) => s + n(it.valor_liquidar), 0) +
 		adicionales.reduce((s, a) => s + n(a.valor_liquidar), 0);
+	const totalServicios =
+		items.filter((it) => !it.excluido).reduce((s, it) => s + n(it.total_facturado), 0) +
+		adicionales.reduce((s, a) => s + n(a.valor_unitario) * (n(a.cantidad) || 1), 0);
 
 	return {
 		totalServicio,
+		totalFacturable: totalServicios - gastos.total,
+		totalAnticipos: anticipos.total,
 		descuentosGlobales: totalCostosLaborales + gastos.total + anticipos.total,
 		impuestos: conceptos
 			.filter((c) => c.tipo === 'IMPUESTO')
@@ -480,18 +509,14 @@ function basesDelReparto(
 
 /**
  * Bloques de la sección «Retenciones y neto a pagar por copropietario».
- *
- * Aritmética: los descuentos generales (nómina + gastos + anticipos) se
- * totalizan ANTES de repartir; lo que queda es el VALOR SERVICIO, y ese se
- * divide como valor a facturar por el porcentaje EFECTIVO de la cascada
- * (ver `$lib/editor/business/reparto-propietarios.ts`, cuadre al peso). Las
- * retenciones son de cada propietario —las calcula y persiste el servidor
- * sobre SU valor a facturar— y solo aplican a quienes tributan.
+ * El valor a facturar reparte servicios menos gastos de vehículo; la base
+ * liquidable y el neto conservan la distribución de descuentos y retenciones
+ * propia de cada copropietario.
  *
  * Devuelve DOS grupos, y no una lista sola, porque son dos cosas
  * distintas y antes se leían como una:
  *
- *  `reparto` — el resumen (total descuentos + valor servicio) y una card
+ *  `reparto` — el resumen del total a facturar y una card
  *    por propietario CON retenciones (facturar, retenciones concepto a
  *    concepto, neto). Esto es dinero que SALE hacia una persona.
  *
@@ -504,10 +529,11 @@ function basesDelReparto(
  */
 function bloquesCopropietarios(
 	reparto: RepartoCierre,
-	impuestos: ConceptoDescuento[]
+	impuestos: ConceptoDescuento[],
+	valorAFacturar: number
 ): { reparto: BloquePreview[]; conceptos: BloquePreview[] } {
 	const ordenados = reparto.propietarios;
-	const { valorServicio, descuentosGlobales } = reparto;
+	const { totalAnticipos } = reparto;
 
 	const resumen: BloquePreview = {
 		id: 'copro-resumen',
@@ -516,18 +542,25 @@ function bloquesCopropietarios(
 		columnas: COLS_COPROPIETARIO,
 		filas: [
 			{
+				destacada: true,
 				celdas: {
-					concepto: 'Total descuentos',
+					concepto: 'VALOR A FACTURAR',
 					porcentaje: '',
-					valor: restado(descuentosGlobales)
+					valor: valorAFacturar
 				}
 			},
 			{
-				destacada: true,
 				celdas: {
-					concepto: 'Valor servicio (listo para repartir)',
+					concepto: 'Descuentos anticipo',
 					porcentaje: '',
-					valor: valorServicio
+					valor: restado(totalAnticipos)
+				}
+			},
+			{
+				celdas: {
+					concepto: 'TOTAL A PAGAR',
+					porcentaje: '',
+					valor: valorAFacturar - totalAnticipos
 				}
 			}
 		]
@@ -625,7 +658,7 @@ function bloquesCopropietarios(
 								celdas: {
 									concepto: (p.nota || p.nombre).toUpperCase(),
 									porcentaje: fmtPct(n(p.porcentaje)),
-									valor: p.facturar
+								valor: p.valorNetoBase
 								}
 							},
 							{
@@ -782,17 +815,17 @@ export function documentoCierre(o: {
 		.filter((c) => c.tipo === 'COSTO_LABORAL')
 		.reduce((s, c) => s + n(c.valor_total), 0);
 
-	// Mismo encadenado que la hoja: TOTAL DESCUENTOS es la suma de los
-	// totalizadores de las cuatro secciones, y TOTAL A PAGAR se apoya en él.
 	const totalServicio = Number(totalesItems.valor_liquidar);
-	const totalDescuentos =
-		totalCostosLaborales + gastos.total + impuestosBloque.total + anticipos.total;
-	const totalPagar = totalServicio - totalDescuentos;
+	// VALOR A FACTURAR = total de servicios menos gastos del vehículo.
+	// En el resumen, DESCUENTOS ANTICIPO contiene únicamente anticipos.
+	const valorAFacturar = Number(totalesItems.total) - gastos.total;
+	const totalDescuentos = anticipos.total;
+	const totalPagar = valorAFacturar - totalDescuentos;
 
 	// ── Copropietarios ──
 	const esMulti = !!hoja.es_multi_propietario && copropietarios.length > 0;
-	// Lo que se reparte es el bruto menos los descuentos GLOBALES (nómina,
-	// gastos y anticipos): las retenciones ya van por copropietario.
+	// El reparto interno conserva la liquidación por propietario; el resumen
+	// del documento muestra por separado facturación neta de gastos y anticipos.
 	const descuentosGlobales = totalCostosLaborales + gastos.total + anticipos.total;
 	const sumaPct = copropietarios.reduce((s, p) => s + n(p.porcentaje), 0);
 
@@ -846,8 +879,16 @@ export function documentoCierre(o: {
 		// copropietario cuánto se le factura: una sola aritmética, o el correo
 		// y el PDF adjunto acabarían diciendo cifras distintas.
 		const { reparto, conceptos } = bloquesCopropietarios(
-			repartoCore(copropietarios, impuestos, totalServicio, descuentosGlobales),
-			impuestos
+			repartoCore(
+				copropietarios,
+				impuestos,
+				totalServicio,
+				descuentosGlobales,
+				valorAFacturar,
+				totalDescuentos
+			),
+			impuestos,
+			valorAFacturar
 		);
 		secciones.push({
 			id: 'copropietarios',
@@ -888,14 +929,14 @@ export function documentoCierre(o: {
 	// card, y lo que va a conceptos ni siquiera se paga. Un TOTAL A PAGAR
 	// único al pie se leía como el cheque de la placa cuando en realidad era
 	// la suma de pagos a personas distintas más un abono interno; además
-	// repetía, con otra cifra, el «Total descuentos» que ya sale arriba en el
+	// repetía, con otra cifra, los «Descuentos anticipo» que ya salen arriba en el
 	// resumen del reparto (ese excluye las retenciones, que van por
 	// propietario). El documento cierra en el reparto.
 	const resumen: LineaResumen[] | undefined = esMulti
 		? undefined
 		: [
-				{ label: 'Valor del servicio', valor: totalServicio },
-				{ label: 'Total descuentos', valor: totalDescuentos, descuento: true },
+				{ label: 'VALOR A FACTURAR', valor: valorAFacturar },
+				{ label: 'Descuentos anticipo', valor: totalDescuentos, descuento: true },
 				{ label: 'Total a pagar', valor: totalPagar, fuerte: true }
 			];
 

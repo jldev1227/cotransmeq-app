@@ -486,6 +486,20 @@
 		}, 0);
 		// Neto = bruto − admon (lo que efectivamente se liquida al tercero).
 		const adicionalesNeto = adicionalesBruto - adicionalesAdmon;
+		const conceptos = item.conceptos || [];
+		const totalGastosVehiculo = getGastos(conceptos).reduce(
+			(s, c) => s + (Number(c.valor_total) || 0),
+			0
+		);
+		const totalAnticipos = getAnticipos(conceptos).reduce(
+			(s, c) => s + (Number(c.valor_total) || 0),
+			0
+		);
+		const totalFacturado =
+			items.reduce(
+				(s: number, it: any) => s + (it.liquidacion_tercero?.total_facturado || 0),
+				0
+			) + adicionalesBruto;
 		return {
 			totalVUnidad:
 				items.reduce((s: number, it: any) => s + (it.liquidacion_tercero?.valor_unitario || 0), 0) +
@@ -498,11 +512,10 @@
 					(s: number, it: any) => s + (it.liquidacion_tercero?.valor_admin || 0),
 					0
 				) + adicionalesAdmon,
-			totalFacturado:
-				items.reduce(
-					(s: number, it: any) => s + (it.liquidacion_tercero?.total_facturado || 0),
-					0
-				) + adicionalesBruto,
+			totalFacturado,
+			totalGastosVehiculo,
+			totalAnticipos,
+			valorAFacturar: totalFacturado - totalGastosVehiculo,
 			totalLiquidar:
 				items.reduce((s: number, it: any) => s + (it.liquidacion_tercero?.valor_liquidar || 0), 0) +
 				adicionalesNeto,
@@ -1231,6 +1244,20 @@
 				>
 					<div
 						style="
+								display:inline-flex;
+								flex-direction:row;
+								gap:4px;
+								align-items:center;
+								font-size:14px;
+								font-weight:700;
+							"
+					>
+						<span>VALOR A FACTURAR:</span>
+						<span style="color:#ea580c;">{COP(pdfTotales.valorAFacturar)}</span>
+					</div>
+
+					<div
+						style="
 			display:inline-flex;
 			flex-direction:row;
 			gap:4px;
@@ -1239,9 +1266,9 @@
 			font-weight:700;
 		"
 					>
-						<span>TOTAL DESCUENTOS:</span>
+						<span>DESCUENTOS ANTICIPO:</span>
 						<span style="color:#dc2626;">
-							{COP(item.total_descuentos || 0)}
+							{COP(pdfTotales.totalAnticipos)}
 						</span>
 					</div>
 
@@ -1257,7 +1284,7 @@
 					>
 						<span>TOTAL A PAGAR:</span>
 						<span style="color:#ea580c;">
-							{COP((pdfTotales.totalLiquidar || 0) - (item.total_descuentos || 0))}
+							{COP(pdfTotales.valorAFacturar - pdfTotales.totalAnticipos)}
 						</span>
 					</div>
 				</div>
