@@ -333,7 +333,7 @@ export interface PropietarioReparto {
 	porcentaje_efectivo: number;
 	/** `false` = pago interno por concepto: no tributa ni genera egreso. */
 	aplica_retenciones: boolean;
-	/** Su parte del valor a facturar (servicios menos gastos de vehículo). */
+	/** Su parte del valor a facturar (servicios menos nómina y gastos de vehículo). */
 	facturar: number;
 	/** Su parte liquidable después de los descuentos generales. */
 	valorNetoBase: number;
@@ -353,7 +353,7 @@ export interface RepartoCierre {
 	valorServicio: number;
 	/** Anticipos, único concepto del resumen DESCUENTOS ANTICIPO. */
 	totalAnticipos: number;
-	/** Servicios menos gastos del vehículo. */
+	/** Servicios menos costos de nómina y gastos del vehículo. */
 	totalFacturable: number;
 	propietarios: PropietarioReparto[];
 }
@@ -361,7 +361,7 @@ export interface RepartoCierre {
 /**
  * El reparto, a partir de lo ya totalizado.
  *
- * `facturar` reparte servicios menos gastos de vehículo. `valorNetoBase`
+ * `facturar` reparte servicios menos nómina y gastos de vehículo. `valorNetoBase`
  * conserva la base de pago actual, que resta todos los descuentos generales;
  * las retenciones por propietario se descuentan de esa base.
  */
@@ -505,7 +505,7 @@ function basesDelReparto(
 
 	return {
 		totalServicio,
-		totalFacturable: totalServicios - gastos.total,
+		totalFacturable: totalServicios - gastos.total - totalCostosLaborales,
 		totalAnticipos: anticipos.total,
 		descuentosGlobales: totalCostosLaborales + gastos.total + anticipos.total,
 		impuestos: conceptos
@@ -518,9 +518,9 @@ function basesDelReparto(
 
 /**
  * Bloques de la sección «Retenciones y neto a pagar por copropietario».
- * El valor a facturar reparte servicios menos gastos de vehículo; la base
- * liquidable y el neto conservan la distribución de descuentos y retenciones
- * propia de cada copropietario.
+ * El valor a facturar reparte servicios menos nómina y gastos de vehículo;
+ * la base liquidable y el neto conservan la distribución de descuentos y
+ * retenciones propia de cada copropietario.
  *
  * Devuelve DOS grupos, y no una lista sola, porque son dos cosas
  * distintas y antes se leían como una:
@@ -830,9 +830,9 @@ export function documentoCierre(o: {
 		.reduce((s, c) => s + n(c.valor_total), 0);
 
 	const totalServicio = Number(totalesItems.valor_liquidar);
-	// VALOR A FACTURAR = total de servicios menos gastos del vehículo.
+	// VALOR A FACTURAR = total de servicios menos nómina de conductores y gastos del vehículo.
 	// En el resumen, DESCUENTOS ANTICIPO contiene únicamente anticipos.
-	const valorAFacturar = Number(totalesItems.total) - gastos.total;
+	const valorAFacturar = Number(totalesItems.total) - gastos.total - totalCostosLaborales;
 	const totalDescuentos = anticipos.total;
 	const totalPagar = valorAFacturar - totalDescuentos;
 

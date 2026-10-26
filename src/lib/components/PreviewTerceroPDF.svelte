@@ -513,6 +513,10 @@
 			(s, c) => s + (Number(c.valor_total) || 0),
 			0
 		);
+		const totalCostosLaborales = getLaborales(conceptos).reduce(
+			(s, c) => s + (Number(c.valor_total) || 0),
+			0
+		);
 		const totalAnticipos = getAnticipos(conceptos).reduce(
 			(s, c) => s + (Number(c.valor_total) || 0),
 			0
@@ -536,8 +540,9 @@
 				) + adicionalesAdmon,
 			totalFacturado,
 			totalGastosVehiculo,
+			totalCostosLaborales,
 			totalAnticipos,
-			valorAFacturar: totalFacturado - totalGastosVehiculo,
+			valorAFacturar: totalFacturado - totalGastosVehiculo - totalCostosLaborales,
 			totalLiquidar:
 				items.reduce((s: number, it: any) => s + (it.liquidacion_tercero?.valor_liquidar || 0), 0) +
 				adicionalesNeto,
