@@ -247,6 +247,14 @@ ${cada('td.lbl')} {
 }
 /* Texto largo (cliente / recorrido): que respire antes de partir palabra. */
 ${cada('td.long')} { overflow-wrap: normal; word-break: keep-all; }
+/* En el PDF de recorridos el detalle queda en una sola línea: envolverlo
+   alarga cada fila y termina empujando recorridos a otra página. */
+.doc .bloque-tbl td .texto-truncado {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Columnas de uso interno: gris, para que se lean como «no es del cliente». */
 ${cada('th.col-internal')} {

@@ -70,6 +70,11 @@ Reglas que no se negocian:
   `ESCALA_PREVIEW = 1.35`) y, solo para el PDF, la regla
   `@page { size: letter landscape; … }`.
 
+En el PDF de recorridos, la descripción del servicio y el cliente conservan el
+texto completo en el preview y se limitan a una sola línea con puntos
+suspensivos al exportar. Así esos datos largos no aumentan la altura de las
+filas ni desplazan recorridos a páginas adicionales.
+
 El exportador individual y el de lotes usan las rutas locales de marca:
 `logo_nombre.webp` para la cabecera y `sello-firma-terceros.webp` para el sello.
 La misma imagen se usa en nómina y en la liquidación regular del tercero.

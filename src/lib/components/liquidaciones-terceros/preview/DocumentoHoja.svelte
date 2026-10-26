@@ -19,7 +19,13 @@
 <script lang="ts">
 	import { columnasVisibles, type ScopePreview } from './columnas';
 	import { claseDeCelda, textoDeCelda } from './formato';
-	import type { DocumentoPreview, LineaResumen, SeccionPreview } from './tipos';
+	import type {
+		CeldaFormateada,
+		DocumentoPreview,
+		LineaResumen,
+		SeccionPreview,
+		ValorCelda
+	} from './tipos';
 
 	interface Props {
 		scope: ScopePreview;
@@ -71,6 +77,12 @@
 
 	function claseLinea(l: LineaResumen): string {
 		return l.fuerte ? 'fuerte' : l.descuento ? 'desc' : '';
+	}
+
+	function esCeldaTruncada(valor: ValorCelda): valor is CeldaFormateada & { truncar: true } {
+		return (
+			typeof valor === 'object' && valor !== null && 'texto' in valor && valor.truncar === true
+		);
 	}
 
 	const hoy = new Date().toLocaleDateString('es-CO', {
@@ -248,8 +260,15 @@
 												class:destacada={fila.destacada}
 											>
 												{#each b.columnas as c (c.key)}
-													<td class={claseDeCelda(fila.celdas[c.key], c.tipo)}>
-														{textoDeCelda(fila.celdas[c.key], c.tipo)}
+													{@const valor = fila.celdas[c.key]}
+													<td class={claseDeCelda(valor, c.tipo)}>
+														{#if esCeldaTruncada(valor)}
+															<span class="texto-truncado" title={valor.texto}>
+																{textoDeCelda(valor, c.tipo)}
+															</span>
+													{:else}
+														{textoDeCelda(valor, c.tipo)}
+													{/if}
 													</td>
 												{/each}
 											</tr>

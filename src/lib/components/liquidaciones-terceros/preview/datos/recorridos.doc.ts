@@ -23,7 +23,8 @@ import type {
 	ColumnaPreview,
 	DocumentoPreview,
 	FilaPreview,
-	SeccionPreview
+	SeccionPreview,
+	ValorCelda
 } from '../tipos';
 import { COP, nombreMes } from '../formato';
 import type {
@@ -71,6 +72,12 @@ import type {
  *    ancho. Cambiarlo movía el recuento de páginas de cada conductor.
  */
 export type DestinoDocumento = 'pantalla' | 'pdf';
+
+/** En papel, el detalle no puede hacer crecer cada fila de la planilla. */
+function textoDeUnaLinea(texto: string | null | undefined, destino: DestinoDocumento): ValorCelda {
+	if (destino !== 'pdf' || !texto) return texto ?? '';
+	return { texto, truncar: true };
+}
 
 function columnasBase(destino: DestinoDocumento): ColumnaPreview[] {
 	const pdf = destino === 'pdf';
@@ -214,8 +221,8 @@ function bloqueRecorridos(
 			// «Descripción del servicio» del formato: qué se transportó en el
 			// tramo. En una fila de DÍA la misma columna lleva la observación
 			// libre del día, y el DTO ya las unifica.
-			descripcion: f.descripcion ?? '',
-			cliente: f.cliente_nombre ?? '',
+			descripcion: textoDeUnaLinea(f.descripcion, destino),
+			cliente: textoDeUnaLinea(f.cliente_nombre, destino),
 			hora_ini: f.hora_inicio ?? '',
 			hora_fin: f.hora_fin ?? '',
 			horas: f.horas_conducidas || '',

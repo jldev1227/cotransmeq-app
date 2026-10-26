@@ -61,6 +61,8 @@ export interface CeldaFormateada {
 	texto: string;
 	/** `neg` la pinta en rojo, `pos` en verde. */
 	signo?: 'neg' | 'pos';
+	/** Imprime el texto en una sola línea con puntos suspensivos si no cabe. */
+	truncar?: boolean;
 	/**
 	 * Importe CRUDO del que salió `texto`.
 	 *
