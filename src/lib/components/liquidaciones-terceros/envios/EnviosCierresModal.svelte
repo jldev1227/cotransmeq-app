@@ -533,12 +533,13 @@
 				documento: documentoCierre({ cierre: detalles[h.id], mes, anio })
 			}));
 			const nombrePorHoja = new Map(hojasUnicas.map((h, i) => [h.id, hojas[i].nombreArchivo]));
-			const valorFacturablePreviewPorHoja = new Map(
-				hojasUnicas.map((h, i) => [
-					h.id,
-					hojas[i].documento.resumen?.find((r) => r.label.toUpperCase() === 'VALOR A FACTURAR')
-						?.valor ?? null
-				])
+			const valorFacturablePreviewPorHoja = new Map<string, number | null>(
+				hojasUnicas.map((h, i): [string, number | null] => {
+					const valor = hojas[i].documento.resumen?.find(
+						(r) => r.label.toUpperCase() === 'VALOR A FACTURAR'
+					)?.valor;
+					return [h.id, typeof valor === 'number' ? valor : null];
+				})
 			);
 
 			const { documentos, fallidas } = await componerHojasHtml('cierres', hojas, {
