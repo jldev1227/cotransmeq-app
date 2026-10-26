@@ -239,8 +239,9 @@ deja fuera a quien solo tiene `limited`.
 
 | Módulo | `full` | `read` | `limited` |
 |---|---|---|---|
-| `dashboard`, `actividad`, `perfil`, `flota`, `conductores`, `clientes`, `mis-formularios` | Todos (`general`) | | |
+| `dashboard`, `actividad`, `perfil`, `flota`, `conductores`, `personal`, `clientes`, `mis-formularios` | Todos (`general`) | | |
 | `servicios` | administración, operaciones | HSEQ, talento humano, facturación | |
+| `rastreo_servicios` | administración, operaciones | HSEQ, talento humano, mantenimiento | |
 | `recargos` | administración, operaciones | HSEQ, facturación, talento humano | |
 | `solicitudes` | administración, operaciones | facturación, contabilidad | |
 | `sarlaft` | administración, talento humano | | |

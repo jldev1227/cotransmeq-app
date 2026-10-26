@@ -7,6 +7,7 @@
 	import FormularioUsuario from './FormularioUsuario.svelte';
 	import SelectorAreas from './SelectorAreas.svelte';
 	import { apiClient } from '$lib/api/apiClient';
+	import { OPCIONES_VINCULACION } from '$lib/config/personal';
 
 	/**
 	 * Alta manual: la cuenta queda creada y lista, con la contraseña que
@@ -62,6 +63,7 @@
 	let passwordConfirm = $state('');
 	let telefono = $state('');
 	let cargo = $state('');
+	let tipoVinculacion = $state('por_definir');
 	let role = $state('usuario');
 	let areas = $state<string[]>([]);
 	let verPassword = $state(false);
@@ -78,6 +80,7 @@
 			passwordConfirm = '';
 			telefono = '';
 			cargo = '';
+			tipoVinculacion = 'por_definir';
 			role = 'usuario';
 			areas = [];
 			verPassword = false;
@@ -121,6 +124,7 @@
 				password,
 				telefono: telefono.trim() || undefined,
 				cargo: cargo.trim() || undefined,
+				tipo_vinculacion: tipoVinculacion,
 				role,
 				area: areas
 			});
@@ -230,6 +234,11 @@
 				{#each ROLES as r (r.value)}
 					<option value={r.value}>{r.label}</option>
 				{/each}
+			</select>
+		</Campo>
+		<Campo id="{idForm}-vinculacion" label="Tipo de vinculación">
+			<select id="{idForm}-vinculacion" class="uf-input" bind:value={tipoVinculacion}>
+				{#each OPCIONES_VINCULACION as opcion (opcion.value)}<option value={opcion.value}>{opcion.label}</option>{/each}
 			</select>
 		</Campo>
 

@@ -81,7 +81,9 @@ export const listadoServicios = memoriaListado('/dashboard/servicios', { descart
 export const listadoAcciones = memoriaListado('/dashboard/acciones-correctivas');
 export const listadoAsistencias = memoriaListado('/dashboard/asistencias');
 export const listadoClientes = memoriaListado('/dashboard/clientes', { descartar: ['nuevo'] });
-export const listadoConductores = memoriaListado('/dashboard/conductores', {
+export const listadoConductores = memoriaListado('/dashboard/personal', {
+	porDefecto: '/dashboard/personal?tipo=conductor',
+	acepta: (params) => params.get('tipo') !== 'administrativo',
 	descartar: ['nuevo']
 });
 export const listadoEvaluaciones = memoriaListado('/dashboard/evaluaciones');

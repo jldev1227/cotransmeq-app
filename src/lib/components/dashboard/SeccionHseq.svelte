@@ -57,7 +57,7 @@
 					'El registro previo al recorrido ayuda a detectar novedades de salud y seguridad antes de iniciar la jornada.',
 				accion:
 					'Contacta a los conductores pendientes y confirma el diligenciamiento antes de continuar el servicio.',
-				enlace: '/dashboard/conductores?estado=servicio'
+				enlace: '/dashboard/personal?tipo=conductor&estado=servicio'
 			});
 
 		const descanso = Number(datos.descansos?.resumen?.alerta ?? k.alertas_descanso ?? 0);
@@ -114,7 +114,7 @@
 		valor={numero(k.conductores_en_servicio)}
 		detalle={`${numero(k.conductores_disponibles)} disponibles · ${numero(k.conductores_programados)} programados`}
 		icono={Users}
-		href="/dashboard/conductores?estado=servicio"
+		href="/dashboard/personal?tipo=conductor&estado=servicio"
 	/>
 	<Kpi
 		etiqueta="Sin preoperacional hoy"
@@ -149,7 +149,7 @@
 		subtitulo="Están en un servicio y no han enviado el HSEQ-FR-08/09 de hoy"
 		columnas={6}
 		tono={sinPreop.length ? 'alerta' : 'normal'}
-		enlace="/dashboard/conductores?estado=servicio"
+		enlace="/dashboard/personal?tipo=conductor&estado=servicio"
 	>
 		{#if sinPreop.length === 0}
 			<p class="sec-ok">

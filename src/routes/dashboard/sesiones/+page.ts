@@ -2,7 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 
 /**
- * `/dashboard/sesiones` es ahora la pestaña Sesiones de `/dashboard/usuarios`.
+ * `/dashboard/sesiones` es ahora la pestaña Sesiones de `/dashboard/personal`.
  *
  * La pantalla vivía por duplicado: aquí como tabla de once columnas en Tailwind
  * sobre `bg-gray-50`, y allí como sección con el lenguaje visual del resto del
@@ -28,5 +28,5 @@ export const load: PageLoad = ({ url }) => {
 	const estado = url.searchParams.get('estado');
 	if (estado && estado !== 'activas') destino.set('sesion', estado);
 
-	redirect(307, `/dashboard/usuarios?${destino}`);
+	redirect(307, `/dashboard/personal?tipo=administrativo&${destino}`);
 };

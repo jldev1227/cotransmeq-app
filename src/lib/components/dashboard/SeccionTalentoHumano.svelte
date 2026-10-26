@@ -120,7 +120,7 @@
 				evidencia:
 					'Los conductores vinculados con licencia vencida requieren actualización antes de conducir.',
 				accion: 'Gestiona la renovación y confirma la nueva fecha en cada ficha.',
-				enlace: '/dashboard/conductores'
+				enlace: '/dashboard/personal?tipo=conductor'
 			});
 
 		if (Number(k.con_pendientes) > 0 || sinContrato > 0)
@@ -131,7 +131,7 @@
 				evidencia: `${numero(k.con_pendientes)} vinculados tienen datos pendientes${sinContrato ? ` y ${numero(sinContrato)} conductores activos no tienen contrato o fecha de ingreso` : ''}.`,
 				accion:
 					'Completa los datos pendientes para mantener al día la información contractual del equipo.',
-				enlace: '/dashboard/conductores'
+				enlace: '/dashboard/personal?tipo=conductor'
 			});
 
 		if (camposSocialPendientes > 0)
@@ -142,7 +142,7 @@
 				evidencia: `${numero(social.eps)} sin EPS · ${numero(social.fondo_pension)} sin fondo de pensión · ${numero(social.arl)} sin ARL.`,
 				accion:
 					'Completa EPS, fondo y ARL en las fichas para facilitar la gestión de nómina y afiliaciones.',
-				enlace: '/dashboard/conductores'
+				enlace: '/dashboard/personal?tipo=conductor'
 			});
 
 		const alertasDescanso = Number(k.alertas_descanso ?? 0);
@@ -165,7 +165,7 @@
 				evidencia:
 					'Estas licencias todavía están vigentes, pero requieren seguimiento para evitar vencimientos.',
 				accion: 'Notifica a los conductores y solicita con anticipación el soporte renovado.',
-				enlace: '/dashboard/conductores'
+				enlace: '/dashboard/personal?tipo=conductor'
 			});
 
 		return items.slice(0, 5);
@@ -186,7 +186,7 @@
 			'Con tipo de contrato y fecha de ingreso'}
 		tono="verde"
 		icono={BadgeCheck}
-		href="/dashboard/conductores"
+		href="/dashboard/personal?tipo=conductor"
 	/>
 	<Kpi
 		etiqueta="Con datos pendientes"
@@ -229,7 +229,7 @@
 		subtitulo="Qué le falta a la ficha de cada vinculado"
 		columnas={7}
 		tono={datos.pendientes.items.length ? 'alerta' : 'normal'}
-		enlace="/dashboard/conductores"
+		enlace="/dashboard/personal?tipo=conductor"
 	>
 		{#if datos.pendientes.items.length === 0}
 			<p class="sec-ok">Todas las fichas de los vinculados están completas.</p>
@@ -325,7 +325,7 @@
 		subtitulo={`Próximos ${datos.licencias.proximos_dias} días`}
 		columnas={4}
 		tono={k.licencias_vencidas ? 'alerta' : 'normal'}
-		enlace="/dashboard/conductores"
+		enlace="/dashboard/personal?tipo=conductor"
 	>
 		{#if datos.licencias.items.length === 0}
 			<p class="sec-ok">Ninguna licencia vencida ni por vencer.</p>

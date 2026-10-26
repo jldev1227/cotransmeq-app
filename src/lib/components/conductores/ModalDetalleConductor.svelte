@@ -149,7 +149,7 @@
 
 	{#snippet acciones()}
 		{#if conductorId}
-			<a class="btn-secondary" href={`/dashboard/conductores/${conductorId}`}>Ver ficha completa</a>
+			<a class="btn-secondary" href={`/dashboard/personal/${conductorId}?tipo=conductor`}>Ver ficha completa</a>
 			{#if oneditar}
 				<button type="button" class="btn-primary" onclick={() => oneditar(conductorId)}>
 					Editar conductor

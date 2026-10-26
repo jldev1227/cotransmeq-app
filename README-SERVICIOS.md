@@ -7,6 +7,7 @@
 - ✅ **Actualización en tiempo real** vía Socket.IO
 - ✅ **Mapa interactivo** con Mapbox GL
 - ✅ **Tracking en tiempo real** de vehículos
+- ✅ **Seguimiento GPS por placa** con Mapbox y Wialon desde la vista de servicios
 - ✅ **Componentes reutilizables** y modulares
 - ✅ **TypeScript** completo con tipos seguros
 - ✅ **Responsive design** para móviles y desktop
@@ -29,6 +30,8 @@ src/
     └── dashboard/
         └── servicios/
             ├── +page.svelte          # Lista de servicios
+            ├── mapa/
+            │   └── +page.svelte     # Ubicación y velocidad de flota (Wialon)
             └── [id]/
                 └── +page.svelte      # Detalle con mapa
 ```
@@ -48,6 +51,11 @@ VITE_MAPBOX_ACCESS_TOKEN=tu_token_aqui
 VITE_API_URL=http://localhost:3000/api
 VITE_SOCKET_URL=http://localhost:3000
 ```
+
+La consulta GPS requiere además `WIALON_TOKEN` en el entorno privado del
+backend. Genera un token con seguimiento y lectura (`access_type=768`) desde
+[Wialon](https://hosting.wialon.com/login.html?client_id=Cotransmeq&access_type=768&activation_time=0&duration=0&lang=es&flags=0).
+El token no debe configurarse en el frontend.
 
 ### 2. Instalar Dependencias
 
@@ -98,6 +106,9 @@ npm run dev
 
 Luego navega a: `http://localhost:5173/dashboard/servicios`
 
+Usa **Seguimiento GPS** en la cabecera para abrir
+`/dashboard/servicios/mapa`; el mapa consulta ubicación y velocidad cada 15 s.
+
 ### Build para Producción
 
 ```bash
@@ -145,24 +156,18 @@ serviciosStore.configurarSocket(socket);
 
 ### Personalización
 
-Para cambiar el estilo del mapa, edita en `[id]/+page.svelte`:
+Los mapas usan el estilo Warm de la galería de Mapbox, compartido desde `src/lib/mapbox.ts`:
 
 ```typescript
 map = new mapboxgl.Map({
 	container: mapContainer,
-	style: 'mapbox://styles/mapbox/outdoors-v12', // Cambiar aquí
+	style: MAPBOX_WARM_STYLE,
 	center: [lng, lat],
 	zoom: 12
 });
 ```
 
-Estilos disponibles:
-
-- `mapbox://styles/mapbox/streets-v12`
-- `mapbox://styles/mapbox/outdoors-v12`
-- `mapbox://styles/mapbox/light-v11`
-- `mapbox://styles/mapbox/dark-v11`
-- `mapbox://styles/mapbox/satellite-v9`
+El rastreo GPS está disponible desde Conductores como un mapa 2D a pantalla completa.
 
 ## 🎨 Sistema de Diseño
 

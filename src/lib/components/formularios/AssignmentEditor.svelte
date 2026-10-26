@@ -601,7 +601,7 @@
 									{/if}
 								</div>
 
-								{#if targets.length > 1}
+								{#if targets.length > 0}
 									<button
 										type="button"
 										class="ae-quitar"

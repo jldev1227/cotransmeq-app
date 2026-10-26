@@ -47,13 +47,13 @@
 		// `permisos_rutas` es una lista blanca por usuario: si la tiene, manda
 		// ella y no el área. Sin pasarla aquí el menú mostraría entradas que el
 		// guard de ruta y la API rechazan un clic después.
-		const { allowed } = checkAccess(
+		const { allowed, level } = checkAccess(
 			currentUser.role || currentUser.rol,
 			currentUser.area,
 			item.id,
 			currentUser.permisos_rutas
 		);
-		return allowed;
+		return allowed && (item.id !== 'capacitaciones-gestion' || level === 'full');
 	});
 
 	function handleMenuClick(item: MenuItem) {

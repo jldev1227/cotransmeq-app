@@ -64,6 +64,7 @@ import {
 	formulaPie,
 	totalColumnas,
 	valorFila,
+	valorCampoFilaDto,
 	type BonoColumna,
 	type FilaRecorrido,
 	type RecorridosPeriodoDTO
@@ -556,7 +557,7 @@ export function crearRecorridosEngine(opts: {
 					escribir(c.sheetId, c.row, c.column, fila.tipo_dia, estiloTipo(fila.tipo_dia, false));
 					continue;
 				}
-				const valor = (fila as unknown as Record<string, unknown>)[c.field];
+				const valor = valorCampoFilaDto(fila, c.field);
 				escribir(c.sheetId, c.row, c.column, valor ?? '');
 			}
 

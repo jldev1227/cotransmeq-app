@@ -1,7 +1,13 @@
 import { redirect } from '@sveltejs/kit';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { env as envPrivado } from '$env/dynamic/private';
-import { checkAccess, getAccessibleModules } from '$lib/config/permissions';
+import {
+	checkAccess,
+	getAccessibleModules,
+	segmentoRutaModulo,
+	type Area,
+	type PermisosRutas
+} from '$lib/config/permissions';
 
 /// Rastreo de errores (Sentry), OPCIONAL: solo con `SENTRY_DSN` en el entorno
 /// del servidor (el del navegador va aparte, con `PUBLIC_SENTRY_DSN`, en
@@ -36,11 +42,18 @@ export const handleError: HandleServerError = async ({ error, event, status }) =
 	S?.captureException(error, { tags: { ruta: event.route.id ?? event.url.pathname } });
 };
 
-function decodeJwtPayload(token: string): any | null {
+interface JwtPayload {
+	exp?: number;
+	area?: unknown;
+	role?: string;
+	permisos_rutas?: PermisosRutas;
+}
+
+function decodeJwtPayload(token: string): JwtPayload | null {
 	try {
 		const parts = token.split('.');
 		if (parts.length !== 3) return null;
-		const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+		const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8')) as JwtPayload;
 		// Check expiry
 		if (payload.exp && payload.exp * 1000 < Date.now()) return null;
 		return payload;
@@ -63,15 +76,11 @@ function getModuleFromPath(pathname: string): string | null {
  * mantenimiento con lista blanca puede no tenerlo, y aterrizaría en otra pantalla
  * denegada. `perfil` es el último recurso porque `checkAccess` lo concede siempre.
  */
-function landingRoute(
-	userRole: string,
-	userArea: string[],
-	userRutas: Record<string, any> | null
-): string {
-	const accesibles = getAccessibleModules(userRole, userArea as any, userRutas);
+function landingRoute(userRole: string, userArea: Area[], userRutas: PermisosRutas): string {
+	const accesibles = getAccessibleModules(userRole, userArea, userRutas);
 	if (accesibles['servicios']) return '/dashboard/servicios';
 	const primero = Object.keys(accesibles).find((m) => m !== 'perfil');
-	return primero ? `/dashboard/${primero}` : '/dashboard/perfil';
+	return primero ? `/dashboard/${segmentoRutaModulo(primero)}` : '/dashboard/perfil';
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -104,7 +113,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			throw redirect(302, `/login?redirect=${encodeURIComponent(url.pathname + url.search)}`);
 		}
 
-		const userArea = payload.area;
+		const userArea = payload.area as Area[];
 		const userRole = payload.role ?? 'usuario';
 		// La lista blanca viaja en el token cuando el backend la firma; si no
 		// llega, `undefined` deja mandar a las reglas por área (comportamiento
@@ -124,6 +133,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 
+		const rutaGestionCapacitaciones = /^\/dashboard\/capacitaciones\/(gestion|nuevo)(\/|$)/.test(url.pathname);
+		const permisoGestionCapacitaciones = checkAccess(userRole, userArea, 'capacitaciones-gestion', userRutas);
+		const puedeGestionarCapacitaciones = permisoGestionCapacitaciones.allowed && permisoGestionCapacitaciones.level === 'full';
+		if (rutaGestionCapacitaciones && !puedeGestionarCapacitaciones) {
+			throw redirect(302, '/dashboard/capacitaciones?denied=1');
+		}
+
 		event.locals.token = token;
 		event.locals.userRole = userRole;
 		event.locals.userArea = userArea;
@@ -131,5 +147,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.token = token ?? undefined;
 	}
 
-	return await resolve(event);
+	const response = await resolve(event);
+	response.headers.set('Strict-Transport-Security', 'max-age=31536000');
+	response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	response.headers.set(
+		'Permissions-Policy',
+		'camera=(), geolocation=(self), microphone=(), payment=()'
+	);
+	return response;
 };

@@ -5,7 +5,8 @@ type SidebarRouteItem = {
 
 const ACTIVE_ROUTE_ALIASES: Record<string, string[]> = {
 	dashboard: ['/dashboard/actividad'],
-	usuarios: ['/dashboard/sesiones', '/dashboard/directorio']
+	usuarios: ['/dashboard/sesiones', '/dashboard/directorio'],
+	'capacitaciones-gestion': ['/dashboard/capacitaciones/nuevo']
 };
 
 /** Resuelve la ruta actual a la entrada del sidebar que le corresponde. */

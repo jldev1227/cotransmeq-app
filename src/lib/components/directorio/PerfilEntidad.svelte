@@ -6,7 +6,8 @@
 	import AnaliticaIndividual from './AnaliticaIndividual.svelte';
 	import ModalFormVehiculo from '$lib/components/vehiculos/ModalFormVehiculo.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
-	import { Activity, ArrowLeft, CalendarDays, Gauge, Hash, Info, Mail, MapPin, Pencil, Phone, Truck, UserRound } from 'lucide-svelte';
+	import HistorialSimit from './HistorialSimit.svelte';
+	import { Activity, ArrowLeft, CalendarDays, FileSearch, Gauge, Hash, Info, Mail, MapPin, Pencil, Phone, Truck, UserRound } from 'lucide-svelte';
 
 	type Tipo = 'vehiculo' | 'tercero';
 	interface Props { tipo: Tipo; entidadId: string; }
@@ -14,7 +15,13 @@
 	let ficha = $state<any>(null);
 	let cargando = $state(true);
 	let error = $state('');
-	const tab = $derived(page.url.searchParams.get('tab') === 'informacion' ? 'informacion' : 'actividad');
+	const tab = $derived(
+		page.url.searchParams.get('tab') === 'informacion'
+			? 'informacion'
+			: page.url.searchParams.get('tab') === 'simit' && tipo === 'vehiculo'
+				? 'simit'
+				: 'actividad'
+	);
 	let editandoVehiculo = $state(false);
 
 	const esVehiculo = $derived(tipo === 'vehiculo');
@@ -55,7 +62,7 @@
 		void cargar();
 	});
 
-	function cambiarTab(siguiente: 'informacion' | 'actividad') {
+	function cambiarTab(siguiente: 'informacion' | 'actividad' | 'simit') {
 		const url = new URL(page.url);
 		if (siguiente === 'actividad') url.searchParams.delete('tab');
 		else url.searchParams.set('tab', siguiente);
@@ -184,11 +191,18 @@
 						<button type="button" role="tab" aria-selected={tab === 'actividad'} class:activo={tab === 'actividad'} onclick={() => cambiarTab('actividad')}>
 							<span><Activity size={15} /></span> Actividad y analítica
 						</button>
+						{#if esVehiculo}
+							<button type="button" role="tab" aria-selected={tab === 'simit'} class:activo={tab === 'simit'} onclick={() => cambiarTab('simit')}>
+								<span><FileSearch size={15} /></span> Estado SIMIT
+							</button>
+						{/if}
 					</div>
 				</section>
 
 				<section class="page-card contenido-card">
-					{#if tab === 'actividad'}
+					{#if tab === 'simit' && esVehiculo}
+						<HistorialSimit tipo="vehiculo" entidadId={entidadId} />
+					{:else if tab === 'actividad'}
 						<div class="seccion-titulo">
 							<div><p class="card-etiqueta">Sección activa</p><h2>Actividad y analítica</h2></div>
 							<p>Indicadores operativos calculados para el período seleccionado.</p>

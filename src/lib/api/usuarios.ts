@@ -6,8 +6,11 @@ export interface Usuario {
 	nombre: string;
 	correo: string;
 	telefono?: string;
+	numero_documento?: string | null;
+	fecha_ingreso?: string | null;
 	role?: string;
 	cargo?: string;
+	tipo_vinculacion?: string;
 	area?: string[];
 	activo?: boolean;
 	firma_url?: string;
@@ -20,6 +23,10 @@ export interface Usuario {
 	ultimo_acceso?: string;
 	created_at?: string;
 	updated_at?: string;
+	es_invitado?: boolean;
+	invitado_por_id?: string | null;
+	creado_por_id?: string | null;
+	actor_alta?: { id: string; nombre: string; correo: string } | null;
 }
 
 /** Payload del alta manual: aquí la contraseña la pone quien crea, no el invitado. */
@@ -29,6 +36,7 @@ export interface CrearUsuarioPayload {
 	password: string;
 	telefono?: string;
 	cargo?: string;
+	tipo_vinculacion?: string;
 	role: string;
 	area: string[];
 	permisos_rutas: Record<string, AccessLevel> | null;
@@ -67,7 +75,7 @@ export const usuariosAPI = {
 		data: Partial<
 			Pick<
 				Usuario,
-				'nombre' | 'correo' | 'telefono' | 'role' | 'cargo' | 'area' | 'activo' | 'permisos_rutas'
+				'nombre' | 'correo' | 'telefono' | 'role' | 'cargo' | 'tipo_vinculacion' | 'area' | 'activo' | 'permisos_rutas'
 			>
 		>
 	): Promise<Usuario> {

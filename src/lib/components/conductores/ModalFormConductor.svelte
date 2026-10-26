@@ -13,6 +13,7 @@
 	} from '$lib/components/directorio/formulario';
 	import { conductoresAPI } from '$lib/api/apiClient';
 	import { normalizarNombrePersona } from '$lib/utils/nombre-persona';
+	import { OPCIONES_VINCULACION } from '$lib/config/personal';
 
 	/**
 	 * Crear y editar un conductor en el mismo modal (antes: página `/agregar`
@@ -117,6 +118,7 @@
 		salario_base: 'laboral',
 		estado: 'laboral',
 		tipo_contrato: 'laboral',
+		tipo_vinculacion: 'laboral',
 		sede_trabajo: 'laboral',
 		eps: 'seguridad',
 		fondo_pension: 'seguridad',
@@ -142,6 +144,7 @@
 		salario_base: '',
 		estado: 'activo',
 		tipo_contrato: 'INDEFINIDO',
+		tipo_vinculacion: 'por_definir',
 		sede_trabajo: 'YOPAL',
 		eps: '',
 		fondo_pension: '',
@@ -226,6 +229,7 @@
 				salario_base: c.salario_base != null ? String(c.salario_base) : '',
 				estado: SINONIMOS_ESTADO[estado] ?? estado,
 				tipo_contrato: c.tipo_contrato ?? '',
+			tipo_vinculacion: c.tipo_vinculacion ?? 'por_definir',
 				sede_trabajo: String(c.sede_trabajo ?? '').toUpperCase(),
 				eps: c.eps ?? '',
 				fondo_pension: c.fondo_pension ?? '',
@@ -288,6 +292,7 @@
 			salario_base: textoONull(form.salario_base) === null ? null : Number(form.salario_base),
 			estado: form.estado,
 			tipo_contrato: form.tipo_contrato || null,
+			tipo_vinculacion: form.tipo_vinculacion || 'por_definir',
 			sede_trabajo: form.sede_trabajo || null,
 			eps: textoONull(form.eps),
 			fondo_pension: textoONull(form.fondo_pension),
@@ -491,6 +496,13 @@
 				<Campo id="c-contrato" label="Tipo de contrato">
 					<select id="c-contrato" class="de-input" bind:value={form.tipo_contrato}>
 						{#each CONTRATOS as [v, l] (v)}<option value={v}>{l}</option>{/each}
+					</select>
+				</Campo>
+				<Campo id="c-vinculacion" label="Tipo de vinculación">
+					<select id="c-vinculacion" class="de-input" bind:value={form.tipo_vinculacion}>
+						{#each OPCIONES_VINCULACION as opcion (opcion.value)}
+							<option value={opcion.value}>{opcion.label}</option>
+						{/each}
 					</select>
 				</Campo>
 				<Campo id="c-sede" label="Sede de trabajo">

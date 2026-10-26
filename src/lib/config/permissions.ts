@@ -90,10 +90,38 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 		general: true,
 		description: 'Gestión de conductores'
 	},
+	personal: {
+		full: [
+			'administracion',
+			'operaciones',
+			'contabilidad',
+			'facturacion',
+			'talento_humano',
+			'hseq'
+		],
+		general: true,
+		description: 'Gestión unificada del personal'
+	},
+	capacitaciones: {
+		full: [],
+		general: true,
+		description: 'Capacitaciones privadas del personal de Cotransmeq'
+	},
+	'capacitaciones-gestion': {
+		full: ['administracion', 'hseq'],
+		description: 'Administración del catálogo y asignaciones de capacitación'
+	},
 	servicios: {
 		full: ['administracion', 'operaciones'],
 		read: ['hseq', 'talento_humano', 'facturacion'],
 		description: 'Gestión de servicios de transporte'
+	},
+	// Vista separada de GPS: Mantenimiento y Talento Humano pueden consultar
+	// recorridos autorizados sin obtener acceso al detalle operativo del servicio.
+	rastreo_servicios: {
+		full: ['administracion', 'operaciones'],
+		read: ['hseq', 'talento_humano', 'mantenimiento'],
+		description: 'Consulta de rastreo GPS de servicios'
 	},
 	recargos: {
 		full: ['administracion', 'operaciones'],
@@ -274,13 +302,26 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
  */
 export type PermisosRutas = Record<string, AccessLevel> | null | undefined;
 
+/** La URL usa guion y las capacidades del backend usan el identificador con guion bajo. */
+export function moduloPermisoDesdeRuta(moduleId: string): string {
+	return moduleId === 'rastreo-servicios' ? 'rastreo_servicios' : moduleId;
+}
+
+/** Convierte el identificador de permiso a su segmento público de ruta. */
+export function segmentoRutaModulo(moduleId: string): string {
+	if (moduleId === 'rastreo_servicios') return 'rastreo-servicios';
+	if (moduleId === 'capacitaciones-gestion') return 'capacitaciones/gestion';
+	return moduleId;
+}
+
 export function checkAccess(
 	userRole: string | null | undefined,
 	userAreas: Area[] | Area | null | undefined,
 	moduleId: string,
 	rutasOverride?: PermisosRutas
 ): { allowed: boolean; level: AccessLevel | null } {
-	const permission = ROUTE_PERMISSIONS[moduleId];
+	const idPermiso = moduloPermisoDesdeRuta(moduleId);
+	const permission = ROUTE_PERMISSIONS[idPermiso];
 	if (!permission) {
 		return { allowed: false, level: null };
 	}
@@ -296,10 +337,10 @@ export function checkAccess(
 	if (override && !isAdmin) {
 		// El perfil propio nunca se recorta: sin él el usuario no podría ni ver ni
 		// corregir sus propios datos, y no hay forma de pedirlo desde la UI.
-		if (moduleId === 'perfil') {
+		if (idPermiso === 'perfil') {
 			return { allowed: true, level: 'full' };
 		}
-		const level = override[moduleId];
+		const level = override[idPermiso] ?? (idPermiso === 'personal' ? override.conductores : undefined);
 		return level ? { allowed: true, level } : { allowed: false, level: null };
 	}
 

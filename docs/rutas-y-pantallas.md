@@ -37,28 +37,34 @@ conductores básicos…). La referencia de endpoints de cada módulo está en
 
 Todas exigen sesión administrativa. Las que no están en el menú se marcan.
 
-### Inicio, perfil y equipo
+### Inicio, perfil y personal
 
 | Ruta | Pantalla | Módulo | API |
 |---|---|---|---|
-| `/dashboard` | Panel de inicio: el backend decide qué secciones ve el usuario (operaciones, HSEQ, talento humano, contabilidad, facturación, mantenimiento) y el periodo vive en la URL. | Ninguno: basta la sesión (`dashboard` es `general`). | `dashboard` |
+| `/dashboard` | Panel de inicio: el backend decide qué secciones ve el usuario (incluye estado SIMIT con pestañas separadas de placas y conductores, ejecución manual y programación configurable para administración); los periodos viven en la URL. | Ninguno: basta la sesión (`dashboard` es `general`). | `dashboard`, `simit` |
 | `/dashboard/actividad` | Registro de actividad del equipo con filtros por persona, módulo, acción, área y fechas. Fuera del menú. | `actividad` (general) | `actividad` |
 | `/dashboard/perfil` | Mi perfil: datos de contacto, firma, sesión actual, contraseña, enlace de la app móvil y conexiones con Claude o ChatGPT (tokens del MCP). Fuera del menú. | `perfil` (siempre accesible) | `auth`, `app-usuarios`, `mcp` |
-| `/dashboard/usuarios` | «Equipo»: usuarios, sesiones, invitaciones, permisos (`bonos-planilla`) y accesos a la app móvil (`?tab=app-movil`, solo rol admin). | `usuarios` | `usuarios`, `sesiones`, `invitaciones` |
+| `/dashboard/personal` | Directorio único con pestañas Conductores y Administrativos. La segunda pestaña solo aparece para admin; conserva sesiones, invitaciones, permisos y accesos móviles. Filtros de personal en `?tipo=`. | `personal` | `conductores`, `usuarios`, `sesiones`, `invitaciones` |
+| `/dashboard/personal/[id]` | Ficha dinámica: `?tipo=conductor` carga la ficha existente del conductor; `?tipo=administrativo` carga datos personales, área, vinculación, roles, permisos, origen de alta, accesos móviles y sesiones. | `personal` (admin para fichas administrativas) | `conductores`, `usuarios`, `sesiones` |
+| `/dashboard/capacitaciones` | Capacitaciones internas: aprendizaje asignado para todo el personal y gestión de cursos para Administración, Talento Humano y HSEQ. El selector anuncia la vista activa y los estados de carga y error. | `capacitaciones` (general) | `capacitaciones` → acceso SSO interno |
+| `/dashboard/usuarios` | Compatibilidad: redirige a Personal con `tipo=administrativo` y conserva los filtros de URL. | `usuarios` | Redirección |
 | `/dashboard/directorio` | Pantalla huérfana: presencia, invitaciones y alta manual, lo mismo que cubre «Equipo». Fuera del menú; su propio código pide no añadirle funciones. | `directorio` | `usuarios`, `invitaciones` |
 
 ### Flota, conductores y operación
 
 | Ruta | Pantalla | Módulo | API |
 |---|---|---|---|
-| `/dashboard/flota` | Directorio de vehículos: ocultos, papelera, acciones masivas, detalle con documentos. | `flota` | `vehiculos`, `vehiculos-documentos` |
+| `/dashboard/flota` | Directorio de vehículos: ocultos, papelera, acciones masivas y acceso a cada ficha. | `flota` | `vehiculos`, `vehiculos-documentos` |
+| `/dashboard/flota/[id]` | Ficha individual de la placa con información, actividad y estado de cuenta SIMIT e historial de consultas. | `flota` | `vehiculos`, `simit/:id` |
 | `/dashboard/mantenimiento` | Planes preventivos, órdenes de trabajo y novedades de los preoperacionales. | `mantenimiento` | `mantenimiento` |
 | `/dashboard/combustible` | Tanqueos y rendimiento en km por galón. | `combustible` | `combustible` |
-| `/dashboard/conductores` | Directorio de conductores; el alta y la edición van en modal. | `conductores` | `conductores` |
-| `/dashboard/conductores/[id]` | Ficha del conductor con sus documentos. | `conductores` | `conductores`, `conductores-documentos`, `viaticos` |
-| `/dashboard/conductores/recorridos` | Canvas de recorridos (Univer): un libro por corte, una hoja por conductor, una fila por recorrido; alimenta bonos y pernoctes. Se abre desde Conductores. | Servidor: `conductores`. Canvas: `recorridos`. Marcar bonos exige además `bonos-planilla`. | `recorridos-canvas`, `dias-laborados`, `liquidaciones` (configuraciones de liquidación) |
+| `/dashboard/conductores` | Compatibilidad: redirige al directorio Personal con `tipo=conductor`. | `conductores` | Redirección |
+| `/dashboard/conductores/[id]` | Compatibilidad: redirige a la ficha dinámica `/dashboard/personal/[id]?tipo=conductor`. | `conductores` | Redirección |
+| `/dashboard/conductores/recorridos` | Canvas de recorridos (Univer): un libro por corte, una hoja por conductor, una fila por recorrido; alimenta bonos y pernoctes. Se abre desde Personal. | Servidor: `conductores`. Canvas: `recorridos`. Marcar bonos exige además `bonos-planilla`. | `recorridos-canvas`, `dias-laborados`, `liquidaciones` (configuraciones de liquidación) |
+| `/dashboard/conductores/rastreo` | Mapa GPS 2D en vivo de conductores con servicio y sesión consentida; ruta conservada fuera del menú lateral. Los marcadores muestran nombre y placa; al enfocarlos se ve foto, cliente, origen/destino y ruta vial proyectada al destino. Actualiza posiciones cada 15 s. | `rastreo_servicios` | `rastreo-servicios`, `servicios/:id/rastreo` |
 | `/dashboard/servicios` | Servicios en lista, calendario o canvas; alta y edición en modal con buscador unificado para cliente, municipios, vehículo y conductor; ticket. | `servicios` | `servicios` |
-| `/dashboard/servicios/[id]` | Detalle con título de origen, destino y propósito, indicaciones de operaciones bajo el título, programación (fecha/horas), descarga del rutograma PDF, mapa con capa agrupada de paradas seguras (restaurantes, estaciones y hospedajes), vigencia de la licencia del conductor y días para vencer, ejecución y modal para compartir enlace o ticket. | `servicios` | `servicios` |
+| `/dashboard/servicios/[id]` | Detalle con título de origen, destino y propósito, indicaciones de operaciones bajo el título, programación (fecha/horas), descarga del rutograma PDF, mapa con capa agrupada de paradas seguras (restaurantes, estaciones y hospedajes), vigencia de la licencia del conductor y días para vencer, ejecución, panel GPS de solo lectura y modal para compartir enlace o ticket. | `servicios` | `servicios`, `servicios/:id/rastreo` (lo autoriza el backend) |
+| `/dashboard/rastreo-servicios` y `/dashboard/rastreo-servicios/[id]` | Rutas antiguas: redirigen al mapa de `/dashboard/conductores/rastreo`, conservando el servicio seleccionado cuando aplica. | `rastreo_servicios` | Redirección; la API vuelve a validar el permiso. |
 | `/dashboard/recargos` | Planillas de recargos del mes, con la importación de planillas desde la base de Transmeralda (vista previa, alta de vehículos y empresas que falten, sincronización de conductores). | `recargos` | `recargos` (rutas `importar-desde-transmeralda`), `liquidaciones` (vista previa de recargos) |
 | `/dashboard/recargos/configuracion` | Configuración de salarios para recargos. | `recargos` | `recargos` |
 | `/dashboard/viaticos` | Anticipos a conductores, su legalización y los gastos de la empresa. | `viaticos` | `viaticos` |
@@ -147,9 +153,9 @@ Rutas que ya no tienen pantalla y se conservan porque hay enlaces repartidos
 | `/dashboard/nomina` | `/dashboard/nomina/canvas` | 307; conserva `anio`, `mes` y `desde`. |
 | `/dashboard/liquidaciones-terceros` | `/dashboard/liquidaciones-terceros/<canvas>?anio=&mes=` | 307. El periodo por defecto se calcula en hora de Bogotá (el `load` corre en UTC en el servidor y en hora local en el navegador). `?tab=` elige el canvas (`mensual` y `ocasional` → ocasional, `adicionales`, `ingresos`; el resto, cierres). |
 | `/dashboard/formularios/envios` | `/dashboard/formularios?vista=envios&…` | 308; conserva los filtros de la consulta. Aquí la carpeta conserva además el `+page.svelte` del antiguo explorador de envíos, que nunca se pinta porque el `load` redirige antes: es código muerto. |
-| `/dashboard/sesiones` | `/dashboard/usuarios?tab=sesiones` | 307; traduce `q` a `qSesion` y `estado` a `sesion`. |
+| `/dashboard/sesiones` | `/dashboard/personal?tipo=administrativo&tab=sesiones` | 307; traduce `q` a `qSesion` y `estado` a `sesion`. |
 | `/dashboard/clientes/agregar` | `/dashboard/clientes?nuevo=1` | 307; el alta es un modal del listado. |
-| `/dashboard/conductores/agregar` | `/dashboard/conductores?nuevo=1` | 307; igual que clientes. |
+| `/dashboard/conductores/agregar` | `/dashboard/personal?tipo=conductor&nuevo=1` | 307; igual que clientes. |
 
 Queda además `dashboard/acciones-correctivas/+page.svelte.bak`, que SvelteKit
 ignora.
@@ -169,6 +175,7 @@ login). El funcionamiento sin red está en
 | `/public/portal/formularios/envios/[id]` | Recibo de un envío. | `formularios-dinamicos` |
 | `/public/portal/formularios/envios/[id]/documento` | Documento imprimible del envío (`+page@public`: sin barra ni menú). | `formularios-dinamicos` |
 | `/public/portal/servicios` | Servicios asignados al conductor. | `conductor-portal` |
+| `/public/portal/capacitaciones` | Cursos, evaluaciones y certificados privados del conductor, con acceso SSO de un solo uso y estados de carga y error anunciados. | `conductor-portal` → acceso SSO interno |
 | `/public/portal/servicios/[id]` | Detalle del servicio con mapa e inicio de la ejecución. | `conductor-portal` |
 | `/public/portal/dias-laborados` | Registro diario de recorridos y adjuntos. | `conductor-portal` |
 | `/public/portal/viaticos` | Viáticos del conductor, solo consulta (reportar gastos va por la app móvil). | `viaticos` |

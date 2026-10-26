@@ -12,6 +12,7 @@
 	} from '$lib/types/servicios';
 	import mapboxgl from 'mapbox-gl';
 	import 'mapbox-gl/dist/mapbox-gl.css';
+	import { MAPBOX_WARM_STYLE } from '$lib/mapbox';
 	import distracomLocations from '$lib/data/distracomlocations';
 
 	const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
@@ -577,7 +578,7 @@
 		mapboxgl.accessToken = MAPBOX_TOKEN;
 		map = new mapboxgl.Map({
 			container: 'map',
-			style: 'mapbox://styles/mapbox/outdoors-v12',
+			style: MAPBOX_WARM_STYLE,
 			center: [originLng, originLat],
 			zoom: 12,
 			projection: 'mercator',
