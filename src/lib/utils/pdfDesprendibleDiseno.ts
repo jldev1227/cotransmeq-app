@@ -1,8 +1,8 @@
 /**
  * Página principal del desprendible con el DISEÑO 2 (pdfmake).
  *
- * Es la maquetación aprobada en septiembre de 2026 —cabecera de marca con logo
- * y mascota, franja de identidad, tarjetas «Información básica», «Adicionales»,
+ * Es la maquetación aprobada en septiembre de 2026 —cabecera clara con logo,
+ * franja de identidad, tarjetas «Información básica», «Adicionales»,
  * «Novedades», «Deducciones», «Resumen de pago» y firmas con el sello— llevada
  * al MISMO generador del desprendible (`pdfDesprendible.ts`). No es otro
  * documento: canvas, dashboard, enlace firmado, portal, ZIP y app móvil siguen
@@ -27,17 +27,12 @@ export interface MarcaDesprendible {
 	suave: string;
 	/** Fondo de la fila del neto. */
 	acento: string;
-	/** Rótulo pequeño sobre el título de la cabecera. */
-	kicker: string;
-	/** Texto del periodo dentro de la cabecera. */
-	periodo: string;
 	/** Bordes de las tarjetas. */
 	borde: string;
 	/** Fondo de la franja de identidad. */
 	fondoSuave: string;
-	/** Logo en blanco, PNG en data-URL (pdfmake no lee WebP). */
+	/** Logo a color, PNG en data-URL (pdfmake no lee WebP). */
 	logo: string | null;
-	mascota: string | null;
 	sello: string | null;
 }
 
@@ -80,7 +75,6 @@ const TEXTO = '#17201D';
 const GRIS = '#66756F';
 const LINEA = '#EDF3F0';
 const ANCHO = 515; // A4 (595 pt) menos los márgenes de 40 pt del documento.
-const ALTO_CABECERA = 122;
 
 function encabezadoColumnas(marca: MarcaDesprendible) {
 	const h = (text: string, alignment: 'left' | 'center' | 'right' = 'left') => ({
@@ -183,38 +177,28 @@ function tarjeta(
 }
 
 function cabecera(marca: MarcaDesprendible, m: ModeloDesprendibleDiseno) {
-	const izquierda = {
+	const empresa = {
 		width: '*',
-		margin: [18, 12, 0, 0],
 		stack: [
-			{
-				columns: [
-					...(marca.logo ? [{ image: marca.logo, fit: [96, 30], width: 100 }] : [{ text: marca.nombre.toUpperCase(), bold: true, color: '#FFFFFF', fontSize: 11, width: 100 }]),
-					{
-						width: '*',
-						stack: [
-							{ text: marca.razonSocial, bold: true, fontSize: 7.5, color: '#FFFFFF' },
-							{ text: `NIT ${marca.nit}`, fontSize: 7.2, color: '#FFFFFF', opacity: 0.85 }
-						],
-						margin: [6, 4, 0, 0]
-					}
-				],
-				columnGap: 4
-			},
-			{ text: 'COMPROBANTE DIGITAL', bold: true, fontSize: 6.3, characterSpacing: 1.6, color: marca.kicker, margin: [0, 9, 0, 0] },
-			{ text: `Desprendible de nómina del mes de ${m.mes.toLowerCase()}`, bold: true, fontSize: 15, color: '#FFFFFF', lineHeight: 1, margin: [0, 2, 0, 0] },
-			{ text: m.periodo, fontSize: 8, color: marca.periodo, margin: [0, 4, 0, 0] }
+			{ text: marca.razonSocial, bold: true, fontSize: 11.5, color: TEXTO },
+			{ text: `NIT ${marca.nit}`, fontSize: 9, color: GRIS, margin: [0, 3, 0, 0] }
 		]
 	};
-	const derecha = marca.mascota
-		? { width: 112, image: marca.mascota, fit: [110, 110], margin: [0, 6, 8, 0] }
-		: { width: 112, canvas: [{ type: 'rect', x: 0, y: 0, w: 1, h: ALTO_CABECERA, color: marca.oscuro, fillOpacity: 0 }] };
+	const logo = marca.logo
+		? { image: marca.logo, fit: [112, 44], width: 112, alignment: 'right' as const }
+		: { text: marca.nombre.toUpperCase(), bold: true, fontSize: 9, color: marca.oscuro, alignment: 'right' as const };
 	return [
-		{ canvas: [{ type: 'rect', x: 0, y: 0, w: ANCHO, h: ALTO_CABECERA, r: 14, color: marca.oscuro }] },
 		{
-			columns: [izquierda, derecha],
-			columnGap: 6,
-			margin: [0, -ALTO_CABECERA, 0, 0]
+			columns: [empresa, logo],
+			columnGap: 12,
+			margin: [0, 0, 0, 10]
+		},
+		{ text: 'COMPROBANTE DIGITAL', bold: true, fontSize: 7.2, characterSpacing: 1, color: marca.acento, margin: [0, 0, 0, 3] },
+		{ text: `Desprendible de nómina · ${m.mes.toLowerCase()}`, bold: true, fontSize: 16, color: marca.oscuro },
+		{ text: m.periodo, bold: true, fontSize: 11.5, color: TEXTO, margin: [0, 4, 0, 0] },
+		{
+			canvas: [{ type: 'line', x1: 0, y1: 0, x2: ANCHO, y2: 0, lineWidth: 0.8, lineColor: marca.borde }],
+			margin: [0, 10, 0, 14]
 		}
 	];
 }
@@ -402,12 +386,9 @@ export function paginaPrincipalDiseno2(m: ModeloDesprendibleDiseno, marca: Marca
 
 // ─── Piezas para las páginas de detalle (recargos, días sin recargo) ─────
 
-const ALTO_CABECERA_SECCION = 66;
-
 /**
- * Cabecera compacta de las páginas de detalle: la misma banda de marca de la
- * primera página, con el título de la página y hasta cuatro datos
- * (conductor, cédula, vehículo, mes…) en dos columnas.
+ * Cabecera ligera de las páginas de detalle, con datos legibles también al
+ * imprimir en blanco y negro.
  */
 export function cabeceraSeccion(
 	marca: MarcaDesprendible,
@@ -415,32 +396,33 @@ export function cabeceraSeccion(
 ): any[] {
 	const dato = ([etiqueta, valor]: [string, string]) => ({
 		stack: [
-			{ text: etiqueta, bold: true, fontSize: 5.8, characterSpacing: 0.9, color: marca.kicker },
-			{ text: valor || '—', bold: true, fontSize: 8, color: '#FFFFFF', margin: [0, 1, 0, 0] }
+			{ text: etiqueta, bold: true, fontSize: 5.8, characterSpacing: 0.7, color: GRIS },
+			{ text: valor || '—', bold: true, fontSize: 7.8, color: TEXTO, margin: [0, 1, 0, 0] }
 		],
-		margin: [0, 0, 0, 5]
+		margin: [0, 0, 0, 4]
 	});
 	const mitad = Math.ceil(o.datos.length / 2);
 	return [
-		{ canvas: [{ type: 'rect', x: 0, y: 0, w: ANCHO, h: ALTO_CABECERA_SECCION, r: 12, color: marca.oscuro }] },
 		{
 			columns: [
 				{
 					width: '*',
 					stack: [
-						{ text: marca.nombre.toUpperCase(), bold: true, fontSize: 6.3, characterSpacing: 1.6, color: marca.kicker },
-						{ text: o.titulo, bold: true, fontSize: 13, color: '#FFFFFF', margin: [0, 3, 0, 0] },
-						...(o.subtitulo ? [{ text: o.subtitulo, fontSize: 7.5, color: marca.periodo, margin: [0, 3, 0, 0] }] : [])
+						{ text: marca.nombre.toUpperCase(), bold: true, fontSize: 6.3, characterSpacing: 1, color: marca.acento },
+						{ text: o.titulo, bold: true, fontSize: 13, color: TEXTO, margin: [0, 3, 0, 0] },
+						...(o.subtitulo ? [{ text: o.subtitulo, fontSize: 8.5, color: GRIS, margin: [0, 3, 0, 0] }] : [])
 					],
-					margin: [16, 11, 0, 0]
+					margin: [0, 0, 0, 0]
 				},
-				{ width: 120, stack: o.datos.slice(0, mitad).map(dato), margin: [0, 11, 0, 0] },
-				{ width: 110, stack: o.datos.slice(mitad).map(dato), margin: [0, 11, 0, 0] },
-				// Ocupa el alto de la banda para que lo siguiente no se monte encima.
-				{ width: 1, canvas: [{ type: 'rect', x: 0, y: 0, w: 1, h: ALTO_CABECERA_SECCION, color: marca.oscuro, fillOpacity: 0 }] }
+				{ width: 120, stack: o.datos.slice(0, mitad).map(dato) },
+				{ width: 110, stack: o.datos.slice(mitad).map(dato) }
 			],
 			columnGap: 8,
-			margin: [0, -ALTO_CABECERA_SECCION, 0, 8]
+			margin: [0, 0, 0, 8]
+		},
+		{
+			canvas: [{ type: 'line', x1: 0, y1: 0, x2: ANCHO, y2: 0, lineWidth: 0.7, lineColor: marca.borde }],
+			margin: [0, 0, 0, 12]
 		}
 	];
 }
