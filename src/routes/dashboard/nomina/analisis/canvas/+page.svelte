@@ -113,7 +113,6 @@
 		placas: lista(),
 		conductores: lista(),
 		estados: lista(),
-		pagaCliente: opcion<'todos' | 'si' | 'no'>('todos'),
 		q: texto(),
 		analisis: opcion<Tab>('resumen')
 	};
@@ -365,51 +364,6 @@
 		return Array.from(mapa.values());
 	});
 
-	// ── Recargos ──
-	interface FilaRec {
-		placa: string;
-		conductor: string;
-		cliente: string;
-		mes: string;
-		mesClave: string;
-		anio: number;
-		valor: number;
-		pagaCliente: boolean;
-		parte: 'cliente' | 'propietario' | null;
-		porcentaje: number;
-	}
-	const filasRec = $derived.by(() => {
-		const res: FilaRec[] = [];
-		for (const l of liqsConBusqueda) {
-			for (const r of l.recargos) {
-				if (!placaPasa(r.placa)) continue;
-				const periodo = periodoConcepto(r.mes, l.anio, l.mes);
-				const { anio, clave: mk } = periodo;
-				if (!periodoReferenciaPasa(r.mes, l.anio, l.mes)) continue;
-				if (filtros.pagaCliente === 'si' && !r.paga_cliente) continue;
-				if (filtros.pagaCliente === 'no' && r.paga_cliente) continue;
-				const base = {
-					placa: r.placa ?? '—',
-					conductor: l.conductor.nombre,
-					cliente: r.cliente || '—',
-					mes: mesNombre(mk),
-					mesClave: mk,
-					anio,
-					pagaCliente: r.paga_cliente,
-					porcentaje: r.porcentaje_propietario
-				};
-				if (r.porcentaje_propietario > 0) {
-					const prop = Math.round((r.valor * r.porcentaje_propietario) / 100);
-					res.push({ ...base, valor: r.valor - prop, parte: 'cliente' });
-					res.push({ ...base, valor: prop, parte: 'propietario' });
-				} else {
-					res.push({ ...base, valor: r.valor, parte: null });
-				}
-			}
-		}
-		return res;
-	});
-
 	// ── Recargos de planillas agrupados por empresa ──
 	interface FilaJornada {
 		planillaId: string;
@@ -629,21 +583,18 @@
 			devengado: 0,
 			neto: 0,
 			bonificaciones: 0,
-			recargos: 0,
 			pernotes: 0,
 			deducciones: 0,
 			dias: 0,
 			firmadas: 0,
 			mantenimientos: filasMnt.reduce((s, f) => s + f.cantidad, 0),
 			bonFilas: filasBon.reduce((s, f) => s + f.total, 0),
-			recFilas: filasRec.reduce((s, f) => s + f.valor, 0),
 			perFilas: filasPer.reduce((s, f) => s + f.total, 0)
 		};
 		for (const l of liqs) {
 			t.devengado += l.salario_devengado;
 			t.neto += l.sueldo_total;
 			t.bonificaciones += l.total_bonificaciones;
-			t.recargos += l.total_recargos;
 			t.pernotes += l.total_pernotes;
 			t.deducciones += l.salud + l.pension + l.total_anticipos;
 			t.dias += l.dias_laborados;
@@ -652,7 +603,6 @@
 		/// Las tarjetas de conceptos acompañan sus pestañas: un bono puede pagarse
 		/// en septiembre y referirse a agosto, así que no debe heredar el total del corte.
 		t.bonificaciones = t.bonFilas;
-		t.recargos = t.recFilas;
 		t.pernotes = t.perFilas;
 		return t;
 	});
@@ -681,11 +631,6 @@
 				etiqueta: 'Bonificaciones',
 				valor: fmt(totales.bonificaciones),
 				detalle: `${filasBon.length} filas · mes de referencia`
-			},
-			{
-				etiqueta: filtros.analisis === 'recargos' ? 'Distribución liquidación' : 'Recargos',
-				valor: fmt(totales.recargos),
-				detalle: `${filasRec.length} filas · mes de referencia`
 			}
 		];
 		if (filtros.analisis === 'recargos') {
@@ -742,20 +687,12 @@
 	const porPlaca = $derived.by(() => {
 		const m = new Map<string, number>();
 		for (const f of filasBon) m.set(f.placa, (m.get(f.placa) ?? 0) + f.total);
-		for (const f of filasRec) m.set(f.placa, (m.get(f.placa) ?? 0) + f.valor);
 		for (const f of filasPer) m.set(f.placa, (m.get(f.placa) ?? 0) + f.total);
 		return Array.from(m.entries())
 			.filter(([p]) => p !== '—')
 			.sort(([, a], [, b]) => b - a)
 			.slice(0, 14)
 			.map(([placa, total]) => ({ placa, total }));
-	});
-
-	const pagaCliente = $derived.by(() => {
-		let si = 0;
-		let no = 0;
-		for (const f of filasRec) f.pagaCliente ? (si += f.valor) : (no += f.valor);
-		return { si, no };
 	});
 
 	/// Colores de marca leídos del CSS: la gráfica sigue a la empresa sin
@@ -865,16 +802,6 @@
 			}
 		]
 	});
-	const datosPaga = $derived({
-		labels: ['Paga el cliente', 'Asume la empresa'],
-		datasets: [
-			{
-				data: [pagaCliente.si, pagaCliente.no],
-				backgroundColor: [colores.primario, colores.ambar],
-				borderWidth: 0
-			}
-		]
-	});
 
 	// =============================================
 	// TABLA: ORDEN, PÁGINA Y EXPORTACIÓN
@@ -902,7 +829,7 @@
 			case 'bonificaciones':
 				return ordenar(filasBon);
 			case 'recargos':
-				return ordenar(filasRec);
+				return ordenar(filasJornada);
 			case 'pernotes':
 				return ordenar(filasPer);
 			case 'mantenimientos':
@@ -916,7 +843,6 @@
 	$effect(() => {
 		void filtros.analisis;
 		void filtros.q;
-		void filtros.pagaCliente;
 		void firmaServidor;
 		pagina = 1;
 		paginaJornada = 1;
@@ -967,19 +893,10 @@
 		recargos: [
 			{ key: 'placa', label: 'Placa' },
 			{ key: 'conductor', label: 'Conductor' },
-			{ key: 'cliente', label: 'Cliente' },
-			{ key: 'mesClave', label: 'Mes', fmt: (_v, f) => `${f.mes} ${f.anio}` },
-			{ key: 'pagaCliente', label: 'Paga cliente', fmt: (v) => (v ? 'Sí' : 'No') },
-			{
-				key: 'parte',
-				label: 'Asume',
-				fmt: (v, f) =>
-					v === 'propietario'
-						? `Propietario ${f.porcentaje}%`
-						: v === 'cliente'
-							? `Cliente ${100 - f.porcentaje}%`
-							: '—'
-			},
+			{ key: 'planilla', label: 'Planilla' },
+			{ key: 'empresa', label: 'Empresa' },
+			{ key: 'mesClave', label: 'Mes', fmt: (_v, f) => f.mes + ' ' + f.anio },
+			{ key: 'dias', label: 'Días manejados', fmt: (v) => formatearDiasJornada(v) },
 			{ key: 'valor', label: 'Valor', num: true, fmt: fmt }
 		],
 		pernotes: [
@@ -1042,7 +959,6 @@
 		filtros.placas = [];
 		filtros.conductores = [];
 		filtros.estados = [];
-		filtros.pagaCliente = 'todos';
 		filtros.q = '';
 	}
 	const nFiltros = $derived(
@@ -1051,7 +967,6 @@
 			filtros.placas.length +
 			filtros.conductores.length +
 			filtros.estados.length +
-			(filtros.pagaCliente !== 'todos' ? 1 : 0) +
 			(filtros.q.trim() ? 1 : 0)
 	);
 
@@ -1184,18 +1099,6 @@
 					aria-label="Buscar"
 				/>
 			</label>
-			<div class="an-segmentos" role="group" aria-label="Paga cliente">
-				<span class="an-grupo-etiqueta">Paga cliente</span>
-				{#each [['todos', 'Todos'], ['si', 'Sí'], ['no', 'No']] as [v, l] (v)}
-					<button
-						type="button"
-						class="an-segmento"
-						class:an-segmento--activo={filtros.pagaCliente === v}
-						aria-pressed={filtros.pagaCliente === v}
-						onclick={() => (filtros.pagaCliente = v as 'todos' | 'si' | 'no')}>{l}</button
-					>
-				{/each}
-			</div>
 			<div class="an-filtros-resumen">
 				{#if nFiltros}
 					<span class="an-nota"
@@ -1243,60 +1146,49 @@
 		</section>
 
 		<!-- ── Gráficas ── -->
-		<section class="an-graficas" class:an-cargando={cargando}>
-			<div class="an-card an-grafica an-grafica--ancha">
-				<header class="an-card-cabecera">
-					<h2>Por mes</h2>
-					<span>Bonificaciones, recargos y pernoctes pagados en cada corte</span>
-				</header>
-				<div class="an-lienzo">
-					{#if porMes.length}
-						<Bar data={datosMes} options={opcionesBarra(true)} />
-					{:else}
-						<p class="an-sin">Sin datos</p>
-					{/if}
+		{#if filtros.analisis !== 'recargos'}
+			<section class="an-graficas" class:an-cargando={cargando}>
+				<div class="an-card an-grafica an-grafica--ancha">
+					<header class="an-card-cabecera">
+						<h2>Por mes</h2>
+						<span>Bonificaciones, recargos y pernoctes pagados en cada corte</span>
+					</header>
+					<div class="an-lienzo">
+						{#if porMes.length}
+							<Bar data={datosMes} options={opcionesBarra(true)} />
+						{:else}
+							<p class="an-sin">Sin datos</p>
+						{/if}
+					</div>
 				</div>
-			</div>
-			<div class="an-card an-grafica">
-				<header class="an-card-cabecera">
-					<h2>Por placa</h2>
-					<span>Las {porPlaca.length} con más bonos, recargos y pernoctes</span>
-				</header>
-				<div class="an-lienzo">
-					{#if porPlaca.length}
-						<Bar data={datosPlaca} options={opcionesBarra(false)} />
-					{:else}
-						<p class="an-sin">Sin datos</p>
-					{/if}
+				<div class="an-card an-grafica">
+					<header class="an-card-cabecera">
+						<h2>Por placa</h2>
+						<span>Bonos y pernoctes por placa</span>
+					</header>
+					<div class="an-lienzo">
+						{#if porPlaca.length}
+							<Bar data={datosPlaca} options={opcionesBarra(false)} />
+						{:else}
+							<p class="an-sin">Sin datos</p>
+						{/if}
+					</div>
 				</div>
-			</div>
-			<div class="an-card an-grafica">
-				<header class="an-card-cabecera">
-					<h2>Estados</h2>
-					<span>Liquidaciones por estado del flujo</span>
-				</header>
-				<div class="an-lienzo">
-					{#if porEstado.length}
-						<Doughnut data={datosEstados} options={opcionesDonaConteo} />
-					{:else}
-						<p class="an-sin">Sin datos</p>
-					{/if}
+				<div class="an-card an-grafica">
+					<header class="an-card-cabecera">
+						<h2>Estados</h2>
+						<span>Liquidaciones por estado del flujo</span>
+					</header>
+					<div class="an-lienzo">
+						{#if porEstado.length}
+							<Doughnut data={datosEstados} options={opcionesDonaConteo} />
+						{:else}
+							<p class="an-sin">Sin datos</p>
+						{/if}
+					</div>
 				</div>
-			</div>
-			<div class="an-card an-grafica">
-				<header class="an-card-cabecera">
-					<h2>Recargos</h2>
-					<span>Quién los asume</span>
-				</header>
-				<div class="an-lienzo">
-					{#if pagaCliente.si + pagaCliente.no > 0}
-						<Doughnut data={datosPaga} options={opcionesDona} />
-					{:else}
-						<p class="an-sin">Sin recargos</p>
-					{/if}
-				</div>
-			</div>
-		</section>
+			</section>
+		{/if}
 
 		<!-- ── Tablas ── -->
 		<section class="an-card an-tabla-card" class:an-cargando={cargando}>
@@ -1317,7 +1209,7 @@
 								: t.key === 'bonificaciones'
 									? filasBon.length
 									: t.key === 'recargos'
-										? filasRec.length + filasJornada.length
+										? filasJornada.length
 										: t.key === 'pernotes'
 											? filasPer.length
 											: filasMnt.length}
@@ -1348,21 +1240,21 @@
 									<th class="an-th--num"><span class="an-th-btn">Valor</span></th>
 								</tr>
 							</thead>
-										<tbody>
-				{#each filasJornadaPagina as f, i (f.planillaId + '-' + (f.empresaId ?? f.empresa) + '-' + f.mesClave + '-' + i)}
-					<tr>
-						<td data-etiqueta="Placa">{f.placa}</td>
-						<td data-etiqueta="Conductor">{f.conductor}</td>
-						<td data-etiqueta="Planilla">{f.planilla}</td>
-						<td data-etiqueta="Empresa">{f.empresa}</td>
-						<td data-etiqueta="Mes">{f.mes} {f.anio}</td>
-						<td data-etiqueta="Días manejados">{formatearDiasJornada(f.dias)}</td>
-						<td class="an-td--num" data-etiqueta="Valor">
-							<strong>{fmt(f.valor)}</strong>
-						</td>
-					</tr>
-				{/each}
-			</tbody>
+							<tbody>
+								{#each filasJornadaPagina as f, i (f.planillaId + '-' + (f.empresaId ?? f.empresa) + '-' + f.mesClave + '-' + i)}
+									<tr>
+										<td data-etiqueta="Placa">{f.placa}</td>
+										<td data-etiqueta="Conductor">{f.conductor}</td>
+										<td data-etiqueta="Planilla">{f.planilla}</td>
+										<td data-etiqueta="Empresa">{f.empresa}</td>
+										<td data-etiqueta="Mes">{f.mes} {f.anio}</td>
+										<td data-etiqueta="Días manejados">{formatearDiasJornada(f.dias)}</td>
+										<td class="an-td--num" data-etiqueta="Valor">
+											<strong>{fmt(f.valor)}</strong>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
 						</table>
 					</div>
 					<PaginadorLista
@@ -1375,21 +1267,12 @@
 				</div>
 			{/if}
 
-			{#if filtros.analisis === 'recargos' && filasRec.length}
-				<div class="an-recargos-jornada">
-					<header class="an-card-cabecera">
-						<h2>Distribución de recargos de la liquidación</h2>
-						<span>Valores guardados en nómina y repartidos entre cliente y propietario</span>
-					</header>
-				</div>
-			{/if}
-
-			{#if !filasActivas.length && !(filtros.analisis === 'recargos' && filasJornada.length)}
+			{#if !filasActivas.length}
 				<div class="an-estado an-estado--corto">
 					<img src={mascota('vacio').src} alt="" class="an-estado-mascota" aria-hidden="true" />
 					<p>Sin registros en esta pestaña para los filtros puestos.</p>
 				</div>
-			{:else if filasActivas.length}
+			{:else if filtros.analisis !== 'recargos'}
 				<div class="an-scroll">
 					<table class="an-tabla">
 						<thead>
@@ -1413,10 +1296,7 @@
 						</thead>
 						<tbody>
 							{#each filasPagina as f, i (filtros.analisis + (f.id ?? i) + (pagina - 1) * POR_PAGINA)}
-								<tr
-									class:an-tr--prop={f.parte === 'propietario'}
-									class:an-tr--empresa={filtros.analisis === 'recargos' && f.pagaCliente === false}
-								>
+								<tr>
 									{#each columnas as c (c.key)}
 										<td class:an-td--num={c.num} data-etiqueta={c.label}>
 											{#if c.key === 'estado_flujo'}
@@ -1432,11 +1312,7 @@
 													<strong>{f.conductor.nombre}</strong>
 													{#if f.conductor.cedula}<small>C.C. {f.conductor.cedula}</small>{/if}
 												</span>
-											{:else if c.key === 'pagaCliente'}
-												<span class="an-si-no" class:an-si-no--si={f.pagaCliente}
-													>{f.pagaCliente ? 'Sí' : 'No'}</span
-												>
-											{:else if c.key === 'sueldo_total' || c.key === 'total' || (c.key === 'valor' && filtros.analisis === 'recargos')}
+											{:else if c.key === 'sueldo_total' || c.key === 'total'}
 												<strong>{celda(c, f)}</strong>
 											{:else}
 												{celda(c, f)}
@@ -1629,34 +1505,6 @@
 	.an-buscador input:focus {
 		outline: none;
 	}
-	.an-segmentos {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.15rem;
-		padding: 0.25rem;
-		background: var(--bg-surface);
-		border: 1.5px solid var(--border-default);
-		border-radius: 14px;
-	}
-	.an-segmentos .an-grupo-etiqueta {
-		padding: 0 0.5rem 0 0.6rem;
-	}
-	.an-segmento {
-		padding: 0.4rem 0.75rem;
-		border: none;
-		border-radius: 10px;
-		background: transparent;
-		font-family: inherit;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: var(--text-muted);
-		cursor: pointer;
-	}
-	.an-segmento--activo {
-		background: var(--au-tint, #ddf7ea);
-		color: var(--emerald-800);
-		font-weight: 700;
-	}
 	.an-filtros-resumen {
 		display: flex;
 		align-items: center;
@@ -1782,7 +1630,7 @@
 	}
 	@media (min-width: 900px) {
 		.an-graficas {
-			grid-template-columns: repeat(3, minmax(0, 1fr));
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 		.an-grafica--ancha {
 			grid-column: 1 / -1;
@@ -1790,7 +1638,7 @@
 	}
 	@media (min-width: 1400px) {
 		.an-graficas {
-			grid-template-columns: 2fr 1fr 1fr 1fr;
+			grid-template-columns: 2fr 1fr 1fr;
 		}
 		.an-grafica--ancha {
 			grid-column: auto;
@@ -1960,12 +1808,6 @@
 	.an-tabla tbody tr:hover td {
 		background: rgba(var(--au-primary-rgb, 7, 150, 101), 0.04);
 	}
-	.an-tr--prop td {
-		background: rgba(245, 158, 11, 0.06);
-	}
-	.an-tr--empresa td {
-		background: rgba(220, 38, 38, 0.035);
-	}
 	.an-conductor {
 		display: flex;
 		flex-direction: column;
@@ -1990,19 +1832,6 @@
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
 		white-space: nowrap;
-	}
-	.an-si-no {
-		display: inline-block;
-		padding: 0.15rem 0.5rem;
-		border-radius: 999px;
-		background: rgba(220, 38, 38, 0.1);
-		font-size: 0.7rem;
-		font-weight: 700;
-		color: #991b1b;
-	}
-	.an-si-no--si {
-		background: var(--au-tint, #ddf7ea);
-		color: var(--emerald-800);
 	}
 	.an-td--acc {
 		text-align: right;
