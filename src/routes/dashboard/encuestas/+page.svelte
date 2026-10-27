@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { BarChart3, Plus, ArrowUpRight, Copy, Search, Sparkles } from 'lucide-svelte';
+	import { ArrowUpRight, Copy, Plus } from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import { encuestasAPI, type Encuesta, type EncuestaInput } from '$lib/api/encuestas';
 	import { socketUtils } from '$lib/socket';
 	import { authStore } from '$lib/stores/auth';
 	import { checkAccess } from '$lib/config/permissions';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 
 	const puedeGestionar = $derived.by(() => {
 		const u = $authStore.user;
@@ -16,15 +18,20 @@
 	let encuestas = $state<Encuesta[]>([]);
 	let cargando = $state(true);
 	let creando = $state(false);
-	let tituloNuevo = $state('');
 	let busqueda = $state('');
+	let estadoFiltro = $state<'TODAS' | 'BORRADOR' | 'PUBLICADA' | 'CERRADA'>('TODAS');
 	let error = $state('');
 
 	const visibles = $derived(
-		encuestas.filter((e) => e.titulo.toLocaleLowerCase('es').includes(busqueda.toLocaleLowerCase('es')))
+		encuestas.filter((e) => {
+			const coincideEstado = estadoFiltro === 'TODAS' || e.estado === estadoFiltro;
+			const texto = `${e.titulo} ${e.descripcion ?? ''}`.toLocaleLowerCase('es');
+			return coincideEstado && texto.includes(busqueda.trim().toLocaleLowerCase('es'));
+		})
 	);
 	const publicadas = $derived(encuestas.filter((e) => e.estado === 'PUBLICADA').length);
-	const respuestas = $derived(encuestas.reduce((s, e) => s + (e._count?.respuestas ?? 0), 0));
+	const borradores = $derived(encuestas.filter((e) => e.estado === 'BORRADOR').length);
+	const cerradas = $derived(encuestas.filter((e) => e.estado === 'CERRADA').length);
 
 	async function cargar() {
 		try {
@@ -45,11 +52,11 @@
 	});
 
 	async function crear() {
-		if (!tituloNuevo.trim() || creando) return;
+		if (!puedeGestionar || creando) return;
 		creando = true;
 		try {
 			const entrada: EncuestaInput = {
-				titulo: tituloNuevo.trim(), descripcion: '', mensaje_final: '¡Gracias por compartir tu opinión!',
+				titulo: 'Encuesta nueva', descripcion: '', mensaje_final: '¡Gracias por compartir tu opinión!',
 				nombre_modo: 'NO', correo_modo: 'NO', registrar_origen: false,
 				politica_origen: 'PERMITIR', fecha_cierre: null, preguntas: []
 			};
@@ -63,8 +70,12 @@
 	}
 
 	async function copiar(token: string) {
-		await navigator.clipboard.writeText(encuestasAPI.enlace(token));
-		toast.success('Enlace copiado');
+		try {
+			await navigator.clipboard.writeText(encuestasAPI.enlace(token));
+			toast.success('Enlace copiado');
+		} catch {
+			toast.error('No se pudo copiar el enlace');
+		}
 	}
 
 	function fecha(valor: string) {
@@ -74,51 +85,67 @@
 
 <svelte:head><title>Encuestas · Panel</title></svelte:head>
 
-<div class="pagina">
-	<header class="cabecera">
-		<div>
-			<div class="eyebrow"><Sparkles size={15} /> Participación y escucha</div>
-			<h1>Encuestas</h1>
-			<p>Crea un enlace, escucha al grupo y sigue las respuestas mientras llegan.</p>
+<div class="dir-pagina encuestas-pagina">
+	<header class="page-card dir-cabecera">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Encuestas</h1>
+			<p class="dir-desc">Crea cuestionarios, comparte el enlace y consulta las respuestas en tiempo real.</p>
+			<div class="dir-conteos">
+				<ResumenConteos
+					conteos={[
+						{ clave: 'TODAS', etiqueta: 'Todas', valor: encuestas.length },
+						{ clave: 'BORRADOR', etiqueta: 'Borradores', valor: borradores, color: '#d99a24' },
+						{ clave: 'PUBLICADA', etiqueta: 'Publicadas', valor: publicadas, color: 'var(--emerald-500)' },
+						{ clave: 'CERRADA', etiqueta: 'Cerradas', valor: cerradas, color: '#87918d' }
+					]}
+					activo={estadoFiltro}
+					onElegir={(clave) => (estadoFiltro = clave as typeof estadoFiltro)}
+				/>
+			</div>
 		</div>
-		{#if puedeGestionar}<button class="btn-crear" onclick={() => document.getElementById('nuevo-titulo')?.focus()}><Plus size={18} /> Nueva encuesta</button>{/if}
+		{#if puedeGestionar}
+			<div class="dir-cabecera-acciones">
+				<button type="button" class="btn-primary" onclick={() => void crear()} disabled={creando}>
+					<Plus size={17} /> {creando ? 'Creando borrador…' : 'Nueva encuesta'}
+				</button>
+			</div>
+		{/if}
 	</header>
 
-	<section class="resumen" aria-label="Resumen de encuestas">
-		<div><span>Encuestas</span><strong>{encuestas.length}</strong><small>en tu espacio</small></div>
-		<div><span>Publicadas</span><strong>{publicadas}</strong><small>recibiendo respuestas</small></div>
-		<div><span>Respuestas</span><strong>{respuestas}</strong><small>en total</small></div>
-		<div class="resumen-ilustrado"><BarChart3 size={32} /><span>Tu tablero se actualiza al recibir una respuesta.</span></div>
-	</section>
-
-	{#if puedeGestionar}<section class="crear-panel">
-		<div><strong>Empezar una encuesta</strong><p>Ponle un nombre. Después eliges preguntas y opciones.</p></div>
-		<form onsubmit={(e) => { e.preventDefault(); void crear(); }}>
-			<input id="nuevo-titulo" type="text" maxlength="180" minlength="3" placeholder="Ej. Encuesta de satisfacción del servicio" bind:value={tituloNuevo} required />
-			<button type="submit" disabled={creando || tituloNuevo.trim().length < 3}>{creando ? 'Creando…' : 'Crear borrador'} <ArrowUpRight size={16} /></button>
-		</form>
-	</section>{/if}
-
-	<div class="barra"><h2>Todas las encuestas</h2><label><Search size={17} /><input type="search" placeholder="Buscar por título" bind:value={busqueda} /></label></div>
-	{#if error}<p class="error" role="alert">{error}</p>{/if}
-	{#if cargando}<p class="vacio">Cargando encuestas…</p>
+	<div class="dir-filtros">
+		<div class="dir-filtros-buscador">
+			<BuscadorLista bind:valor={busqueda} onBuscar={() => {}} placeholder="Buscar por título o descripción…" etiqueta="Buscar encuestas" />
+		</div>
+		<p class="actualizacion"><span aria-hidden="true"></span> Respuestas en tiempo real</p>
+	</div>
+	{#if error}<p class="error page-card" role="alert">{error}</p>{/if}
+	{#if cargando}<div class="estado-vacio page-card">Cargando encuestas…</div>
 	{:else if visibles.length === 0}
-		<div class="vacio">{puedeGestionar ? 'Todavía no hay encuestas que coincidan. Crea una arriba para empezar.' : 'No hay encuestas que coincidan.'}</div>
+		<div class="estado-vacio page-card">
+			<strong>{busqueda || estadoFiltro !== 'TODAS' ? 'No hay encuestas con estos filtros' : 'Aún no hay encuestas'}</strong>
+			<p>{busqueda || estadoFiltro !== 'TODAS' ? 'Prueba con otra búsqueda o cambia el estado seleccionado.' : 'Crea la primera y construye las preguntas que quieres compartir.'}</p>
+			{#if puedeGestionar && !busqueda && estadoFiltro === 'TODAS'}
+				<button type="button" class="btn-primary" onclick={() => void crear()} disabled={creando}><Plus size={16} /> Crear primera encuesta</button>
+			{/if}
+		</div>
 	{:else}
-		<div class="rejilla">
+		<div class="rejilla-encuestas">
 			{#each visibles as encuesta (encuesta.id)}
-				<article class="tarjeta">
-					<div class="tarjeta-top">
-						<span class:verde={encuesta.estado === 'PUBLICADA'} class:gris={encuesta.estado === 'CERRADA'} class="estado">{encuesta.estado === 'PUBLICADA' ? 'Publicada' : encuesta.estado === 'CERRADA' ? 'Cerrada' : 'Borrador'}</span>
-						<span class="fecha">{fecha(encuesta.created_at)}</span>
+				<article class="encuesta-card page-card">
+					<div class="encuesta-card-meta">
+						<span class="estado" class:publicada={encuesta.estado === 'PUBLICADA'} class:cerrada={encuesta.estado === 'CERRADA'}>{encuesta.estado === 'PUBLICADA' ? 'Publicada' : encuesta.estado === 'CERRADA' ? 'Cerrada' : 'Borrador'}</span>
+						<span class="fecha">Creada el {fecha(encuesta.created_at)}</span>
 					</div>
-					<h3>{encuesta.titulo}</h3>
-					<p>{encuesta.descripcion || 'Sin descripción todavía'}</p>
-					<div class="tarjeta-pie"><strong>{encuesta._count?.respuestas ?? 0}</strong><span>respuestas</span></div>
-					<div class="acciones">
-						<a href={`/dashboard/encuestas/${encuesta.id}`}>Abrir tablero <ArrowUpRight size={16} /></a>
+					<h2>{encuesta.titulo}</h2>
+					<p class="descripcion">{encuesta.descripcion || 'Sin descripción'}</p>
+					<div class="encuesta-card-resumen">
+						<div><strong>{encuesta._count?.respuestas ?? 0}</strong><span>Respuestas</span></div>
+						<div><strong>{encuesta.preguntas?.length ?? 0}</strong><span>Preguntas</span></div>
+					</div>
+					<div class="encuesta-card-acciones">
+						<a class="abrir-tablero" href={`/dashboard/encuestas/${encuesta.id}`}>Abrir encuesta <ArrowUpRight size={16} /></a>
 						{#if encuesta.estado === 'PUBLICADA'}
-							<button title="Copiar enlace público" aria-label="Copiar enlace de {encuesta.titulo}" onclick={() => copiar(encuesta.token)}><Copy size={17} /></button>
+							<button type="button" class="copiar-enlace" title="Copiar enlace público" aria-label="Copiar enlace de {encuesta.titulo}" onclick={() => void copiar(encuesta.token)}><Copy size={16} /> Copiar enlace</button>
 						{/if}
 					</div>
 				</article>
@@ -128,47 +155,31 @@
 </div>
 
 <style>
-	.pagina { padding: 1.5rem 1.25rem 3rem; color: var(--text-primary); }
-	.cabecera { display: flex; justify-content: space-between; align-items: end; gap: 1.5rem; margin: 0 0 2rem; }
-	.eyebrow { display: flex; align-items: center; gap: .4rem; text-transform: uppercase; letter-spacing: .14em; color: var(--accion, #07875f); font-size: .72rem; font-weight: 800; }
-	h1 { font-size: clamp(2.2rem, 4vw, 3.8rem); letter-spacing: -.05em; margin: .4rem 0; }
-	.cabecera p { margin: 0; color: var(--text-secondary); }
-	button, input { font: inherit; }
-	.btn-crear, .crear-panel button { display: inline-flex; align-items: center; gap: .5rem; border: 0; border-radius: .8rem; background: var(--accion, #07875f); color: #fff; padding: .85rem 1.1rem; font-weight: 700; cursor: pointer; }
-	.resumen { display: grid; grid-template-columns: repeat(3, minmax(9rem, 1fr)) minmax(12rem, 1.3fr); gap: .8rem; margin-bottom: 1rem; }
-	.resumen > div { background: var(--bg-surface, #fff); border: 1px solid var(--border-subtle, #e3e9e5); border-radius: 1rem; padding: 1.25rem; display: flex; flex-direction: column; gap: .25rem; }
-	.resumen span { color: var(--text-secondary); font-size: .84rem; }
-	.resumen strong { font-size: 2rem; letter-spacing: -.04em; }
-	.resumen small { color: var(--text-muted, #8a9991); }
-	.resumen .resumen-ilustrado { background: color-mix(in srgb, var(--accion, #07875f) 10%, var(--bg-surface, white)); color: var(--accion, #07875f); justify-content: space-between; }
-	.resumen-ilustrado span { color: var(--text-primary); font-weight: 600; }
-	.crear-panel { display: flex; justify-content: space-between; gap: 2rem; align-items: center; border-radius: 1rem; padding: 1.35rem; background: var(--bg-surface, #fff); border: 1px solid var(--border-subtle, #e3e9e5); }
-	.crear-panel strong { font-size: 1.04rem; }
-	.crear-panel p { margin: .25rem 0 0; font-size: .84rem; color: var(--text-secondary); }
-	.crear-panel form { display: flex; gap: .5rem; min-width: min(100%, 29rem); }
-	.crear-panel input { min-width: 0; flex: 1; border: 1px solid var(--border-default, #ccd6d0); border-radius: .7rem; padding: .75rem; background: var(--bg-surface, #fff); color: var(--text-primary); }
-	.crear-panel button:disabled { opacity: .55; cursor: default; }
-	.barra { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 2rem 0 1rem; }
-	h2 { font-size: 1.2rem; margin: 0; }
-	.barra label { display: flex; align-items: center; gap: .5rem; padding: .55rem .8rem; border: 1px solid var(--border-default, #ccd6d0); border-radius: .75rem; color: var(--text-secondary); background: var(--bg-surface, #fff); }
-	.barra input { border: 0; outline: 0; background: transparent; color: var(--text-primary); }
-	.rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
-	.tarjeta { display: flex; flex-direction: column; min-height: 15rem; background: var(--bg-surface, #fff); border: 1px solid var(--border-subtle, #e3e9e5); border-radius: 1rem; padding: 1.2rem; }
-	.tarjeta-top { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
-	.estado { display: inline-block; padding: .3rem .6rem; border-radius: 2rem; background: #f4ebd6; color: #875d15; font-size: .7rem; font-weight: 800; }
-	.estado.verde { background: #e1f4e9; color: #116d44; }
-	.estado.gris { background: #edf0f1; color: #5e6d71; }
-	.fecha { color: var(--text-muted, #8a9991); font-size: .75rem; }
-	h3 { margin: 1rem 0 .4rem; font-size: 1.15rem; letter-spacing: -.02em; }
-	.tarjeta > p { margin: 0; color: var(--text-secondary); font-size: .84rem; line-height: 1.5; }
-	.tarjeta-pie { display: flex; align-items: baseline; gap: .4rem; margin-top: auto; padding-top: 1.4rem; }
-	.tarjeta-pie strong { font-size: 1.5rem; letter-spacing: -.04em; }
-	.tarjeta-pie span { color: var(--text-secondary); font-size: .8rem; }
-	.acciones { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-subtle, #e3e9e5); margin-top: 1rem; padding-top: .8rem; }
-	.acciones a { display: inline-flex; align-items: center; gap: .3rem; color: var(--accion, #07875f); font-size: .84rem; font-weight: 750; text-decoration: none; }
-	.acciones button { border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; padding: .4rem; }
-	.vacio { border: 1px dashed var(--border-default, #ccd6d0); border-radius: 1rem; padding: 3rem; text-align: center; color: var(--text-secondary); }
+	.encuestas-pagina { overflow: auto; }
+	.actualizacion { display: inline-flex; align-items: center; gap: .45rem; margin: 0 .25rem; color: var(--text-muted); font-size: .78rem; white-space: nowrap; }
+	.actualizacion span { width: .5rem; height: .5rem; border-radius: 50%; background: var(--accion); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 14%, transparent); }
+	.rejilla-encuestas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: .85rem; align-content: start; }
+	.encuesta-card { display: flex; flex-direction: column; gap: .8rem; padding: 1rem 1.1rem; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+	.encuesta-card:hover { border-color: color-mix(in srgb, var(--accion) 35%, var(--border-subtle)); box-shadow: var(--shadow-card-hover, var(--shadow-card)); transform: translateY(-1px); }
+	.encuesta-card-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+	.estado { display: inline-flex; align-items: center; min-height: 1.45rem; padding: .15rem .55rem; border-radius: 999px; background: #fff5df; color: #805a10; font-size: .68rem; font-weight: 750; }
+	.estado.publicada { background: color-mix(in srgb, var(--emerald-500) 13%, white); color: var(--emerald-800); }
+	.estado.cerrada { background: var(--bg-subtle); color: var(--text-muted); }
+	.fecha { color: var(--text-muted); font-size: .72rem; }
+	h2 { margin: 0; color: var(--text-primary); font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }
+	.descripcion { min-height: 2.5em; margin: -.35rem 0 0; color: var(--text-muted); font-size: .8rem; line-height: 1.5; }
+	.encuesta-card-resumen { display: flex; gap: 1.5rem; border-top: 1px solid var(--border-subtle); padding-top: .75rem; }
+	.encuesta-card-resumen div { display: flex; align-items: baseline; gap: .4rem; }
+	.encuesta-card-resumen strong { color: var(--text-primary); font-size: 1.05rem; }
+	.encuesta-card-resumen span { color: var(--text-muted); font-size: .74rem; }
+	.encuesta-card-acciones { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin-top: auto; }
+	.abrir-tablero, .copiar-enlace { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 2.5rem; border-radius: .75rem; font: inherit; font-size: .78rem; font-weight: 700; text-decoration: none; cursor: pointer; }
+	.abrir-tablero { color: var(--accion); }
+	.copiar-enlace { padding: 0 .65rem; border: 1px solid var(--border-default); background: var(--bg-surface); color: var(--text-secondary); }
+	.estado-vacio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .55rem; min-height: 12rem; padding: 2rem; text-align: center; color: var(--text-muted); }
+	.estado-vacio strong { color: var(--text-primary); font-size: .95rem; }
+	.estado-vacio p { margin: 0 0 .5rem; font-size: .8rem; }
+	.estado-vacio .btn-primary { margin-top: .4rem; }
 	.error { color: #b42318; }
-	@media (max-width: 850px) { .cabecera, .crear-panel { align-items: stretch; flex-direction: column; } .resumen { grid-template-columns: repeat(2, minmax(0, 1fr)); } .crear-panel form { min-width: 0; } }
-	@media (max-width: 500px) { .resumen { grid-template-columns: 1fr 1fr; } .resumen-ilustrado { grid-column: 1 / -1; } .crear-panel form { flex-direction: column; } .barra { align-items: stretch; flex-direction: column; } }
+	@media (max-width: 640px) { .encuestas-pagina { padding: 1rem; } .encuesta-card-acciones { align-items: stretch; } .copiar-enlace { flex: 1; } }
 </style>
