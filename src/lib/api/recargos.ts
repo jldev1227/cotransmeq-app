@@ -591,7 +591,7 @@ export const recargosApi = {
 	 *   - ya_importado: ya está en Cotransmeq → tachada, no se reimporta
 	 *   - motivo_no_importable: solo si el conductor no existe en CM
 	 *   - vehiculo_no_existe_en_destino: se crea al importar
-	 *   - empresa_no_existe_en_destino: se crea al importar
+	 *   - empresa_no_existe_en_destino: solo si no hay coincidencia con una empresa existente
 	 */
 	async previewImportarTransmeralda(
 		mes: number,
@@ -628,6 +628,14 @@ export const recargosApi = {
 			dias_lista: number[];
 			/** Mismos días pero compactados como rangos: "1-3, 5-7" */
 			dias_rangos: string;
+			empresa_origen_id: string | null;
+			empresa_destino_id: string | null;
+			empresa_destino_nombre: string | null;
+			empresa_coincidencia: 'nit' | 'nombre' | 'similitud' | 'revision' | 'nueva' | 'eliminada';
+			empresa_coincidencia_score: number | null;
+			empresa_sugerencias: Array<{ id: string; nombre: string; nit: string | null; score: number }>;
+			empresa_requiere_revision: boolean;
+			empresa_nit_en_empresa_eliminada: boolean;
 			ya_importado: boolean;
 			conductor_existe_en_destino: boolean;
 			/**
@@ -680,7 +688,11 @@ export const recargosApi = {
 	 * cuántas se importaron, omitieron, fallaron y cuántas entidades se
 	 * crearon.
 	 */
-	async importarDesdeTransmeralda(sourceIds: string[]): Promise<{
+	async importarDesdeTransmeralda(
+		sourceIds: string[],
+		empresaDestinoPorPlanilla: Record<string, string> = {},
+		empresasConfirmadasNuevas: string[] = []
+	): Promise<{
 		solicitadas: number;
 		importadas: number;
 		omitidas: number;
@@ -706,7 +718,11 @@ export const recargosApi = {
 			message: string;
 			recalculoBatchId: string | null;
 			data: any;
-		}>(`${BASE_URL}/importar-desde-transmeralda`, { source_ids: sourceIds });
+		}>(`${BASE_URL}/importar-desde-transmeralda`, {
+			source_ids: sourceIds,
+			empresa_destino_por_planilla: empresaDestinoPorPlanilla,
+			empresas_confirmadas_nuevas: empresasConfirmadasNuevas
+		});
 		// El backend mete `recalculoBatchId` arriba del `data` para que
 		// sea fácil de consumir sin tener que navegar el data envelope.
 		return {

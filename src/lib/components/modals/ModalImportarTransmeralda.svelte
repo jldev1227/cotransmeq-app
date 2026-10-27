@@ -60,12 +60,14 @@
 	} | null = null;
 	let errorMsg: string | null = null;
 	let selectedIds = new Set<string>();
+	let empresaDestinoSeleccionado: Record<string, string> = {};
 	let mostrarNoImportables = false;
 	/** Texto del buscador. Filtra solo lo que se VE, nunca lo seleccionado. */
 	let busqueda = '';
 
 	$: if (isOpen) {
 		selectedIds = new Set();
+		empresaDestinoSeleccionado = {};
 		preview = null;
 		errorMsg = null;
 		busqueda = '';
@@ -81,7 +83,13 @@
 			// Auto-seleccionar todas las importables nuevas
 			selectedIds = new Set(
 				preview.planillas
-					.filter((p) => !p.ya_importado && p.motivo_no_importable === null)
+					.filter(
+						(p) =>
+							!p.ya_importado &&
+							p.motivo_no_importable === null &&
+							!p.empresa_requiere_revision &&
+							!p.empresa_nit_en_empresa_eliminada
+					)
 					.map((p) => p.source_id)
 			);
 		} catch (err: any) {
@@ -188,15 +196,28 @@
 	 * y no «las 200 de debajo que no estoy mirando».
 	 */
 	$: importablesVisibles = planillasFiltradas.filter(
-		(p) => !p.ya_importado && p.motivo_no_importable === null
+		(p) =>
+			!p.ya_importado &&
+			p.motivo_no_importable === null &&
+			(!p.empresa_nit_en_empresa_eliminada || !!empresaDestinoSeleccionado[p.source_id]) &&
+			(!p.empresa_requiere_revision || !!empresaDestinoSeleccionado[p.source_id])
 	);
 	$: todasVisiblesSeleccionadas =
 		importablesVisibles.length > 0 &&
 		importablesVisibles.every((p) => selectedIds.has(p.source_id));
 
 	$: importablesCount =
-		preview?.planillas.filter((p) => !p.ya_importado && p.motivo_no_importable === null).length ??
+		preview?.planillas.filter(
+			(p) =>
+				!p.ya_importado &&
+				p.motivo_no_importable === null &&
+				!p.empresa_requiere_revision &&
+				!p.empresa_nit_en_empresa_eliminada
+		).length ??
 		0;
+	$: empresasPorRevisar =
+		preview?.planillas.filter((p) => p.empresa_requiere_revision || p.empresa_nit_en_empresa_eliminada)
+			.length ?? 0;
 
 	$: haySeleccion = selectedIds.size > 0;
 
@@ -206,7 +227,24 @@
 		errorMsg = null;
 		try {
 			const sourceIds = Array.from(selectedIds);
-			const result = await recargosApi.importarDesdeTransmeralda(sourceIds);
+			const empresaDestinoPorPlanilla: Record<string, string> = {};
+			const empresasConfirmadasNuevas: string[] = [];
+			for (const sourceId of sourceIds) {
+				const fila = preview?.planillas.find((p) => p.source_id === sourceId);
+				const seleccion = empresaDestinoSeleccionado[sourceId];
+				if (seleccion === '__nueva__') {
+					empresasConfirmadasNuevas.push(sourceId);
+				} else if (seleccion) {
+					empresaDestinoPorPlanilla[sourceId] = seleccion;
+				} else if (fila?.empresa_destino_id) {
+					empresaDestinoPorPlanilla[sourceId] = fila.empresa_destino_id;
+				}
+			}
+			const result = await recargosApi.importarDesdeTransmeralda(
+				sourceIds,
+				empresaDestinoPorPlanilla,
+				empresasConfirmadasNuevas
+			);
 			const newRecargoIds = (result.detalle?.importadas || []).map((d) => d.new_id);
 			dispatch('imported', {
 				importadas: result.importadas,
@@ -223,6 +261,16 @@
 				err?.response?.data?.message || err?.message || 'No se pudo ejecutar la importación';
 		} finally {
 			importing = false;
+		}
+	}
+
+	function cambiarEmpresaDestino(sourceId: string, event: Event) {
+		const valor = (event.currentTarget as HTMLSelectElement).value;
+		empresaDestinoSeleccionado = { ...empresaDestinoSeleccionado, [sourceId]: valor };
+		if (!valor && selectedIds.has(sourceId)) {
+			const siguiente = new Set(selectedIds);
+			siguiente.delete(sourceId);
+			selectedIds = siguiente;
 		}
 	}
 
@@ -335,6 +383,12 @@
 							Marca las que quieres traer a Cotransmeq
 						{/if}
 					</p>
+					{#if empresasPorRevisar > 0}
+						<p class="it-nota it-empresa-aviso">
+							{empresasPorRevisar} planilla(s) requieren resolver la empresa destino. Las coincidencias
+							mayores a 80/100 se asignan automáticamente.
+						</p>
+					{/if}
 				</div>
 				{#if preview.vehiculos_a_crear > 0 || preview.empresas_a_crear > 0}
 					<button
@@ -429,7 +483,16 @@
 				{#each planillasFiltradas as p (p.source_id)}
 					{@const noImportable = !!p.motivo_no_importable}
 					{@const importada = p.ya_importado}
-					{@const deshabilitada = noImportable || importada || !p.conductor_activo_en_destino}
+					{@const empresaElegida = empresaDestinoSeleccionado[p.source_id]}
+					{@const empresaSinResolver = p.empresa_requiere_revision && !empresaElegida}
+					{@const empresaEliminadaSinAlternativa =
+						p.empresa_nit_en_empresa_eliminada && !p.empresa_sugerencias?.length}
+					{@const deshabilitada =
+						noImportable ||
+						importada ||
+						!p.conductor_activo_en_destino ||
+						empresaSinResolver ||
+						empresaEliminadaSinAlternativa}
 					{@const isSelected = selectedIds.has(p.source_id)}
 					<label
 						class="it-fila"
@@ -453,6 +516,47 @@
 						<span class="it-col">
 							<span class="it-principal it-num">{p.vehiculo_placa}</span>
 							<span class="it-secundario">{p.empresa_nombre}</span>
+							{#if p.empresa_nit_en_empresa_eliminada}
+								<span class="it-secundario it-empresa-eliminada">
+									El NIT está ligado a una empresa eliminada; selecciona un destino activo o reactívala.
+								</span>
+							{/if}
+							{#if p.empresa_requiere_revision}
+								<div class="it-empresa-resolver">
+									<span>
+										No hay coincidencia superior a 80/100 · mejor resultado
+										{p.empresa_coincidencia_score ?? 0}/100
+									</span>
+									<select
+										aria-label="Empresa destino para {p.empresa_nombre}"
+										value={empresaElegida ?? ''}
+										onchange={(event) => cambiarEmpresaDestino(p.source_id, event)}
+										onclick={(event) => event.stopPropagation()}
+									>
+										<option value="">Seleccionar empresa</option>
+										{#each p.empresa_sugerencias ?? [] as sugerencia (sugerencia.id)}
+											<option value={sugerencia.id}>
+												{sugerencia.nombre} · {sugerencia.score}/100
+											</option>
+										{/each}
+										{#if !p.empresa_nit_en_empresa_eliminada}
+											<option value="__nueva__">Crear como empresa nueva</option>
+										{/if}
+									</select>
+								</div>
+							{:else if p.empresa_destino_id}
+								<span class="it-secundario it-empresa-match">
+									Destino: {p.empresa_destino_nombre} ·
+									{p.empresa_coincidencia === 'nit'
+										? 'NIT exacto'
+										: p.empresa_coincidencia === 'nombre'
+											? 'nombre normalizado'
+											: `similitud ${p.empresa_coincidencia_score ?? 0}/100`}
+								</span>
+							{/if}
+							{#if empresaElegida === '__nueva__'}
+								<span class="it-secundario it-empresa-match">Crear empresa nueva · confirmado</span>
+							{/if}
 						</span>
 
 						<span class="it-col">
@@ -490,6 +594,10 @@
 								>
 									{p.motivo_no_importable}
 								</span>
+							{:else if empresaEliminadaSinAlternativa}
+								<span class="it-chip it-chip--peligro">NIT en empresa eliminada</span>
+							{:else if empresaSinResolver}
+								<span class="it-chip it-chip--alerta">Elegir empresa</span>
 							{:else}
 								<span class="it-chip it-chip--marca">Nueva</span>
 							{/if}
@@ -672,6 +780,10 @@
 		color: var(--text-muted);
 		font-size: 12px;
 		font-weight: 600;
+	}
+	.it-empresa-aviso {
+		margin-top: 5px;
+		color: #92400e;
 	}
 	.it-num {
 		font-variant-numeric: tabular-nums;
@@ -916,6 +1028,40 @@
 		line-height: 1.3;
 		font-weight: 600;
 		overflow-wrap: anywhere;
+	}
+	.it-empresa-resolver {
+		width: min(100%, 340px);
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+		margin-top: 5px;
+		color: #92400e;
+		font-size: 11px;
+		line-height: 1.35;
+		font-weight: 700;
+	}
+	.it-empresa-resolver select {
+		width: 100%;
+		min-height: 34px;
+		padding: 5px 8px;
+		border: 1px solid var(--border-default);
+		border-radius: 8px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 12px;
+	}
+	.it-empresa-resolver select:focus-visible {
+		outline: 2px solid var(--accion);
+		outline-offset: 2px;
+	}
+	.it-empresa-eliminada {
+		color: #b42318;
+	}
+	.it-empresa-match {
+		color: var(--color-emerald-700);
+		font-size: 11px;
 	}
 
 	/* Chips suaves para estados. */
