@@ -39,6 +39,11 @@ permisos por módulo en [autenticacion-y-permisos.md](./autenticacion-y-permisos
 En el análisis de nómina, el resumen agrupa por el mes en que termina cada
 liquidación. Las pestañas de conceptos filtran por el mes de referencia del
 bono, recargo, pernocte o mantenimiento, aunque pertenezca a un corte distinto.
+La pestaña Recargos separa los valores monetarios de la liquidación de las
+horas de jornada agrupadas por placa y tipo. Estas últimas salen de los días
+copiados al canvas o, cuando el corte no tiene copia, de las planillas del
+conductor; se filtran por el mes del día y respetan las marcas de ocultar y no
+sumar.
 
 El código de ingresos conserva nombres del gemelo (`ingresos-transmeralda.ts`,
 tablas `liquidacion_ingreso_transmeralda*`, el rótulo «INGRESOS DE

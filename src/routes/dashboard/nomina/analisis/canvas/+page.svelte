@@ -162,22 +162,25 @@
 	let cargando = $state(true);
 	let errorCarga = $state('');
 	let firmaCargada = '';
+	let solicitudAnalisis = 0;
 
-	/// Lo que decide una nueva consulta al servidor. La búsqueda libre, «paga
-	/// cliente», la pestaña y la página no: se resuelven sobre lo que ya llegó.
+	/// La pestaña solo activa la lectura adicional de recargos cuando se necesitan;
+	/// así el análisis de jornada no encarece el resumen ni las otras pestañas.
 	const firmaServidor = $derived(
 		JSON.stringify([
 			filtros.anios,
 			filtros.meses,
 			filtros.placas,
 			filtros.conductores,
-			filtros.estados
+			filtros.estados,
+			filtros.analisis === 'recargos'
 		])
 	);
 
 	async function cargar(forzar = false) {
 		const f = firmaServidor;
 		if (!forzar && f === firmaCargada) return;
+		const solicitud = ++solicitudAnalisis;
 		cargando = true;
 		errorCarga = '';
 		try {
@@ -186,15 +189,18 @@
 				meses: filtros.meses.map(Number).filter(Boolean),
 				placas: filtros.placas,
 				conductores: filtros.conductores,
-				estados: filtros.estados
+				estados: filtros.estados,
+				incluirRecargosJornada: filtros.analisis === 'recargos'
 			});
+			if (solicitud !== solicitudAnalisis) return;
 			datos = r;
 			firmaCargada = f;
 		} catch (e: any) {
+			if (solicitud !== solicitudAnalisis) return;
 			errorCarga = e?.response?.data?.error || e?.message || 'No se pudo cargar el análisis.';
 			toast.error(errorCarga);
 		} finally {
-			cargando = false;
+			if (solicitud === solicitudAnalisis) cargando = false;
 		}
 	}
 
@@ -404,6 +410,109 @@
 		return res;
 	});
 
+	// ── Recargos de planillas agrupados por empresa ──
+	interface FilaJornada {
+		planillaId: string;
+		planilla: string;
+		placa: string;
+		conductor: string;
+		empresaId: string | null;
+		empresa: string;
+		mes: string;
+		mesClave: string;
+		anio: number;
+		dias: Set<string>;
+		valoresPorDia: Map<string, number>;
+		valor: number;
+	}
+	let paginaJornada = $state(1);
+	function formatearDiasJornada(fechas: Set<string>): string {
+		const dias = Array.from(new Set(Array.from(fechas, (fecha) => Number(fecha.slice(-2)))))
+			.filter((dia) => Number.isInteger(dia) && dia >= 1 && dia <= 31)
+			.sort((a, b) => a - b);
+		if (!dias.length) return '—';
+
+		const rangos: string[] = [];
+		let inicio = dias[0];
+		let fin = inicio;
+		const agregarRango = () => {
+			if (fin - inicio >= 2) {
+				rangos.push(inicio + ' al ' + fin);
+			} else if (fin > inicio) {
+				rangos.push(String(inicio), String(fin));
+			} else {
+				rangos.push(String(inicio));
+			}
+		};
+		for (const dia of dias.slice(1)) {
+			if (dia === fin + 1) {
+				fin = dia;
+				continue;
+			}
+			agregarRango();
+			inicio = dia;
+			fin = dia;
+		}
+		agregarRango();
+		return rangos.join(', ');
+	}
+	function agregarDiasJornada(fila: FilaJornada, detalles: { fecha: string; valor: number }[]) {
+		for (const detalle of detalles) {
+			fila.dias.add(detalle.fecha);
+			if (!fila.valoresPorDia.has(detalle.fecha)) {
+				fila.valoresPorDia.set(detalle.fecha, detalle.valor);
+			}
+		}
+		fila.valor = Array.from(fila.valoresPorDia.values()).reduce((total, valor) => total + valor, 0);
+	}
+	const filasJornada = $derived.by(() => {
+		const mapa = new Map<string, FilaJornada>();
+		for (const l of liqsConBusqueda) {
+			for (const r of l.recargos_jornada ?? []) {
+				if (!placaPasa(r.placa) || !periodoReferenciaPasa(r.mes, l.anio, l.mes)) continue;
+				const periodo = periodoConcepto(r.mes, l.anio, l.mes);
+				const { anio, clave: mk } = periodo;
+				const placa = r.placa ?? '—';
+				const empresa = r.cliente || '—';
+				const claveEmpresa = r.cliente_id ?? empresa;
+				const clave = [r.planilla_id, placa, l.conductor.nombre, claveEmpresa, anio, mk].join('|');
+				const existente = mapa.get(clave);
+				if (existente) {
+					agregarDiasJornada(existente, r.dias ?? []);
+				} else {
+					const fila: FilaJornada = {
+						planillaId: r.planilla_id,
+						planilla: r.numero_planilla || '—',
+						placa,
+						conductor: l.conductor.nombre,
+						empresaId: r.cliente_id,
+						empresa,
+						mes: mesNombre(mk),
+						mesClave: mk,
+						anio,
+						dias: new Set(),
+						valoresPorDia: new Map(),
+						valor: 0
+					};
+					agregarDiasJornada(fila, r.dias ?? []);
+					mapa.set(clave, fila);
+				}
+			}
+		}
+		return Array.from(mapa.values()).sort(
+			(a, b) =>
+				a.placa.localeCompare(b.placa) ||
+				a.conductor.localeCompare(b.conductor, 'es') ||
+				a.mesClave.localeCompare(b.mesClave) ||
+				a.planilla.localeCompare(b.planilla, 'es') ||
+				a.empresa.localeCompare(b.empresa, 'es')
+		);
+	});
+	const totalValorJornada = $derived(filasJornada.reduce((total, fila) => total + fila.valor, 0));
+	const filasJornadaPagina = $derived(
+		filasJornada.slice((paginaJornada - 1) * POR_PAGINA, paginaJornada * POR_PAGINA)
+	);
+
 	// ── Pernoctes ──
 	interface FilaPer {
 		placa: string;
@@ -546,6 +655,60 @@
 		t.recargos = t.recFilas;
 		t.pernotes = t.perFilas;
 		return t;
+	});
+
+	interface TarjetaCifra {
+		etiqueta: string;
+		valor: string;
+		detalle: string;
+		fuerte?: boolean;
+	}
+	const tarjetasCifras = $derived.by(() => {
+		const tarjetas: TarjetaCifra[] = [
+			{
+				etiqueta: 'Liquidaciones',
+				valor: num.format(totales.liquidaciones),
+				detalle: `${totales.conductores} conductores · ${totales.placas} placas`
+			},
+			{
+				etiqueta: 'Neto pagado',
+				valor: fmt(totales.neto),
+				detalle: `${num.format(totales.dias)} días laborados`,
+				fuerte: true
+			},
+			{ etiqueta: 'Devengado', valor: fmt(totales.devengado), detalle: 'salario del periodo' },
+			{
+				etiqueta: 'Bonificaciones',
+				valor: fmt(totales.bonificaciones),
+				detalle: `${filasBon.length} filas · mes de referencia`
+			},
+			{
+				etiqueta: filtros.analisis === 'recargos' ? 'Distribución liquidación' : 'Recargos',
+				valor: fmt(totales.recargos),
+				detalle: `${filasRec.length} filas · mes de referencia`
+			}
+		];
+		if (filtros.analisis === 'recargos') {
+			tarjetas.push({
+				etiqueta: 'Recargos de planillas',
+				valor: fmt(totalValorJornada),
+				detalle: `${filasJornada.length} grupos · Recargos por empresa`
+			});
+		}
+		tarjetas.push(
+			{
+				etiqueta: 'Pernoctes',
+				valor: fmt(totales.pernotes),
+				detalle: `${filasPer.length} filas · mes de referencia`
+			},
+			{ etiqueta: 'Deducciones', valor: fmt(totales.deducciones), detalle: 'salud, pensión y anticipos' },
+			{
+				etiqueta: 'Firmadas',
+				valor: `${totales.firmadas} / ${totales.liquidaciones}`,
+				detalle: `${totales.mantenimientos} mantenimientos`
+			}
+		);
+		return tarjetas;
 	});
 
 	const porEstado = $derived.by(() => {
@@ -756,6 +919,7 @@
 		void filtros.pagaCliente;
 		void firmaServidor;
 		pagina = 1;
+		paginaJornada = 1;
 	});
 	$effect(() => {
 		void filtros.analisis;
@@ -1069,7 +1233,7 @@
 	{:else if datos}
 		<!-- ── Cifras ── -->
 		<section class="an-cifras" class:an-cargando={cargando}>
-			{#each [{ etiqueta: 'Liquidaciones', valor: num.format(totales.liquidaciones), detalle: `${totales.conductores} conductores · ${totales.placas} placas` }, { etiqueta: 'Neto pagado', valor: fmt(totales.neto), detalle: `${num.format(totales.dias)} días laborados`, fuerte: true }, { etiqueta: 'Devengado', valor: fmt(totales.devengado), detalle: 'salario del periodo' }, { etiqueta: 'Bonificaciones', valor: fmt(totales.bonificaciones), detalle: `${filasBon.length} filas · mes de referencia` }, { etiqueta: 'Recargos', valor: fmt(totales.recargos), detalle: `${filasRec.length} filas · mes de referencia` }, { etiqueta: 'Pernoctes', valor: fmt(totales.pernotes), detalle: `${filasPer.length} filas · mes de referencia` }, { etiqueta: 'Deducciones', valor: fmt(totales.deducciones), detalle: 'salud, pensión y anticipos' }, { etiqueta: 'Firmadas', valor: `${totales.firmadas} / ${totales.liquidaciones}`, detalle: `${totales.mantenimientos} mantenimientos` }] as c (c.etiqueta)}
+			{#each tarjetasCifras as c (c.etiqueta)}
 				<div class="an-cifra" class:an-cifra--fuerte={c.fuerte}>
 					<span class="an-cifra-etiqueta">{c.etiqueta}</span>
 					<span class="an-cifra-valor">{c.valor}</span>
@@ -1153,7 +1317,7 @@
 								: t.key === 'bonificaciones'
 									? filasBon.length
 									: t.key === 'recargos'
-										? filasRec.length
+										? filasRec.length + filasJornada.length
 										: t.key === 'pernotes'
 											? filasPer.length
 											: filasMnt.length}
@@ -1162,12 +1326,70 @@
 				{/each}
 			</div>
 
-			{#if !filasActivas.length}
+			{#if filtros.analisis === 'recargos' && filasJornada.length}
+				<div class="an-recargos-jornada">
+					<header class="an-card-cabecera">
+						<h2>Recargos en planillas</h2>
+						<span>
+							Días y valores agrupados por empresa ·
+							{num.format(filasJornada.length)} grupos · {fmt(totalValorJornada)}
+						</span>
+					</header>
+					<div class="an-scroll">
+						<table class="an-tabla">
+							<thead>
+								<tr>
+									<th><span class="an-th-btn">Placa</span></th>
+									<th><span class="an-th-btn">Conductor</span></th>
+									<th><span class="an-th-btn">Planilla</span></th>
+									<th><span class="an-th-btn">Empresa</span></th>
+									<th><span class="an-th-btn">Mes</span></th>
+									<th><span class="an-th-btn">Días manejados</span></th>
+									<th class="an-th--num"><span class="an-th-btn">Valor</span></th>
+								</tr>
+							</thead>
+										<tbody>
+				{#each filasJornadaPagina as f, i (f.planillaId + '-' + (f.empresaId ?? f.empresa) + '-' + f.mesClave + '-' + i)}
+					<tr>
+						<td data-etiqueta="Placa">{f.placa}</td>
+						<td data-etiqueta="Conductor">{f.conductor}</td>
+						<td data-etiqueta="Planilla">{f.planilla}</td>
+						<td data-etiqueta="Empresa">{f.empresa}</td>
+						<td data-etiqueta="Mes">{f.mes} {f.anio}</td>
+						<td data-etiqueta="Días manejados">{formatearDiasJornada(f.dias)}</td>
+						<td class="an-td--num" data-etiqueta="Valor">
+							<strong>{fmt(f.valor)}</strong>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+						</table>
+					</div>
+					<PaginadorLista
+						pagina={paginaJornada}
+						total={filasJornada.length}
+						porPagina={POR_PAGINA}
+						nombreItems="grupos de recargos por empresa"
+						onCambiar={(p) => (paginaJornada = p)}
+					/>
+				</div>
+			{/if}
+
+			{#if filtros.analisis === 'recargos' && filasRec.length}
+				<div class="an-recargos-jornada">
+					<header class="an-card-cabecera">
+						<h2>Distribución de recargos de la liquidación</h2>
+						<span>Valores guardados en nómina y repartidos entre cliente y propietario</span>
+					</header>
+				</div>
+			{/if}
+
+			{#if !filasActivas.length && !(filtros.analisis === 'recargos' && filasJornada.length)}
 				<div class="an-estado an-estado--corto">
 					<img src={mascota('vacio').src} alt="" class="an-estado-mascota" aria-hidden="true" />
 					<p>Sin registros en esta pestaña para los filtros puestos.</p>
 				</div>
-			{:else}
+			{:else if filasActivas.length}
 				<div class="an-scroll">
 					<table class="an-tabla">
 						<thead>
@@ -1668,6 +1890,13 @@
 	}
 	.an-scroll {
 		overflow-x: auto;
+	}
+	.an-recargos-jornada {
+		padding: 1rem;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	.an-recargos-jornada .an-card-cabecera {
+		padding-bottom: 0.65rem;
 	}
 	.an-tabla {
 		width: 100%;

@@ -486,7 +486,7 @@ const FILA = {
 	 * columnas de 46px no cabía —salía «FIPETRO», «TRANSMERAL»— y encima
 	 * repetía en cada día lo que el bloque de abajo ya dice. Ahora la celda
 	 * solo se rellena con el color del cliente y quién es cada color lo dice
-	 * la leyenda de la fila 21.
+	 * la leyenda de la fila 23.
 	 */
 	/**
 	 * Dos filas en blanco antes.
@@ -500,16 +500,17 @@ const FILA = {
 	/**
 	 * Placa del día, justo debajo del cliente.
 	 *
-	 * Ocupa la fila 18 (0-indexada), que ya estaba libre entre el cliente y los
+	 * Ocupa la fila 19 (0-indexada), que ya estaba libre entre el cliente y los
 	 * totales — no desplaza nada de lo de abajo. Igual que el cliente, la celda
 	 * solo lleva COLOR: la placa completa no cabe en 46 px y quién es cada color
-	 * lo dice la leyenda de la izquierda.
+	 * lo dice la leyenda de placas de la fila 24.
 	 */
 	PLACA_DIA: 19,
 	/// Otras dos en blanco: los totales y la leyenda cierran el bloque de días,
 	/// no forman parte de él.
 	TOTALES_TURNO: 22,
-	LEYENDA: 23
+	LEYENDA: 23,
+	LEYENDA_PLACAS: 24
 } as const;
 
 // ─── Fórmulas vivas sobre la rejilla de días ──────────────────────────
@@ -869,19 +870,21 @@ export interface ResultadoBuild {
 export function buildNominaWorkbook(dto: PeriodoNominaDTO): ResultadoBuild {
 	const unitId = `nomina-${dto.anio}-${dto.mes}`;
 	const dias = dto.periodo.dias;
-	// La leyenda de clientes se escribe hacia la derecha a razón de 4 columnas
-	// por cliente (nombre en dos, color en una, hueco en una). Con muchos
-	// clientes se sale del ancho de los días, así que la hoja tiene que ser al
-	// menos tan ancha como la leyenda más larga del libro.
+	// Las leyendas de clientes y placas se escriben hacia la derecha a razón de
+	// 4 columnas por elemento (nombre en dos, color en una, hueco en una). Con
+	// muchos elementos se sale del ancho de los días, así que la hoja tiene que
+	// ser al menos tan ancha como la leyenda más larga del libro.
 	// Festivos del periodo, calculados UNA vez para todo el libro.
 	// `obtenerFestivosCompletos` recalcula el año entero en cada llamada; con
 	// 31 días × 24 conductores serían 744 recálculos.
 	const festivos = festivosDelPeriodo(dias);
 
 	const maxClientes = dto.hojas.reduce((m, h) => Math.max(m, h.clientes?.length ?? 0), 0);
+	const maxPlacas = dto.hojas.reduce((m, h) => Math.max(m, h.placasUsadas?.length ?? 0), 0);
 	const numColumnas = Math.max(
 		COL.DIA0 + dias.length,
 		COL.DIA0 + maxClientes * 4,
+		COL.DIA0 + maxPlacas * 4,
 		// Las zonas de abajo ya no ensanchan columnas: ganan sitio combinando
 		// celdas, así que la hoja tiene que tener columnas suficientes.
 		ZONA.JORNADA_C0 + ANCHO_JORNADA,
@@ -1465,7 +1468,7 @@ function zonaDias(args: {
 		}
 
 		// Y debajo, la placa de ESE día. Misma regla que el cliente —color y no
-		// texto—, con la leyenda de la izquierda diciendo cuál es cuál. Juntas,
+		// texto—, con la leyenda de la fila 24 diciendo cuál es cuál. Juntas,
 		// las dos filas contestan de un vistazo «¿para quién y con qué vehículo
 		// trabajó cada día?», que antes había que reconstruir a mano.
 		if (dh.placaColor) {
@@ -1489,23 +1492,15 @@ function zonaDias(args: {
 	merge(FILA.TOTALES_TURNO, COL.DIA0, FILA.TOTALES_TURNO, COL.DIA0 + 3);
 
 	leyendaClientes({ hoja, set, merge });
+	leyendaColoresPlacas({ hoja, set, merge });
 	leyendaPlacas({ hoja, set, merge, bind });
 }
 
 /**
- * Placas del periodo, en el hueco que dejan las filas de recargo.
- *
- * Las filas 11-18 tenían las columnas B-E vacías: los datos del conductor
- * ocupan solo hasta la fila 9 y los rótulos de recargo viven en la columna G.
- * Ocho filas de ancho útil sin usar, justo al lado de lo que hay que mirar.
- *
- * Ahí van las placas, una por fila, con su cuadro de color — el mismo que se
- * repite bajo cada día en la fila 19. Es lo que sustituye a la vieja columna
- * PLACA de la cabecera, que apilaba «PPQ491, LLQ895, SIN-PLACA, TSS965,
- * POP128» en una celda de dos columnas.
- *
- * Si hay más placas que filas disponibles, la última dice cuántas quedan fuera
- * en vez de desbordarse sobre los totales.
+ * Tabla editable de bonos por placa en el espacio junto a las filas de recargo.
+ * La clave de color de cada encabezado coincide con la marca diaria y con la
+ * leyenda de placas de la fila 24. La tabla solo incluye vehículos con bonos;
+ * la leyenda de color, en cambio, enumera todas las placas del periodo.
  */
 function leyendaPlacas(args: {
 	hoja: HojaNominaDTO;
@@ -1517,7 +1512,8 @@ function leyendaPlacas(args: {
 	const placas = hoja.placasUsadas ?? [];
 	if (!placas.length) return;
 
-	/// El bloque libre: de la primera fila de recargo a la de la placa.
+	/// El bloque libre: de la primera fila de recargo a la separación antes de
+	/// las filas de cliente y placa.
 	const PRIMERA = FILA.RECARGO0;
 	/// Hasta la fila anterior a la separación: la tabla de bonos vive en las
 	/// columnas A-E y podría seguir bajando, pero cruzar la banda en blanco la
@@ -1533,25 +1529,9 @@ function leyendaPlacas(args: {
 
 	const matriz = hoja.matrizBonos;
 
-	// ── Sin bonos: la lista simple, que es lo que da sentido a los colores ──
-	if (!matriz?.filas.length) {
-		set(PRIMERA, COL.NOMBRE, {
-			v: placas.length === 1 ? 'VEHÍCULO DEL PERIODO' : 'VEHÍCULOS DEL PERIODO',
-			s: cabecera()
-		});
-		merge(PRIMERA, COL.NOMBRE, PRIMERA, COL.CARGO_FIN);
-
-		const cabida = ULTIMA - PRIMERA;
-		placas.slice(0, cabida).forEach((p, i) => {
-			const r = PRIMERA + 1 + i;
-			set(r, COL.NOMBRE, {
-				v: p.placa,
-				s: { ...base(), bg: { rgb: p.color }, cl: { rgb: contraste(p.color) }, bl: 1, ht: HorizontalAlign.CENTER, fs: 9 }
-			});
-			merge(r, COL.NOMBRE, r, COL.CARGO_FIN);
-		});
-		return;
-	}
+	// La leyenda inferior cubre todas las placas aunque no tengan bonos.
+	// Esta tabla solo existe cuando hay cantidades que mostrar.
+	if (!matriz?.filas.length) return;
 
 	/**
 	 * Meses del corte: son las SUBCOLUMNAS de cada placa.
@@ -1824,6 +1804,34 @@ function leyendaClientes(args: {
 		});
 		merge(r, c, r, c + 1);
 		set(r, c + 2, { v: '', s: { ...base(), bg: { rgb: cliente.color } } });
+		c += PASO;
+	}
+}
+
+/**
+ * Leyenda de placas: usa la misma disposición y el mismo color que las marcas
+ * de placa en cada día. Se listan todas las placas usadas por el conductor,
+ * aunque no aparezcan en la tabla de bonos.
+ */
+function leyendaColoresPlacas(args: {
+	hoja: HojaNominaDTO;
+	set: (r: number, c: number, cell: ICellData) => void;
+	merge: (r1: number, c1: number, r2: number, c2: number) => void;
+}) {
+	const { hoja, set, merge } = args;
+	const placas = hoja.placasUsadas ?? [];
+	if (!placas.length) return;
+
+	const r = FILA.LEYENDA_PLACAS;
+	set(r, COL.NOMBRE, { v: 'PLACAS', s: { ...etiqueta(), ht: HorizontalAlign.RIGHT } });
+
+	/// placa (2) + color (1) + hueco (1), igual que la leyenda de clientes.
+	const PASO = 4;
+	let c = COL.DIA0;
+	for (const placa of placas) {
+		set(r, c, { v: placa.placa, s: { ...base(), fs: 8, ht: HorizontalAlign.LEFT } });
+		merge(r, c, r, c + 1);
+		set(r, c + 2, { v: '', s: { ...base(), bg: { rgb: placa.color } } });
 		c += PASO;
 	}
 }

@@ -112,6 +112,17 @@ export interface LiquidacionAnalisis {
 		mes: string;
 		porcentaje_propietario: number;
 	}[];
+	recargos_jornada: {
+		planilla_id: string;
+		numero_planilla: string | null;
+		vehiculo_id: string | null;
+		placa: string | null;
+		cliente_id: string | null;
+		cliente: string;
+		mes: string;
+		dias: { fecha: string; valor: number }[];
+		valor: number;
+	}[];
 	pernotes: {
 		vehiculo_id: string | null;
 		placa: string | null;
@@ -162,10 +173,12 @@ export const nominaCanvasAPI = {
 		placas?: string[];
 		conductores?: string[];
 		estados?: string[];
+		incluirRecargosJornada?: boolean;
 	}): Promise<AnalisisNominaDTO> {
-		const params: Record<string, string> = {};
+		const params: Record<string, string | boolean> = {};
 		for (const [k, v] of Object.entries(filtros)) {
 			if (Array.isArray(v) && v.length) params[k] = v.join(',');
+			else if (typeof v === 'boolean') params[k] = v;
 		}
 		const { data } = await apiClient.get('/api/nomina/analisis', { params });
 		return data as AnalisisNominaDTO;
@@ -468,10 +481,7 @@ export const nominaBorradoresAPI = {
 	 * Descarta las correcciones manuales de los días —a eso se viene— y deja
 	 * intactos bonos, vacaciones y el resto del desprendible.
 	 */
-	async refrescarDias(
-		liquidacionId: string,
-		payload: RefPeriodo
-	): Promise<{ dias: number }> {
+	async refrescarDias(liquidacionId: string, payload: RefPeriodo): Promise<{ dias: number }> {
 		const { data } = await apiClient.post(
 			`/api/nomina/borradores/${liquidacionId}/refrescar-dias`,
 			payload
@@ -589,7 +599,10 @@ export const nominaBorradoresAPI = {
 		diasLaborados: number | null;
 		recargos: { filas: number; total: number; sinAtribuir: number } | null;
 	}> {
-		const { data } = await apiClient.put(`/api/nomina/liquidaciones/${liquidacionId}/periodo`, payload);
+		const { data } = await apiClient.put(
+			`/api/nomina/liquidaciones/${liquidacionId}/periodo`,
+			payload
+		);
 		return data;
 	},
 
