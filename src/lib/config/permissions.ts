@@ -141,6 +141,11 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 	// decide qué se PINTA; el backend lo vuelve a comprobar en cada ruta. Si los
 	// dos no coinciden, el sidebar muestra una entrada que la API rechaza con 403
 	// (o al contrario, esconde algo a quien sí puede usarlo).
+	encuestas: {
+		full: ['administracion', 'hseq', 'operaciones'],
+		read: ['contabilidad', 'talento_humano'],
+		description: 'Encuestas públicas, respuestas y reportes'
+	},
 	formularios: {
 		full: ['administracion', 'hseq'],
 		read: ['operaciones'],

@@ -15,6 +15,7 @@ import {
 	Building2,
 	Calculator,
 	CalendarCheck,
+	ChartPie,
 	ClipboardPen,
 	FileText,
 	Fuel,
@@ -185,6 +186,13 @@ export const MENU_ITEMS: MenuItem[] = [
 		icon: ShieldCheck,
 		badge: null,
 		href: '/dashboard/sarlaft'
+	},
+	{
+		id: 'encuestas',
+		label: 'Encuestas',
+		icon: ChartPie,
+		badge: null,
+		href: '/dashboard/encuestas'
 	},
 	{
 		id: 'formularios',
