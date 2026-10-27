@@ -255,14 +255,21 @@ export function attachCierresCellChangeAdapter(ctx: CierresAdapterContext): () =
 			if (ctx.isApplyingRemote?.()) return;
 
 			const params = info.params as
-				| { unitId?: string; subUnitId?: string; color?: string }
+				| {
+						unitId?: string;
+						subUnitId?: string;
+						/** El comando usa `value`; la mutación equivalente usa `color`. */
+						value?: string | null;
+						color?: string | null;
+				  }
 				| undefined;
 			if (params?.unitId && params.unitId !== ctx.unitId) return;
 			const cierreId = params?.subUnitId ? ctx.resolveCierre(params.subUnitId) : null;
-			// Univer manda `color: undefined` cuando el usuario elige "sin
-			// color": eso se traduce a `null`, que en el servidor significa
-			// "vuelve al color automático del estado".
-			if (cierreId) ctx.onColorHoja(cierreId, params?.color || null);
+			// El comando de Univer usa `value` y la mutación `color`. Un valor
+			// vacío o ausente significa "vuelve al color automático del estado".
+			const valorColor = params?.value ?? params?.color;
+			const color = typeof valorColor === 'string' && valorColor ? valorColor : null;
+			if (cierreId) ctx.onColorHoja(cierreId, color);
 			return;
 		}
 

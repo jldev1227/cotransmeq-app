@@ -630,8 +630,62 @@
 	 * el resto mintiendo.
 	 */
 	function aplicarCambios(cambios: LiquidacionAfectada[]) {
-		if (!ctx) return;
 		for (const c of cambios) {
+			// La hoja Terceros deriva sus números del mismo servicio, pero el
+			// builder no comparte el índice de filas de Liquidaciones. Actualizar
+			// también su modelo y celda evita que quede mostrando la factura vieja
+			// hasta recargar el canvas.
+			terceros = terceros.map((item, indice) => {
+				if (item.liquidacion?.id !== c.id) return item;
+				const numeroFactura = c.factura_id ? c.numero_factura ?? '' : '';
+				ctx?.pintarCelda(
+					'terceros',
+					indice + 1,
+					TCOL.FACTURA,
+					numeroFactura,
+					estiloCeldaFactura(indice % 2 === 1, Boolean(numeroFactura))
+				);
+				return {
+					...item,
+					liquidacion: {
+						...item.liquidacion,
+						estado: c.estado,
+						factura_items:
+							c.factura_id && numeroFactura
+								? [
+										{
+											factura: {
+												id: c.factura_id,
+												numero_factura: numeroFactura,
+												estado: 'ACTIVA'
+											}
+										}
+									]
+								: []
+					}
+				};
+			});
+			// También se mantiene la fuente de datos del panel y del XLSX aunque
+			// el libro todavía esté montándose o esta liquidación no tenga filas.
+			const l = liquidaciones.find((x) => x.id === c.id);
+			if (l) {
+				l.estado = c.estado as EstadoLiquidacionServicio;
+				l.factura_items =
+					c.factura_id && c.numero_factura
+						? [
+								{
+									factura: {
+										id: c.factura_id,
+										numero_factura: c.numero_factura,
+										estado: 'ACTIVA'
+									}
+								}
+							]
+						: [];
+			}
+
+			if (!ctx) continue;
+
 			const filas = ctx.modelo.filasPorLiquidacion.get(c.id);
 			if (!filas) continue;
 
@@ -664,23 +718,6 @@
 				}
 			}
 
-			// Y el array de origen, para que ModalFacturar y el XLSX no vean
-			// un estado viejo.
-			const l = liquidaciones.find((x) => x.id === c.id);
-			if (l) {
-				l.estado = c.estado as EstadoLiquidacionServicio;
-				l.factura_items = c.factura_id
-					? [
-							{
-								factura: {
-									id: c.factura_id,
-									numero_factura: c.numero_factura!,
-									estado: 'ACTIVA'
-								}
-							}
-						]
-					: [];
-			}
 		}
 		/**
 		 * Destello de los cambios de estado.
@@ -691,6 +728,7 @@
 		 * ESTADO cambió de color y no enterarse en una hoja de cuatrocientas
 		 * filas.
 		 */
+		if (!ctx) return;
 		for (const c of cambios) ctx.destellarLiquidacion(c.id);
 
 		// Fuerza el recálculo de los `$derived` que dependen del índice mutado.
@@ -1271,7 +1309,7 @@
 					{
 						id: c.id,
 						consecutivo: c.etiqueta,
-						estado: (c.estado === 'FACTURADA' ? 'FACTURADA' : 'LIQUIDADA') as any,
+					estado: (c.estado as EstadoLiquidacionServicio) ?? 'LIQUIDADA',
 						factura_id: c.factura_id ?? null,
 						numero_factura: c.numero_factura ?? null
 					}

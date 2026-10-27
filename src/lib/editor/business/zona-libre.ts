@@ -72,6 +72,8 @@ interface HojaEditable {
 	inicioItems: number;
 	/// Fila → id del item que la ocupa. Solo las filas de la tabla de items.
 	itemPorFila: Map<number, string>;
+	/// Filas estructurales que pueden anclarse a la capa pero son de solo lectura.
+	filasBloqueadas: Set<number>;
 	/// Nombre → celda que el builder declara editable-y-persistente por clave.
 	celdaPorClave: Map<string, { fila: number; columna: number }>;
 	/// `${fila}:${columna}` → nombre. El índice inverso, para no recorrer el
@@ -92,6 +94,7 @@ export function registrarHojaEditable(
 		finItems: number;
 		inicioItems?: number;
 		itemPorFila?: Map<number, string>;
+		filasBloqueadas?: Iterable<number>;
 		soloDebajo?: boolean;
 		celdasClave?: Record<string, { fila: number; columna: number }>;
 	}
@@ -105,6 +108,7 @@ export function registrarHojaEditable(
 		finItems: datos.finItems,
 		inicioItems: datos.inicioItems ?? 0,
 		itemPorFila: datos.itemPorFila ?? new Map(),
+		filasBloqueadas: new Set(datos.filasBloqueadas ?? []),
 		soloDebajo: datos.soloDebajo ?? false,
 		celdaPorClave,
 		clavePorCelda
@@ -126,6 +130,9 @@ export function anclaDe(
 ): Ancla | null {
 	const h = hojas.get(clave(unitId, sheetId));
 	if (!h) return null;
+	// Las filas marcadas por el builder son parte del bloque estructurado,
+	// aunque no tengan binding editable. Nunca deben caer como anotaciones.
+	if (h.filasBloqueadas.has(fila)) return null;
 
 	// Las celdas por clave se comprueban PRIMERO: son las únicas que pueden
 	// estar por encima del ancla, así que la guarda `soloDebajo` de más abajo
@@ -172,17 +179,24 @@ export function filaDeAncla(
 	if (!h) return null;
 	const tipo = a.ancla_tipo ?? 'fila';
 	// La cabecera se guarda por fila absoluta: no hay nada que recalcular.
-	if (tipo === 'top') return a.offset_fila;
+	if (tipo === 'top') {
+		const fila = a.offset_fila;
+		return h.filasBloqueadas.has(fila) ? null : fila;
+	}
 	if (tipo === 'clave') {
 		// Si el builder ya no declara esa clave, el parámetro dejó de existir:
 		// se ignora en vez de caer sobre una celda cualquiera.
-		return h.celdaPorClave.get(String(a.ancla_ref ?? ''))?.fila ?? null;
+		const fila = h.celdaPorClave.get(String(a.ancla_ref ?? ''))?.fila ?? null;
+		return fila == null || h.filasBloqueadas.has(fila) ? null : fila;
 	}
 	if (tipo === 'item') {
-		for (const [fila, id] of h.itemPorFila) if (id === a.ancla_ref) return fila;
+		for (const [fila, id] of h.itemPorFila) {
+			if (id === a.ancla_ref) return h.filasBloqueadas.has(fila) ? null : fila;
+		}
 		return null;
 	}
-	return h.finItems + a.offset_fila;
+	const fila = h.finItems + a.offset_fila;
+	return h.filasBloqueadas.has(fila) ? null : fila;
 }
 
 export function limpiarHojasEditables(unitId: string): void {

@@ -26,7 +26,7 @@
  * tiene lo mínimo para guardarse. Entonces se vincula y pasa a ser `segmento`
  * o `dia` como las demás.
  */
-export type TipoFilaRecorrido = 'segmento' | 'dia' | 'nueva';
+export type TipoFilaRecorrido = 'segmento' | 'dia' | 'nueva' | 'promocion';
 
 export interface RecorridoBinding {
 	/** Qué tabla toca el patch. */

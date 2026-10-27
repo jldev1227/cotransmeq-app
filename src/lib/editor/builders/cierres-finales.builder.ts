@@ -205,6 +205,7 @@ const ORDEN_IMPUESTOS: Record<string, number> = {
 /** Item del pivote, ya resuelto. */
 export interface ItemCierre {
 	pivoteId: string;
+	liquidacion_servicio_id: string;
 	liquidacion_servicio_consecutivo: string;
 	cliente_nombre: string;
 	placa: string;
@@ -296,6 +297,8 @@ export interface CopropietarioCierre {
 export interface CierreFinalCompleto {
 	hoja: CierreHoja;
 	items: ItemCierre[];
+	/** Items soft-deleted: visibles como referencia, fuera de bindings y totales. */
+	itemsEliminados: ItemCierre[];
 	adicionales: AdicionalCierre[];
 	conceptos: ConceptoDescuento[];
 	copropietarios: CopropietarioCierre[];
@@ -328,7 +331,7 @@ export interface AnclasHoja {
 	 *
 	 * `null` en un cierre sin items.
 	 */
-	rangoItems: { desde: number; hasta: number } | null;
+	rangoItems: Array<{ desde: number; hasta: number }> | null;
 	/// Primera fila de adicional dentro de la tabla de items, o `null` si el
 	/// cierre no tiene ninguno. Ya no es una sección aparte.
 	adicionales: number | null;
@@ -419,13 +422,44 @@ export function estiloAplicaImpuestos(aplica: boolean): IStyleData {
 	} as any;
 }
 
+/** Estilo reutilizable al repintar números de factura desde el socket. */
+export function estiloCeldaFactura(
+	zebra: boolean,
+	anulada: boolean,
+	excluida = false
+): IStyleData {
+	const base: IStyleData = {
+		fs: 10,
+		cl: { rgb: excluida ? RED : TEXT_DARK },
+		bg: { rgb: excluida ? RED_SOFT : zebra ? '#F8FAFC' : '#FFFFFF' },
+		bd: bordesCompletos(),
+		...(excluida ? { st: { s: 1 } } : {})
+	};
+	return anulada && !excluida
+		? { ...base, cl: { rgb: RED }, bl: 1, bg: { rgb: RED_SOFT } }
+		: base;
+}
+
 // ─── Builder de UNA hoja ──────────────────────────────────────────────
 
 export function buildCierreFinalSheet(
 	input: CierreFinalSheetInput
 ): CierreFinalSheetResult {
 	const { unitId, sheetId, sheetName, cierre, anotaciones } = input;
-	const { hoja, items, adicionales, conceptos, copropietarios, propietarios } = cierre;
+	const {
+		hoja,
+		items,
+		itemsEliminados: itemsEliminadosSeparados,
+		adicionales,
+		conceptos,
+		copropietarios,
+		propietarios
+	} = cierre;
+	const itemsActivos = items.filter((it) => !it.excluido);
+	const itemsEliminados = [
+		...items.filter((it) => it.excluido),
+		...(itemsEliminadosSeparados ?? [])
+	];
 
 	// Una hoja de un cierre que ya no es BORRADOR se muestra completa pero
 	// no se puede tocar.
@@ -440,6 +474,7 @@ export function buildCierreFinalSheet(
 	COLUMN_WIDTHS.forEach((w, i) => (colData[i] = { w }));
 
 	const bindings: BindingSeed[] = [];
+	const filasSoloConsulta = new Set<number>();
 
 	/** Registra una celda editable. En hoja bloqueada no registra nada. */
 	const bind = (
@@ -494,6 +529,14 @@ export function buildCierreFinalSheet(
 	const totalFactZebra: IStyleData = { ...cellZebra, bl: 1, n: { pattern: '"$"#,##0' } } as any;
 	const cant: IStyleData = { ...cellBase, ht: HorizontalAlign.RIGHT };
 	const cantZebra: IStyleData = { ...cellZebra, ht: HorizontalAlign.RIGHT };
+	const eliminado: IStyleData = {
+		...cellBase, fs: 9, cl: { rgb: RED }, bg: { rgb: RED_SOFT }, st: { s: 1 }
+	};
+	const eliminadoDinero: IStyleData = { ...eliminado, n: { pattern: '"$"#,##0' } } as any;
+	const eliminadoPorcentaje: IStyleData = { ...eliminado, n: { pattern: '0.00"%"' } } as any;
+	const bandaEliminados: IStyleData = {
+		fs: 9, bl: 1, cl: { rgb: RED }, bg: { rgb: RED_SOFT }, bd: allBorders()
+	};
 
 	// ── Filas de ADICIONAL ──
 	// Comparten tabla con los items para que un solo `=SUM()` los totalice,
@@ -620,6 +663,10 @@ export function buildCierreFinalSheet(
 			...(style ? { s: style } : {})
 		};
 	};
+	const setReadOnly = (r: number, col: number, v: string | number, style?: IStyleData) => {
+		set(r, col, v, style);
+		cellData[r][col].custom = { locked: true };
+	};
 
 	/**
 	 * Celda con fórmula viva. `v` cacheado para que la primera pintura no
@@ -687,11 +734,11 @@ export function buildCierreFinalSheet(
 	row++;
 
 	if (!editable) {
-		set(row, 0, `HOJA EN ESTADO ${hoja.estado} — SOLO LECTURA`, avisoBloqueo);
+		set(row, 0, 'HOJA SOLO LECTURA', avisoBloqueo);
 		merge(row, 0, TOTAL_COLS - 1);
 		soloEstilo(row, 1, TOTAL_COLS - 1, avisoBloqueo);
 		cellData[row][0] = {
-			v: `HOJA EN ESTADO ${hoja.estado} — SOLO LECTURA`,
+			v: 'HOJA SOLO LECTURA',
 			t: CellValueType.STRING,
 			s: avisoBloqueo
 		};
@@ -716,15 +763,10 @@ export function buildCierreFinalSheet(
 	/// nota sigue junto al suyo en vez de quedarse a la altura del vecino.
 	const itemPorFila = new Map<number, string>();
 
-	items.forEach((it, idx) => {
+	itemsActivos.forEach((it, idx) => {
 		const z = idx % 2 === 1;
 		if (it.pivoteId) itemPorFila.set(row, String(it.pivoteId));
-		// El tachado se conserva por si algún día `detallePeriodo` empieza a
-		// mandar los items quitados; hoy no llegan nunca, así que en la
-		// práctica esta rama no se toma.
-		const text = it.excluido
-			? { ...(z ? cellZebra : cellBase), st: { s: 1 } }
-			: z ? cellZebra : cellBase;
+		const text = z ? cellZebra : cellBase;
 		const ingresoTransmeralda = n(it.ingreso_extra_global) - n(it.ingresos_extra_aval);
 
 		set(row, COL.NUM, idx + 1, z ? cantZebra : cant);
@@ -778,8 +820,12 @@ export function buildCierreFinalSheet(
 			row,
 			COL.FACTURA,
 			it.numero_factura,
-			it.factura_anulada ? { ...text, cl: { rgb: RED }, bl: 1, bg: { rgb: RED_SOFT } } : text
+			estiloCeldaFactura(z, it.factura_anulada)
 		);
+		bindDerivada(row, COL.FACTURA, {
+			entityType: 'item', entityId: it.pivoteId,
+			field: 'numero_factura', section: 'items'
+		});
 
 		// ── Columna de acción ──
 		// El VALOR sigue siendo la cadena SÍ/NO aunque el engine le cuelgue
@@ -794,17 +840,83 @@ export function buildCierreFinalSheet(
 			field: 'aplica_impuestos', section: 'items'
 		});
 
-		// Un item excluido no cuenta en los totales del pivote.
-		if (!it.excluido) {
-			sums[COL.ADMON] += n(it.valor_admin);
-			sums[COL.TOTAL] += n(it.total_facturado);
-			sums[COL.V_LIQUIDAR] += n(it.valor_liquidar);
-			sums[COL.ING_EXTRA_GLOBAL] += n(it.ingreso_extra_global);
-			sums[COL.ING_EXTRAS_AVAL] += n(it.ingresos_extra_aval);
-			sums[COL.ING_TRANSMERALDA] += ingresoTransmeralda;
-		}
+		sums[COL.ADMON] += n(it.valor_admin);
+		sums[COL.TOTAL] += n(it.total_facturado);
+		sums[COL.V_LIQUIDAR] += n(it.valor_liquidar);
+		sums[COL.ING_EXTRA_GLOBAL] += n(it.ingreso_extra_global);
+		sums[COL.ING_EXTRAS_AVAL] += n(it.ingresos_extra_aval);
+		sums[COL.ING_TRANSMERALDA] += ingresoTransmeralda;
 		row++;
 	});
+
+	const rangosFilasAccion: Array<{ desde: number; hasta: number }> = [];
+	if (itemsActivos.length > 0) {
+		rangosFilasAccion.push({ desde: firstItemRow, hasta: firstItemRow + itemsActivos.length - 1 });
+	}
+
+	// Los items retirados quedan al final del bloque de liquidaciones. Se
+	// conservan para referencia visual, sin bindings editables ni sumas.
+	if (itemsEliminados.length > 0) {
+		filasSoloConsulta.add(row);
+		bindDerivada(row, COL.NUM, {
+			entityType: 'item',
+			entityId: itemsEliminados[0].pivoteId,
+			field: 'eliminado_solo_lectura_banda',
+			section: 'items'
+		});
+		set(row, COL.NUM, `${itemsEliminados.length} ITEM(S) ELIMINADO(S) · SOLO CONSULTA`, bandaEliminados);
+		merge(row, COL.NUM, TOTAL_COLS - 1);
+		soloEstilo(row, COL.NUM + 1, TOTAL_COLS - 1, bandaEliminados);
+		cellData[row][COL.NUM] = {
+			v: `${itemsEliminados.length} ITEM(S) ELIMINADO(S) · SOLO CONSULTA`,
+			t: CellValueType.STRING, s: bandaEliminados, custom: { locked: true }
+		};
+		rowData[row] = { h: 22 };
+		row++;
+
+		itemsEliminados.forEach((it, idx) => {
+			filasSoloConsulta.add(row);
+			bindDerivada(row, COL.NUM, {
+				entityType: 'item', entityId: it.pivoteId,
+				field: 'eliminado_solo_lectura', section: 'items'
+			});
+			bindDerivada(row, COL.FACTURA, {
+				entityType: 'item', entityId: it.pivoteId,
+				field: 'numero_factura', section: 'items'
+			});
+
+			setReadOnly(row, COL.NUM, `E${idx + 1}`, eliminado);
+			setReadOnly(row, COL.CLIENTE, `ELIMINADO · ${it.cliente_nombre}`, eliminado);
+			setReadOnly(row, COL.LIQ, it.liquidacion_servicio_consecutivo, eliminado);
+			setReadOnly(row, COL.TERCERO, it.tercero_nombre, eliminado);
+			setReadOnly(row, COL.RECORRIDO, it.recorrido, eliminado);
+			setReadOnly(row, COL.FECHAS, it.fechas, eliminado);
+			setReadOnly(row, COL.V_UNIDAD, n(it.valor_unitario), eliminadoDinero);
+			setReadOnly(row, COL.CANT, n(it.cantidad) || 1, eliminado);
+			setReadOnly(row, COL.ADMON_PCT, n(it.porcentaje_admin), eliminadoPorcentaje);
+			setReadOnly(row, COL.ADMON, n(it.valor_admin), eliminadoDinero);
+			setReadOnly(row, COL.TOTAL, n(it.total_facturado), eliminadoDinero);
+			setReadOnly(row, COL.V_LIQUIDAR, n(it.valor_liquidar), eliminadoDinero);
+			setReadOnly(row, COL.PLANILLA, it.numero_planilla, eliminado);
+			setReadOnly(row, COL.ING_EXTRA_GLOBAL, n(it.ingreso_extra_global), eliminadoDinero);
+			setReadOnly(row, COL.ING_EXTRAS_AVAL, n(it.ingresos_extra_aval), eliminadoDinero);
+			setReadOnly(
+				row,
+				COL.ING_TRANSMERALDA,
+				n(it.ingreso_extra_global) - n(it.ingresos_extra_aval),
+				eliminadoDinero
+			);
+			setReadOnly(
+				row,
+				COL.FACTURA,
+				it.numero_factura,
+				estiloCeldaFactura(false, it.factura_anulada, true)
+			);
+			setReadOnly(row, COL.APLICA_IMP, '—', eliminado);
+			rowData[row] = { h: 22 };
+			row++;
+		});
+	}
 
 	// ═══ 1b. ADICIONALES, EN LA MISMA TABLA ══════════════════════════
 	// Eran una tabla aparte: banda propia, cabecera propia de 7 columnas —que
@@ -819,6 +931,7 @@ export function buildCierreFinalSheet(
 	//
 	// Siguen siendo otra cosa —otra tabla de la base, con compare-and-swap
 	// propio— y por eso la fila se lee distinta. Ver `adicBase`/`adicBadge`.
+	const primeraFilaAdicionales = row;
 	let anclaAdicionales: number | null = adicionales.length > 0 ? row : null;
 	let totalAdicionales = 0;
 
@@ -933,29 +1046,28 @@ export function buildCierreFinalSheet(
 		totalAdicionales += n(a.valor_liquidar);
 		row++;
 	});
+	if (adicionales.length > 0) {
+		rangosFilasAccion.push({
+			desde: primeraFilaAdicionales,
+			hasta: primeraFilaAdicionales + adicionales.length - 1
+		});
+	}
 
-	/// Última fila de la tabla, items y adicionales incluidos. Es lo que
-	/// totaliza el pie y lo que abarca el checkbox de APLICA IMP.
-	const ultimaFilaTabla = row - 1;
-	const hayFilas = ultimaFilaTabla >= firstItemRow;
+	const hayFilas = rangosFilasAccion.length > 0;
 
-	// Fila TOTALES de items: SUM vivas, no valores estáticos.
+	// Fila TOTALES de items: SUM de los rangos vivos, no valores estáticos.
 	const totalesItemsRow = row;
 	set(row, COL.NUM, 'TOTALES', tfoot);
 	merge(row, COL.NUM, COL.ADMON_PCT);
 	soloEstilo(row, COL.NUM + 1, COL.ADMON_PCT, tfoot);
-	// `SUM` normal. Era un `SUMIF` sobre la columna EXCLUIR para dejar fuera
-	// los items tachados, pero esos items nunca llegan a la hoja —el detalle
-	// filtra los que tienen `deleted_at`—, así que el condicional filtraba
-	// sobre una columna donde todas las filas decían "NO". Al retirar la
-	// columna, el `SUMIF` se quedaba además sin rango al que apuntar.
 	for (const col of COLS_SUMADAS) {
 		const L = colLetter(col);
-		// El rango llega hasta `ultimaFilaTabla` y no hasta el último item: los
-		// adicionales van dentro de esta misma tabla y este pie es su único
-		// totalizador.
+		// Suma items activos y adicionales; deja fuera los items retirados que
+		// se muestran al final del bloque como referencia.
 		const formula = hayFilas
-			? `=SUM(${L}${firstItemRow + 1}:${L}${ultimaFilaTabla + 1})`
+			? '=' + rangosFilasAccion
+				.map(({ desde, hasta }) => `SUM(${L}${desde + 1}:${L}${hasta + 1})`)
+				.join('+')
 			: '=0';
 		setFormula(row, col, formula, sums[col], tfoot);
 	}
@@ -1873,7 +1985,8 @@ export function buildCierreFinalSheet(
 		// `fila` con un offset negativo enorme y bajaban una fila por cada item
 		// nuevo.
 		inicioItems: firstItemRow,
-		itemPorFila
+		itemPorFila,
+		filasBloqueadas: filasSoloConsulta
 	});
 	aplicarCapa(cellData, unitId, sheetId, anotaciones);
 
@@ -1917,7 +2030,7 @@ export function buildCierreFinalSheet(
 		anclas: {
 			headerItems: headerItemsRow,
 			totalesItems: totalesItemsRow,
-			rangoItems: hayFilas ? { desde: firstItemRow, hasta: ultimaFilaTabla } : null,
+			rangoItems: rangosFilasAccion.length > 0 ? rangosFilasAccion : null,
 			adicionales: anclaAdicionales,
 			descuentos: anclaDescuentos,
 			gastos: anclaGastos,

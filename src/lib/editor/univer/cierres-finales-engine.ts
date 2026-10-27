@@ -123,6 +123,9 @@ export function createCierresFinalesEngine(
 		// Las dos columnas de acción (APLICA IMP. y EXCLUIR) se marcan con un
 		// checkbox, no escribiendo. Ver `colgarCheckboxAcciones`.
 		dataValidation: true,
+		// El color de los cierres ya se persiste en `color_hoja` del backend;
+		// el orden de las pestañas sí es una preferencia local por periodo.
+		sheetPreferences: { persistirColores: false, persistirOrden: true },
 		footer: {
 			// Con N hojas la sheet bar es la navegación principal, aunque el
 			// header añade además un combo con buscador: por encima de ~20

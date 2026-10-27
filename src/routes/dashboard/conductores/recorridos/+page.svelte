@@ -194,6 +194,10 @@
 		valores: Record<string, unknown>;
 		bonos: Set<string>;
 		guardando: boolean;
+		/** Completa localmente un día LABORADO antiguo que aún no tiene tramo. */
+		promocionDia?: boolean;
+		/** Espera el acuse del cambio de fecha antes de crear el tramo. */
+		fechaPendiente?: boolean;
 	}
 	/** Filas insertadas y aún sin guardar, por su id local. */
 	const borradores = new Map<string, Borrador>();
@@ -271,7 +275,7 @@
 					borradoresPendientes = borradores.size;
 					toast.info('Fila nueva', {
 						description:
-							'Escribe la fecha y, o bien placa y horario (recorrido), o bien el tipo de día. Se guarda sola al completarla.',
+							'Escribe la fecha y, o bien placa, horario y descripción (recorrido), o bien el tipo de día. Se guarda sola al completarla.',
 						id: 'recorridos-fila-nueva'
 					});
 				},
@@ -506,6 +510,11 @@
 			onAck: (a: any) => {
 				pendientes = Math.max(0, pendientes - 1);
 				previos.delete(`${a.entity_id}:${a.field}`);
+				const borradorDia = borradores.get(String(a.entity_id));
+				if (a.field === 'fecha' && borradorDia?.promocionDia) {
+					borradorDia.fechaPendiente = false;
+					void intentarGuardarBorrador(String(a.entity_id));
+				}
 				const fila = filaPorId.get(String(a.entity_id));
 				if (!fila) return;
 				// La versión nueva es obligatoria: sin ella el siguiente patch de
@@ -522,6 +531,11 @@
 				pendientes = Math.max(0, pendientes - 1);
 				previos.delete(`${c.entity_id}:${c.field}`);
 				const fila = filaPorId.get(String(c.entity_id));
+				const borradorDia = borradores.get(String(c.entity_id));
+				if (c.field === 'fecha' && borradorDia?.promocionDia) {
+					borradorDia.fechaPendiente = false;
+					if (c.server_row?.fecha) borradorDia.valores.fecha = c.server_row.fecha;
+				}
 				if (fila && c.server_row) {
 					Object.assign(fila, c.server_row);
 					if (typeof c.server_row.version === 'number') fila.version = c.server_row.version;
@@ -602,6 +616,10 @@
 				fila.pernocte = v === true || v === 'SÍ' || v === 'SI';
 				return;
 			}
+			if (campo === 'descripcion_servicio') {
+				fila.descripcion = v == null ? null : String(v);
+				return;
+			}
 			if (campo) (fila as unknown as Record<string, unknown>)[campo] = v;
 		};
 
@@ -613,7 +631,7 @@
 
 	function leerCampo(fila: FilaRecorrido, field: string): unknown {
 		if (field.startsWith('bono:')) return fila.bonos?.[field.slice('bono:'.length)] === true;
-		return (fila as unknown as Record<string, unknown>)[field];
+		return (fila as unknown as Record<string, unknown>)[field === 'descripcion_servicio' ? 'descripcion' : field];
 	}
 
 	/** Devuelve a la celda el valor que tenía antes de una edición rechazada. */
@@ -624,6 +642,11 @@
 		previos.delete(clave);
 		const fila = filaPorId.get(entityId);
 		if (fila) aplicarEnModelo(fila, field, previo);
+		const borrador = borradores.get(entityId);
+		if (field === 'fecha' && borrador?.promocionDia) {
+			borrador.valores.fecha = previo;
+			borrador.fechaPendiente = false;
+		}
 		ctx?.pintarCelda(entityId, field, previo);
 	}
 
@@ -686,7 +709,7 @@
 				continue;
 			}
 
-			if (c.tipoFila === 'nueva') {
+			if (c.tipoFila === 'nueva' || c.tipoFila === 'promocion') {
 				anotarEnBorrador(c);
 				continue;
 			}
@@ -720,6 +743,11 @@
 			 * reponen la fila con lo que diga el servidor o con el valor previo.
 			 */
 			aplicarEnModelo(fila, c.field, validado.valor);
+			const borradorDia = borradores.get(c.entityId);
+			if (c.field === 'fecha' && borradorDia?.promocionDia) {
+				borradorDia.valores.fecha = validado.valor;
+				borradorDia.fechaPendiente = true;
+			}
 			if (c.field === 'fecha') ctx?.pintarCelda(c.entityId, 'fecha', validado.valor);
 
 			pendientes++;
@@ -737,7 +765,29 @@
 	// ── Borradores: filas insertadas ──────────────────────────────────
 
 	function anotarEnBorrador(c: CambioRecorrido) {
-		const b = borradores.get(c.entityId);
+		let b = borradores.get(c.entityId);
+		if (!b && c.tipoFila === 'promocion') {
+			const fila = filaPorId.get(c.entityId);
+			const posicion = ctx?.posicionDe(c.entityId);
+			if (!fila || fila.tipo_fila !== 'dia' || fila.tipo_dia !== 'LABORADO' || !posicion) return;
+			b = {
+				sheetId: posicion.sheetId,
+				row: posicion.row,
+				conductorId: c.conductorId,
+				valores: {
+					fecha: fila.fecha,
+					tipo_dia: 'LABORADO',
+					pernocte: fila.pernocte,
+					...(fila.descripcion ? { descripcion: fila.descripcion } : {})
+				},
+				bonos: new Set(),
+				guardando: false,
+				promocionDia: true,
+				fechaPendiente: previos.has(`${c.entityId}:fecha`)
+			};
+			borradores.set(c.entityId, b);
+			borradoresPendientes = borradores.size;
+		}
 		if (!b) return;
 
 		if (c.field.startsWith('bono:')) {
@@ -801,13 +851,13 @@
 		const tipo = String(v.tipo_dia ?? '').trim().toUpperCase();
 		const tieneTramo = !!(v.vehiculo_placa || v.hora_inicio || v.hora_fin);
 		if (tipo === 'MANTENIMIENTO') return !!v.vehiculo_placa;
-		if (tieneTramo) return !!(v.vehiculo_placa && v.hora_inicio && v.hora_fin);
+		if (tieneTramo) return !!(v.vehiculo_placa && v.hora_inicio && v.hora_fin && v.descripcion);
 		return !!tipo && tipo !== 'LABORADO';
 	}
 
 	async function intentarGuardarBorrador(entityId: string) {
 		const b = borradores.get(entityId);
-		if (!b || b.guardando || !dto) return;
+		if (!b || b.guardando || b.fechaPendiente || !dto) return;
 		if (!borradorCompleto(b)) {
 			orientarBorrador(b);
 			return;
@@ -837,6 +887,17 @@
 				descripcion: (enviados.descripcion as string) ?? null,
 				bonos: [...bonosEnviados]
 			});
+
+			if (b.promocionDia) {
+				borradores.delete(entityId);
+				borradoresPendientes = borradores.size;
+				toast.success('Recorrido completado', {
+					description: `${r.fila.fecha}${r.fila.vehiculo_placa ? ` · ${r.fila.vehiculo_placa}` : ''}`,
+					id: `recorridos-promocion-${entityId}`
+				});
+				void montar();
+				return;
+			}
 
 			borradores.delete(entityId);
 			borradoresPendientes = borradores.size;
@@ -924,7 +985,7 @@
 			const fila = filaPorId.get(f.entityId);
 			try {
 				await recorridosCanvasAPI.eliminarFila({
-					tipo: f.tipoFila,
+					tipo: f.tipoFila === 'promocion' ? 'dia' : f.tipoFila,
 					id: f.entityId,
 					baseVersion: fila?.version ?? null,
 					desde: corte.desde,

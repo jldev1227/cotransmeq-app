@@ -286,9 +286,6 @@
 
 <div class="ceh">
 	{#if cierre}
-		<span class="ceh-badge {claseBadgeEstado(cierre.estado)}" title="Estado de la hoja activa">
-			{cierre.estado}
-		</span>
 		<!-- Cuándo y cómo se pagó (o «sin registro» en los PAGADA de antes). -->
 		<PagoCierreResumen
 			cierreId={cierre.id}
@@ -549,16 +546,6 @@
 		100% {
 			box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
 		}
-	}
-
-	.ceh-badge {
-		display: inline-flex;
-		align-items: center;
-		padding: 3px 9px;
-		border-radius: 999px;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.04em;
 	}
 
 	.ceh-menu-wrap {

@@ -17,6 +17,19 @@ export interface ConfiguracionDescuento {
 	base_calculo: string;
 	activo: boolean;
 	orden: number;
+	/** Tarifa diaria aplicada a conductores sincronizados con nómina. */
+	valor_dia_conductor?: number | string | null;
+}
+
+/** Tarifas base editables para filas manuales y gastos automáticos del cierre. */
+export interface ConfigValoresTercero {
+	valor_dia_conductor_nomina: number;
+	valor_salario_manual: number;
+	valor_auxilio_transporte_manual: number;
+	valor_bonificacion_manual: number;
+	valor_bonificacion_turno_doble_manual: number;
+	valor_dotacion: number;
+	valor_examen_medico: number;
 }
 
 /** Fila del catálogo de conductores que alimenta el buscador del modal. */
@@ -228,27 +241,56 @@ export const liquidacionesTercerosDescuentosAPI = {
 		return response.data;
 	},
 
-	async actualizarConfiguracion(items: Array<{ concepto: string; porcentaje: number; base_calculo?: string }>) {
+	async actualizarConfiguracion(
+		items: Array<{
+			concepto: string;
+			porcentaje: number;
+			base_calculo?: string;
+			valor_dia_conductor?: number;
+		}>
+	) {
 		const response = await apiClient.put('/api/configuracion-descuentos-tercero', { items });
+		return response.data;
+	},
+
+	async obtenerConfigValoresTercero(): Promise<ConfigValoresTercero> {
+		const response = await apiClient.get('/api/liquidaciones-terceros/config-valores');
+		return response.data;
+	},
+
+	async guardarConfigValoresTercero(
+		valores: Partial<ConfigValoresTercero>
+	): Promise<ConfigValoresTercero> {
+		const response = await apiClient.put('/api/liquidaciones-terceros/config-valores', valores);
 		return response.data;
 	},
 
 	// ── Conceptos ──
 
 	async obtenerConceptos(liquidacionTerceroId: string): Promise<ConceptoDescuento[]> {
-		const response = await apiClient.get(`/api/liquidaciones-terceros/${liquidacionTerceroId}/conceptos`);
+		const response = await apiClient.get(
+			`/api/liquidaciones-terceros/${liquidacionTerceroId}/conceptos`
+		);
 		return response.data;
 	},
 
-	async guardarConceptos(liquidacionTerceroId: string, conceptos: ConceptoDescuento[]): Promise<ConceptoDescuento[]> {
-		const response = await apiClient.put(`/api/liquidaciones-terceros/${liquidacionTerceroId}/conceptos`, { conceptos });
+	async guardarConceptos(
+		liquidacionTerceroId: string,
+		conceptos: ConceptoDescuento[]
+	): Promise<ConceptoDescuento[]> {
+		const response = await apiClient.put(
+			`/api/liquidaciones-terceros/${liquidacionTerceroId}/conceptos`,
+			{ conceptos }
+		);
 		return response.data;
 	},
 
 	// ── Copropietarios (reparto porcentual del valor a pagar) ──
 
 	async obtenerPropietarios(liquidacionTerceroFinalId: string): Promise<CopropietariosCierre> {
-		const response = await apiClient.get(`/api/liquidaciones-terceros/${liquidacionTerceroFinalId}/propietarios`);
+		const response = await apiClient.get(
+			`/api/liquidaciones-terceros/${liquidacionTerceroFinalId}/propietarios`
+		);
 		return response.data;
 	},
 
@@ -256,16 +298,25 @@ export const liquidacionesTercerosDescuentosAPI = {
 		liquidacionTerceroFinalId: string,
 		propietarios: LiquidacionTerceroFinalPropietario[]
 	): Promise<CopropietariosCierre> {
-		const response = await apiClient.put(`/api/liquidaciones-terceros/${liquidacionTerceroFinalId}/propietarios`, {
-			propietarios,
-		});
+		const response = await apiClient.put(
+			`/api/liquidaciones-terceros/${liquidacionTerceroFinalId}/propietarios`,
+			{
+				propietarios
+			}
+		);
 		return response.data;
 	},
 
 	// ── Autocompletar desde nómina ──
 
-	async autocompletarNomina(params: { placa: string; mes: number; anio: number }): Promise<AutocompletarNominaResult> {
-		const response = await apiClient.get('/api/liquidaciones-terceros/autocompletar-nomina', { params });
+	async autocompletarNomina(params: {
+		placa: string;
+		mes: number;
+		anio: number;
+	}): Promise<AutocompletarNominaResult> {
+		const response = await apiClient.get('/api/liquidaciones-terceros/autocompletar-nomina', {
+			params
+		});
 		return response.data;
 	},
 
@@ -279,7 +330,7 @@ export const liquidacionesTercerosDescuentosAPI = {
 		const response = await apiClient.post('/api/liquidaciones-terceros/generar-borrador', {
 			liquidacion_servicio_id: liquidacionServicioId,
 			placa: placa || undefined,
-			tercero_id: terceroId || null,
+			tercero_id: terceroId || null
 		});
 		return response.data;
 	},
@@ -407,23 +458,25 @@ export const liquidacionesTercerosDescuentosAPI = {
 	},
 
 	async cancelarBulkSave(batchId: string): Promise<{ cancelled: boolean }> {
-		const response = await apiClient.delete(
-			`/api/liquidaciones-terceros/save-bulk-job/${batchId}`
-		);
+		const response = await apiClient.delete(`/api/liquidaciones-terceros/save-bulk-job/${batchId}`);
 		return response.data;
 	},
 
 	// ── Calcular impuestos ──
 
 	async calcularImpuestos(liquidacionTerceroId: string): Promise<ConceptoDescuento[]> {
-		const response = await apiClient.get(`/api/liquidaciones-terceros/${liquidacionTerceroId}/calcular-impuestos`);
+		const response = await apiClient.get(
+			`/api/liquidaciones-terceros/${liquidacionTerceroId}/calcular-impuestos`
+		);
 		return response.data;
 	},
 
 	// ── Recalcular totales ──
 
 	async recalcularTotales(liquidacionTerceroId: string) {
-		const response = await apiClient.post(`/api/liquidaciones-terceros/${liquidacionTerceroId}/recalcular-totales`);
+		const response = await apiClient.post(
+			`/api/liquidaciones-terceros/${liquidacionTerceroId}/recalcular-totales`
+		);
 		return response.data;
 	},
 
@@ -606,40 +659,48 @@ export const liquidacionesTercerosDescuentosAPI = {
 	},
 
 	/** Quién cambió el estado y cuándo. Alimenta el panel del header. */
-	async historialEstados(liquidacionTerceroId: string): Promise<Array<{
-		id: string;
-		estado_anterior: string | null;
-		estado_nuevo: string;
-		motivo: string | null;
-		fecha: string;
-		usuario: { id: string; nombre: string; correo: string } | null;
-	}>> {
+	async historialEstados(liquidacionTerceroId: string): Promise<
+		Array<{
+			id: string;
+			estado_anterior: string | null;
+			estado_nuevo: string;
+			motivo: string | null;
+			fecha: string;
+			usuario: { id: string; nombre: string; correo: string } | null;
+		}>
+	> {
 		const response = await apiClient.get(
 			`/api/liquidaciones-terceros/${liquidacionTerceroId}/historial-estados`
 		);
 		return response.data;
 	},
 
-async obtenerPorId(liquidacionTerceroId: string, opts: { includeDeleted?: boolean } = {}) {
-    const response = await apiClient.get(
-      `/api/liquidaciones-terceros-descuentos/${liquidacionTerceroId}`,
-      { params: opts.includeDeleted ? { includeDeleted: 'true' } : undefined }
-    );
-    return response.data;
-  },
+	async obtenerPorId(
+		liquidacionTerceroId: string,
+		opts: { includeDeleted?: boolean; signal?: AbortSignal } = {}
+	) {
+		const response = await apiClient.get(
+			`/api/liquidaciones-terceros-descuentos/${liquidacionTerceroId}`,
+			{
+				params: opts.includeDeleted ? { includeDeleted: 'true' } : undefined,
+				signal: opts.signal
+			}
+		);
+		return response.data;
+	},
 
-  /**
-   * Descarga el PDF nativo de la liquidación, renderizado por el backend
-   * con Puppeteer + Chromium. Reemplaza al fallback `window.print()`
-   * que clonaba el DOM del preview.
-   */
-  async descargarPdf(liquidacionTerceroId: string): Promise<Blob> {
-    const response = await apiClient.get(
-      `/api/liquidaciones-terceros/${liquidacionTerceroId}/pdf`,
-      { responseType: 'blob' }
-    );
-    return response.data as Blob;
-  },
+	/**
+	 * Descarga el PDF nativo de la liquidación, renderizado por el backend
+	 * con Puppeteer + Chromium. Reemplaza al fallback `window.print()`
+	 * que clonaba el DOM del preview.
+	 */
+	async descargarPdf(liquidacionTerceroId: string): Promise<Blob> {
+		const response = await apiClient.get(
+			`/api/liquidaciones-terceros/${liquidacionTerceroId}/pdf`,
+			{ responseType: 'blob' }
+		);
+		return response.data as Blob;
+	},
 
 	async obtenerAdicionales(liquidacionTerceroId: string): Promise<AdicionalTransmeralda[]> {
 		const data = await this.obtenerPorId(liquidacionTerceroId);
@@ -662,18 +723,24 @@ async obtenerPorId(liquidacionTerceroId: string, opts: { includeDeleted?: boolea
 	// ── Reemplazar items del pivote (descartar no deseados) ──
 
 	async reemplazarItems(liquidacionTerceroFinalId: string, itemIds: string[]) {
-		const response = await apiClient.put(`/api/liquidaciones-terceros/${liquidacionTerceroFinalId}/items`, {
-			item_ids: itemIds,
-		});
+		const response = await apiClient.put(
+			`/api/liquidaciones-terceros/${liquidacionTerceroFinalId}/items`,
+			{
+				item_ids: itemIds
+			}
+		);
 		return response.data;
 	},
 
 	// ── Toggle aplica_impuestos en item del pivote ──
 
 	async toggleAplicaImpuestosItem(pivoteId: string, aplica_impuestos: boolean) {
-		const response = await apiClient.patch(`/api/liquidaciones-terceros/items/${pivoteId}/aplica-impuestos`, {
-			aplica_impuestos,
-		});
+		const response = await apiClient.patch(
+			`/api/liquidaciones-terceros/items/${pivoteId}/aplica-impuestos`,
+			{
+				aplica_impuestos
+			}
+		);
 		return response.data;
 	},
 
@@ -770,9 +837,12 @@ async obtenerPorId(liquidacionTerceroId: string, opts: { includeDeleted?: boolea
 	// restaurarla. `excluir: true` ⇒ soft-delete, `excluir: false` ⇒ restaurar.
 
 	async toggleExcluirItem(pivoteId: string, excluir: boolean) {
-		const response = await apiClient.patch(`/api/liquidaciones-terceros/items/${pivoteId}/excluir`, {
-			excluir,
-		});
+		const response = await apiClient.patch(
+			`/api/liquidaciones-terceros/items/${pivoteId}/excluir`,
+			{
+				excluir
+			}
+		);
 		return response.data;
 	},
 
@@ -887,45 +957,62 @@ async obtenerPorId(liquidacionTerceroId: string, opts: { includeDeleted?: boolea
 		}>;
 		total: number;
 	}> {
-		const response = await apiClient.get('/api/liquidaciones-terceros/anticipos-vehiculo', { params });
+		const response = await apiClient.get('/api/liquidaciones-terceros/anticipos-vehiculo', {
+			params
+		});
 		return response.data;
 	},
 
 	// ── Snapshots ──
 
-	async listarSnapshots(liquidacionId: string, rama?: string): Promise<Array<{
-		id: string;
-		version: number;
-		rama: string;
-		origen: string;
-		revertido_de_id: string | null;
-		usuario: { id: string; nombre: string; correo: string } | null;
-		created_at: string;
-		diff: any;
-		meta: any;
-	}>> {
+	async listarSnapshots(
+		liquidacionId: string,
+		rama?: string
+	): Promise<
+		Array<{
+			id: string;
+			version: number;
+			rama: string;
+			origen: string;
+			revertido_de_id: string | null;
+			usuario: { id: string; nombre: string; correo: string } | null;
+			created_at: string;
+			diff: any;
+			meta: any;
+		}>
+	> {
 		const response = await apiClient.get(`/api/liquidaciones-terceros/${liquidacionId}/snapshots`, {
-			params: rama ? { rama } : undefined,
+			params: rama ? { rama } : undefined
 		});
 		return response.data;
 	},
 
 	async obtenerSnapshot(liquidacionId: string, snapshotId: string): Promise<any> {
-		const response = await apiClient.get(`/api/liquidaciones-terceros/${liquidacionId}/snapshots/${snapshotId}`);
+		const response = await apiClient.get(
+			`/api/liquidaciones-terceros/${liquidacionId}/snapshots/${snapshotId}`
+		);
 		return response.data;
 	},
 
-	async compararSnapshots(snapshotIdA: string, snapshotIdB: string): Promise<{
+	async compararSnapshots(
+		snapshotIdA: string,
+		snapshotIdB: string
+	): Promise<{
 		fields: Array<{ path: string; anterior: any; nuevo: any }>;
 	}> {
-		const response = await apiClient.get(`/api/liquidaciones-terceros/snapshots/${snapshotIdA}/diff`, {
-			params: { con: snapshotIdB },
-		});
+		const response = await apiClient.get(
+			`/api/liquidaciones-terceros/snapshots/${snapshotIdA}/diff`,
+			{
+				params: { con: snapshotIdB }
+			}
+		);
 		return response.data;
 	},
 
 	async revertirASnapshot(liquidacionId: string, snapshotId: string): Promise<any> {
-		const response = await apiClient.post(`/api/liquidaciones-terceros/${liquidacionId}/snapshots/${snapshotId}/revertir`);
+		const response = await apiClient.post(
+			`/api/liquidaciones-terceros/${liquidacionId}/snapshots/${snapshotId}/revertir`
+		);
 		return response.data;
 	},
 
@@ -937,7 +1024,7 @@ async obtenerPorId(liquidacionTerceroId: string, opts: { includeDeleted?: boolea
 
 	async obtenerConfigGastos(anio: number, mes: number): Promise<ConfigGastosPeriodoDetalle> {
 		const response = await apiClient.get('/api/liquidaciones-terceros/config-gastos', {
-			params: { anio, mes },
+			params: { anio, mes }
 		});
 		return response.data;
 	},
@@ -945,15 +1032,15 @@ async obtenerPorId(liquidacionTerceroId: string, opts: { includeDeleted?: boolea
 	async guardarConfigGastos(
 		anio: number,
 		mes: number,
-		valores: Partial<ConfigGastosPeriodoDetalle>,
+		valores: Partial<ConfigGastosPeriodoDetalle>
 	): Promise<ConfigGastosPeriodoDetalle> {
 		const response = await apiClient.put('/api/liquidaciones-terceros/config-gastos', {
 			anio,
 			mes,
-			...valores,
+			...valores
 		});
 		return response.data;
-	},
+	}
 };
 
 export interface ConfigGastosPeriodoDetalle {
