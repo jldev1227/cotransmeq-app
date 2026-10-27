@@ -76,14 +76,14 @@
 </script>
 
 <div class="editor">
-	<section class="panel cabecera-formulario">
+	<section class="page-card cabecera-formulario">
 		<div class="eyebrow">01 · Presentación</div>
 		<label class="campo"><span>Título de la encuesta</span><input value={value.titulo} maxlength="180" oninput={(e) => cambiar('titulo', e.currentTarget.value)} placeholder="¿Qué te gustaría preguntar?" /></label>
 		<label class="campo"><span>Descripción o instrucciones</span><textarea rows="3" maxlength="4000" value={value.descripcion ?? ''} oninput={(e) => cambiar('descripcion', e.currentTarget.value)} placeholder="Cuenta por qué se hace esta encuesta y cuánto tarda."></textarea></label>
 		<label class="campo"><span>Mensaje después de enviar</span><input value={value.mensaje_final ?? ''} maxlength="1000" oninput={(e) => cambiar('mensaje_final', e.currentTarget.value)} placeholder="¡Gracias por compartir tu opinión!" /></label>
 	</section>
 
-	<section class="panel">
+	<section class="page-card">
 		<div class="eyebrow">02 · Participantes</div>
 		<h2>Datos y procedencia</h2>
 		<p class="ayuda">Una encuesta puede ser anónima. Pide nombre o correo solo si los necesitas para interpretar o contactar a quien responde.</p>
@@ -110,12 +110,12 @@
 	</section>
 
 	<section class="preguntas">
-		<div class="preguntas-cabecera"><div><div class="eyebrow">03 · Cuestionario</div><h2>Preguntas <span>{value.preguntas.length}</span></h2></div><button type="button" class="btn-primario" onclick={() => nueva()}><Plus size={17} /> Agregar pregunta</button></div>
+		<div class="preguntas-cabecera"><div><div class="eyebrow">03 · Cuestionario</div><h2>Preguntas <span>{value.preguntas.length}</span></h2></div><button type="button" class="btn-primary" onclick={() => nueva()}><Plus size={16} /> Agregar pregunta</button></div>
 		{#if value.preguntas.length === 0}
-			<div class="vacio"><span>✦</span><strong>Tu encuesta empieza con una pregunta.</strong><p>Combina opciones, escalas, textos, fechas y números según lo que quieras aprender.</p></div>
+			<div class="vacio page-card"><span>✦</span><strong>Tu encuesta empieza con una pregunta.</strong><p>Combina opciones, escalas, textos, fechas y números según lo que quieras aprender.</p><button type="button" class="btn-secondary" onclick={() => nueva()}><Plus size={16} /> Agregar primera pregunta</button></div>
 		{/if}
 		{#each value.preguntas as p, i (p.id)}
-			<div class="panel pregunta">
+			<div class="page-card pregunta">
 				<div class="pregunta-top"><span class="indice"><GripVertical size={16} /> Pregunta {String(i + 1).padStart(2, '0')}</span><div class="herramientas">
 					<button type="button" title="Subir" disabled={i === 0} onclick={() => mover(p.id, -1)}><ArrowUp size={16} /></button>
 					<button type="button" title="Bajar" disabled={i === value.preguntas.length - 1} onclick={() => mover(p.id, 1)}><ArrowDown size={16} /></button>
@@ -154,8 +154,7 @@
 
 <style>
 	.editor { display: grid; gap: 1rem; }
-	.panel { background: var(--bg-surface, white); border: 1px solid var(--border-subtle, #e3e9e5); border-radius: 1rem; padding: 1.3rem; }
-	.eyebrow { color: var(--accion, #07875f); font-size: .7rem; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; margin-bottom: .8rem; }
+	.eyebrow { margin-bottom: .75rem; }
 	h2 { margin: 0 0 .5rem; font-size: 1.15rem; letter-spacing: -.02em; }
 	h2 span { color: var(--text-muted); font-weight: 500; }
 	.ayuda { margin: 0 0 1.2rem; font-size: .84rem; color: var(--text-secondary); line-height: 1.5; }
@@ -171,12 +170,12 @@
 	.switch { display: inline-flex; align-items: center; gap: .5rem; font-size: .83rem; font-weight: 700; cursor: pointer; }
 	.switch input { width: 1rem; min-height: 1rem; accent-color: var(--accion, #07875f); }
 	.preguntas-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 1rem 0; }
-	.btn-primario { display: inline-flex; align-items: center; gap: .4rem; padding: .7rem .9rem; border: 0; border-radius: .7rem; background: var(--accion, #07875f); color: white; font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
-	.vacio { display: flex; flex-direction: column; align-items: center; gap: .6rem; text-align: center; border: 1px dashed var(--border-default); border-radius: 1rem; padding: 3rem 1rem; color: var(--text-secondary); }
+	.vacio { display: flex; flex-direction: column; align-items: center; gap: .6rem; min-height: 13rem; text-align: center; padding: 2rem 1rem; color: var(--text-secondary); }
 	.vacio span { font-size: 2rem; color: var(--accion, #07875f); }
 	.vacio strong { color: var(--text-primary); }
 	.vacio p { max-width: 26rem; margin: 0; }
-	.pregunta { margin-bottom: .8rem; }
+	.vacio .btn-secondary { margin-top: .35rem; }
+	.pregunta { margin-bottom: 0; }
 	.pregunta-top { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-subtle); padding-bottom: .8rem; margin-bottom: 1rem; }
 	.indice { display: inline-flex; align-items: center; gap: .4rem; color: var(--text-secondary); font-size: .72rem; text-transform: uppercase; font-weight: 800; letter-spacing: .07em; }
 	.herramientas { display: flex; gap: .2rem; }
@@ -191,6 +190,6 @@
 	.enlace { display: inline-flex; align-items: center; gap: .3rem; border: 0; color: var(--accion, #07875f); background: transparent; font: inherit; font-size: .82rem; font-weight: 700; padding: .6rem 0; cursor: pointer; }
 	.escala-config { max-width: 24rem; }
 	.requerida { border-top: 1px solid var(--border-subtle); padding-top: 1rem; }
-	.agregar-final { width: 100%; display: flex; justify-content: center; align-items: center; gap: .4rem; border: 1px dashed var(--border-default); border-radius: .8rem; padding: .9rem; background: transparent; color: var(--accion, #07875f); font: inherit; font-weight: 700; cursor: pointer; }
+	.agregar-final { width: 100%; display: flex; justify-content: center; align-items: center; gap: .4rem; min-height: 44px; border: 1px dashed var(--border-default); border-radius: 12px; padding: .7rem; background: var(--bg-surface); color: var(--emerald-800); font: inherit; font-weight: 700; cursor: pointer; }
 	@media (max-width: 650px) { .pregunta-principal { grid-template-columns: 1fr; gap: 0; } .preguntas-cabecera { align-items: start; flex-direction: column; } }
 </style>

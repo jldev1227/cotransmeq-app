@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { BarChart3, Users, Activity, ShieldCheck, Download, FileSpreadsheet, FileText, ChevronLeft, ChevronRight } from 'lucide-svelte';
+	import { BarChart3, Users, Activity, ShieldCheck, FileSpreadsheet, FileText, ChevronLeft, ChevronRight } from 'lucide-svelte';
 	import Grafica from '$lib/components/dashboard/Grafica.svelte';
+	import TabsVista from '$lib/components/ui/TabsVista.svelte';
 	import type { ResultadoEncuesta, PreguntaEncuesta } from '$lib/api/encuestas';
 
 	interface Props {
@@ -27,37 +28,42 @@
 </script>
 
 <div class="resultados">
-	<div class="barra">
-		<div><div class="eyebrow"><Activity size={14} /> En vivo</div><h2>Lo que respondió tu grupo</h2><p>Los resultados se actualizan cuando llega una respuesta nueva.</p></div>
+	<header class="page-card resultados-cabecera">
+		<div><div class="eyebrow"><Activity size={14} /> En vivo</div><h2>Respuestas de tu grupo</h2><p>Los resultados se actualizan cuando llega una respuesta nueva.</p></div>
 		<div class="exportar">
-			<button onclick={() => onDescargar('xlsx')}><FileSpreadsheet size={16} /> Excel</button>
-			<button onclick={() => onDescargar('pdf')}><FileText size={16} /> PDF</button>
+			<button type="button" class="btn-secondary" onclick={() => onDescargar('xlsx')}><FileSpreadsheet size={16} /> Descargar Excel</button>
+			<button type="button" class="btn-secondary" onclick={() => onDescargar('pdf')}><FileText size={16} /> Descargar PDF</button>
 		</div>
-	</div>
+	</header>
 
 	<section class="metricas" aria-label="Métricas de la encuesta">
-		<div><span><Users size={18} /> Participación</span><strong>{datos.total}</strong><small>respuestas recibidas</small></div>
-		<div><span><BarChart3 size={18} /> Preguntas</span><strong>{preguntas.length}</strong><small>en esta encuesta</small></div>
-		<div><span><Activity size={18} /> Último día</span><strong>{hoy}</strong><small>respuestas de {datos.por_dia.at(-1)?.fecha ?? 'hoy'}</small></div>
-		<div><span><ShieldCheck size={18} /> Origen</span><strong>{datos.encuesta.registrar_origen ? datos.coincidencias_dispositivo : '—'}</strong><small>{datos.encuesta.registrar_origen ? 'coincidencias de dispositivo' : 'comparación desactivada'}</small></div>
+		<div class="stat-card"><span class="stat-label"><Users size={16} /> Participación</span><strong class="stat-value">{datos.total}</strong><small>respuestas recibidas</small></div>
+		<div class="stat-card"><span class="stat-label"><BarChart3 size={16} /> Preguntas</span><strong class="stat-value">{preguntas.length}</strong><small>en esta encuesta</small></div>
+		<div class="stat-card"><span class="stat-label"><Activity size={16} /> Último día</span><strong class="stat-value">{hoy}</strong><small>respuestas de {datos.por_dia.at(-1)?.fecha ?? 'hoy'}</small></div>
+		<div class="stat-card"><span class="stat-label"><ShieldCheck size={16} /> Origen</span><strong class="stat-value">{datos.encuesta.registrar_origen ? datos.coincidencias_dispositivo : '—'}</strong><small>{datos.encuesta.registrar_origen ? 'coincidencias de dispositivo' : 'comparación desactivada'}</small></div>
 	</section>
 
-	<div class="pestanas">
-		<button class:activa={vista === 'graficas'} onclick={() => (vista = 'graficas')}>Análisis visual</button>
-		<button class:activa={vista === 'respuestas'} onclick={() => (vista = 'respuestas')}>Respuestas individuales <span>{datos.total}</span></button>
-	</div>
+	<TabsVista
+		tabs={[
+			{ id: 'graficas', label: 'Análisis visual' },
+			{ id: 'respuestas', label: 'Respuestas individuales', cuenta: datos.total }
+		]}
+		activa={vista}
+		onCambiar={(id) => (vista = id as typeof vista)}
+		etiqueta="Vistas de resultados"
+	/>
 
 	{#if vista === 'graficas'}
 		{#if datos.total === 0}
-			<div class="vacio"><BarChart3 size={30} /><strong>El tablero está listo.</strong><p>Comparte el enlace y los gráficos aparecerán al recibir respuestas.</p></div>
+			<div class="vacio page-card"><BarChart3 size={30} /><strong>El tablero está listo.</strong><p>Comparte el enlace y los gráficos aparecerán al recibir respuestas.</p></div>
 		{:else}
 			<div class="graficas">
-				<div class="grafica-card tendencia">
+				<div class="grafica-card page-card tendencia">
 					<div class="card-top"><div><span class="eyebrow">Participación</span><h3>Respuestas en el tiempo</h3></div><span class="chip">{datos.total} en total</span></div>
 					<Grafica tipo="lineas" etiquetas={datos.por_dia.map(d => d.fecha)} series={[{ etiqueta: 'Respuestas', datos: datos.por_dia.map(d => d.total), color: 'primario' }]} alto={250} leyenda={false} />
 				</div>
 				{#each datos.analisis as q (q.id)}
-					<div class="grafica-card">
+					<div class="grafica-card page-card">
 						<div class="card-top"><div><span class="eyebrow">{q.tipo.replace(/_/g, ' ')}</span><h3>{q.titulo}</h3></div><span class="chip">{q.respondidas} respuestas</span></div>
 						{#if q.opciones.length}
 							{#if q.promedio !== null || q.nps !== null}<div class="score">{q.nps !== null ? q.nps : q.promedio}<small>{q.nps !== null ? 'NPS' : 'promedio'}</small></div>{/if}
@@ -78,7 +84,7 @@
 			{/if}
 		{/if}
 	{:else}
-		<div class="tabla-wrap">
+		<div class="tabla-wrap page-card">
 			{#if datos.respuestas.length === 0}<p class="sin-datos">Todavía no hay respuestas.</p>
 			{:else}
 				<table><thead><tr><th>Fecha</th><th>Participante</th><th>Origen</th>{#each preguntas as p}<th>{p.titulo}</th>{/each}</tr></thead>
@@ -96,24 +102,19 @@
 </div>
 
 <style>
-	.resultados { min-width: 0; }
-	.barra { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+	.resultados { display: grid; gap: 1rem; min-width: 0; }
+	.resultados-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 	.eyebrow { display: inline-flex; align-items: center; gap: .35rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .12em; font-weight: 800; color: var(--accion, #07875f); }
-	h2 { font-size: 1.4rem; letter-spacing: -.03em; margin: .35rem 0; }
-	.barra p { margin: 0; font-size: .83rem; color: var(--text-secondary); }
-	.exportar { display: flex; gap: .5rem; }
-	.exportar button, .paginacion button { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid var(--border-default); border-radius: .7rem; background: var(--bg-surface, white); color: var(--text-primary); padding: .65rem .8rem; cursor: pointer; font: inherit; font-size: .8rem; font-weight: 700; }
+	h2 { font-size: 1.25rem; letter-spacing: -.02em; margin: .35rem 0; }
+	.resultados-cabecera p { margin: 0; font-size: .83rem; color: var(--text-muted); }
+	.exportar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 	.metricas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .7rem; }
-	.metricas > div { display: flex; flex-direction: column; gap: .3rem; padding: 1.1rem; border-radius: .9rem; background: var(--bg-surface, white); border: 1px solid var(--border-subtle); }
-	.metricas span { display: inline-flex; align-items: center; gap: .4rem; color: var(--text-secondary); font-size: .77rem; }
-	.metricas strong { font-size: 2rem; letter-spacing: -.04em; }
-	.metricas small { color: var(--text-muted); }
-	.pestanas { display: flex; gap: .3rem; margin: 1.6rem 0 1rem; border-bottom: 1px solid var(--border-subtle); }
-	.pestanas button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-secondary); padding: .7rem 1rem; cursor: pointer; font: inherit; font-size: .82rem; font-weight: 700; }
-	.pestanas button.activa { color: var(--accion, #07875f); border-color: var(--accion, #07875f); }
-	.pestanas span { color: var(--text-muted); }
+	.metricas > div { display: flex; flex-direction: column; gap: .3rem; }
+	.metricas .stat-label { display: inline-flex; align-items: center; gap: .4rem; }
+	.metricas .stat-value { display: block; }
+	.metricas small { color: var(--text-muted); font-size: .74rem; }
 	.graficas { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: .9rem; }
-	.grafica-card { min-width: 0; padding: 1.2rem; background: var(--bg-surface, white); border: 1px solid var(--border-subtle); border-radius: .95rem; }
+	.grafica-card { min-width: 0; }
 	.tendencia { grid-column: 1 / -1; }
 	.card-top { display: flex; justify-content: space-between; align-items: start; gap: .6rem; margin-bottom: 1rem; }
 	h3 { font-size: 1rem; margin: .3rem 0 0; line-height: 1.4; letter-spacing: -.01em; }
@@ -128,16 +129,17 @@
 	blockquote { margin: 0; padding: .7rem .9rem; border-left: 3px solid var(--accion, #07875f); background: var(--bg-subtle, #f7f9f7); border-radius: .2rem .6rem .6rem .2rem; font-size: .8rem; line-height: 1.5; }
 	.sin-datos { padding: 2rem; color: var(--text-secondary); }
 	.origen { display: flex; align-items: start; gap: .5rem; padding: .9rem 1rem; margin-top: 1rem; color: var(--text-secondary); background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: .8rem; font-size: .78rem; }
-	.vacio { display: flex; flex-direction: column; align-items: center; gap: .5rem; padding: 4rem 1rem; color: var(--text-secondary); background: var(--bg-surface); border: 1px dashed var(--border-default); border-radius: .9rem; text-align: center; }
+	.vacio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .5rem; min-height: 14rem; padding: 2rem 1rem; color: var(--text-secondary); text-align: center; }
 	.vacio strong { color: var(--text-primary); }
 	.vacio p { margin: 0; }
-	.tabla-wrap { overflow: auto; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: .9rem; }
+	.tabla-wrap { overflow: auto; padding: 0; }
 	table { border-collapse: collapse; min-width: 100%; white-space: nowrap; font-size: .78rem; }
 	th, td { padding: .8rem; border-bottom: 1px solid var(--border-subtle); text-align: left; }
 	th { color: var(--text-secondary); background: var(--bg-subtle, #f5f7f5); font-weight: 750; }
 	td { max-width: 25rem; white-space: normal; overflow-wrap: anywhere; }
-	.paginacion { display: flex; align-items: center; justify-content: end; gap: .8rem; margin-top: .8rem; font-size: .8rem; color: var(--text-secondary); }
+	.paginacion { display: flex; align-items: center; justify-content: end; gap: .8rem; font-size: .8rem; color: var(--text-secondary); }
+	.paginacion button { display: inline-flex; align-items: center; gap: .4rem; }
 	.paginacion button:disabled { opacity: .45; cursor: default; }
 	@media (max-width: 900px) { .metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-	@media (max-width: 650px) { .barra { align-items: stretch; flex-direction: column; } .graficas { grid-template-columns: 1fr; } }
+	@media (max-width: 650px) { .resultados-cabecera { align-items: stretch; flex-direction: column; } .exportar { justify-content: stretch; } .exportar .btn-secondary { flex: 1; } .graficas { grid-template-columns: 1fr; } .tendencia { grid-column: auto; } }
 </style>

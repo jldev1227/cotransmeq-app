@@ -146,89 +146,69 @@
 
 <svelte:head><title>{encuesta?.titulo ?? 'Encuesta'} · Encuestas</title></svelte:head>
 
-<div class="pagina">
-	<a class="volver" href="/dashboard/encuestas"><ArrowLeft size={17} /> Todas las encuestas</a>
+<div class="dir-pagina encuesta-detalle">
+	<a class="volver" href="/dashboard/encuestas"><ArrowLeft size={16} /> Encuestas</a>
 	{#if cargando}
-		<div class="vacio">Cargando encuesta…</div>
+		<div class="estado-panel page-card">Cargando encuesta…</div>
 	{:else if error || !encuesta || !formulario}
-		<div class="vacio error">{error || 'Encuesta no encontrada'}</div>
+		<div class="estado-panel page-card error" role="alert">{error || 'Encuesta no encontrada'}</div>
 	{:else}
-		<header class="cabecera">
-			<div>
-				<div class="eyebrow">Encuesta <span class:publicada={encuesta.estado === 'PUBLICADA'} class="estado">{encuesta.estado === 'PUBLICADA' ? 'Publicada' : encuesta.estado === 'CERRADA' ? 'Cerrada' : 'Borrador'}</span></div>
-				<h1>{encuesta.titulo}</h1>
-				<p>{encuesta.estado === 'BORRADOR' ? 'Diseña las preguntas y publica cuando esté lista.' : 'Comparte el enlace y revisa los resultados mientras llegan.'}</p>
+		<header class="page-card dir-cabecera">
+			<div class="dir-cabecera-texto">
+				<div class="detalle-tipo">ENCUESTA <span class="estado" class:publicada={encuesta.estado === 'PUBLICADA'} class:cerrada={encuesta.estado === 'CERRADA'}>{encuesta.estado === 'PUBLICADA' ? 'Publicada' : encuesta.estado === 'CERRADA' ? 'Cerrada' : 'Borrador'}</span></div>
+				<h1 class="dir-titulo">{encuesta.titulo}</h1>
+				<p class="dir-desc">{encuesta.estado === 'BORRADOR' ? 'Configura la presentación y las preguntas. Publica cuando esté lista.' : 'Comparte el enlace y revisa las respuestas de tu grupo.'}</p>
 			</div>
-			<div class="cabecera-acciones">
-				{#if encuesta.estado === 'BORRADOR' && puedeGestionar}
-					<button class="secundario" disabled={trabajando || !cambios} onclick={() => void guardar()}><Save size={16} /> Guardar</button>
-					<button class="primario" disabled={trabajando} onclick={() => void publicar()}><Send size={16} /> Publicar y compartir</button>
-				{:else if encuesta.estado !== 'BORRADOR'}
-					<button class="secundario" onclick={() => void copiar()}><Copy size={16} /> Copiar enlace</button>
-					<a class="primario" href={encuestasAPI.enlace(encuesta.token)} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir encuesta</a>
+			<div class="dir-cabecera-acciones">
+				{#if encuesta.estado !== 'BORRADOR'}
+					<button type="button" class="btn-secondary" onclick={() => void copiar()}><Copy size={16} /> Copiar enlace</button>
+					<a class="btn-primary" href={encuestasAPI.enlace(encuesta.token)} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir encuesta</a>
 				{/if}
 			</div>
 		</header>
 
 		{#if encuesta.estado !== 'BORRADOR'}
-			<div class="enlace"><span>Enlace para compartir</span><code>{encuestasAPI.enlace(encuesta.token)}</code><button title="Copiar enlace" onclick={() => void copiar()}><Copy size={17} /></button></div>
+			<div class="enlace page-card"><div><span class="enlace-etiqueta">Enlace para compartir</span><code>{encuestasAPI.enlace(encuesta.token)}</code></div><button class="btn-secondary" type="button" title="Copiar enlace" onclick={() => void copiar()}><Copy size={16} /> Copiar</button></div>
 		{/if}
 
-		<div class="tabs">
-			{#if encuesta.estado === 'BORRADOR' && puedeGestionar}<button class:activa={vista === 'editor'} onclick={() => (vista = 'editor')}>Constructor {#if cambios}<span class="punto"></span>{/if}</button>{/if}
-			{#if encuesta.estado !== 'BORRADOR'}<button class:activa={vista === 'resultados'} onclick={() => { vista = 'resultados'; void cargarResultados(); }}>Resultados <span>{resultados?.total ?? 0}</span></button>{/if}
-		</div>
-
 		{#if vista === 'editor' && encuesta.estado === 'BORRADOR' && !puedeGestionar}
-			<div class="vacio">Esta encuesta está en borrador. Puedes consultar los resultados cuando se publique.</div>
+			<div class="estado-panel page-card">Esta encuesta está en borrador. Puedes consultar los resultados cuando se publique.</div>
 		{:else if vista === 'editor' && encuesta.estado === 'BORRADOR'}
 			<EditorEncuesta value={formulario} onChange={editar} />
-			<div class="pie-editor"><span>{cambios ? 'Tienes cambios sin guardar' : 'Todos los cambios están guardados'}</span><div><button class="secundario" disabled={trabajando || !cambios} onclick={() => void guardar()}><Save size={16} /> Guardar</button><button class="primario" disabled={trabajando} onclick={() => void publicar()}><Send size={16} /> Publicar encuesta</button></div></div>
+			<div class="pie-editor page-card"><span class:cambio-pendiente={cambios}><i></i>{cambios ? 'Cambios sin guardar' : 'Todos los cambios están guardados'}</span><div><button type="button" class="btn-secondary" disabled={trabajando || !cambios} onclick={() => void guardar()}><Save size={16} /> Guardar borrador</button><button type="button" class="btn-primary" disabled={trabajando} onclick={() => void publicar()}><Send size={16} /> Publicar y compartir</button></div></div>
 		{:else if resultados}
 			<ResultadosEncuesta datos={resultados} onPagina={(pagina) => void cargarResultados(pagina)} onDescargar={(formato) => void descargar(formato)} />
 		{:else}
-			<div class="vacio">Preparando resultados…</div>
+			<div class="estado-panel page-card">Preparando resultados…</div>
 		{/if}
 
-		{#if puedeGestionar}<div class="gestion">
-			<button onclick={() => void duplicar()} disabled={trabajando}><FilePlus2 size={16} /> Duplicar como borrador</button>
-			{#if encuesta.estado === 'PUBLICADA'}<button onclick={() => void cerrar()} disabled={trabajando}><LockKeyhole size={16} /> Cerrar recepción</button>{/if}
-			<button class="peligro" onclick={() => void archivar()} disabled={trabajando}><Trash2 size={16} /> Archivar</button>
+		{#if puedeGestionar}<div class="acciones-gestion" aria-label="Otras acciones de la encuesta">
+			<button type="button" class="btn-secondary" onclick={() => void duplicar()} disabled={trabajando}><FilePlus2 size={16} /> Duplicar</button>
+			{#if encuesta.estado === 'PUBLICADA'}<button type="button" class="btn-secondary" onclick={() => void cerrar()} disabled={trabajando}><LockKeyhole size={16} /> Cerrar recepción</button>{/if}
+			<button type="button" class="btn-danger" onclick={() => void archivar()} disabled={trabajando}><Trash2 size={16} /> Archivar</button>
 		</div>{/if}
 	{/if}
 </div>
 
 <style>
-	.pagina { padding: 1.4rem 1.25rem 3rem; color: var(--text-primary); }
-	.volver { display: inline-flex; align-items: center; gap: .45rem; color: var(--text-secondary); font-size: .8rem; font-weight: 700; text-decoration: none; margin-bottom: 1.7rem; }
-	.volver:hover { color: var(--accion, #07875f); }
-	.cabecera { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 1.4rem; }
-	.eyebrow { display: flex; gap: .5rem; align-items: center; text-transform: uppercase; font-size: .7rem; color: var(--accion, #07875f); font-weight: 800; letter-spacing: .13em; }
-	.estado { background: #f6eddb; color: #8c651d; border-radius: 1rem; padding: .3rem .55rem; letter-spacing: 0; }
-	.estado.publicada { background: #e2f5e9; color: #167247; }
-	h1 { font-size: clamp(2rem, 3.5vw, 3.2rem); letter-spacing: -.045em; line-height: 1.08; margin: .45rem 0; }
-	.cabecera p { margin: 0; color: var(--text-secondary); font-size: .85rem; }
-	.cabecera-acciones, .pie-editor > div { display: flex; gap: .5rem; }
-	button, a.primario { font: inherit; }
-	.primario, .secundario { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 2.7rem; padding: .65rem .9rem; border-radius: .7rem; cursor: pointer; font-size: .8rem; font-weight: 750; text-decoration: none; }
-	.primario { border: 1px solid var(--accion, #07875f); background: var(--accion, #07875f); color: white; }
-	.secundario { border: 1px solid var(--border-default, #ccd6d0); background: var(--bg-surface, white); color: var(--text-primary); }
-	button:disabled { opacity: .5; cursor: default; }
-	.enlace { display: flex; align-items: center; gap: .65rem; padding: .7rem 1rem; border: 1px solid var(--border-subtle); border-radius: .8rem; background: var(--bg-surface); margin-bottom: 1rem; min-width: 0; }
-	.enlace span { font-size: .75rem; color: var(--text-secondary); flex: none; }
-	.enlace code { color: var(--accion, #07875f); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-	.enlace button { border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; }
-	.tabs { display: flex; gap: .3rem; border-bottom: 1px solid var(--border-subtle); margin-bottom: 1rem; }
-	.tabs button { display: inline-flex; align-items: center; gap: .4rem; padding: .75rem 1rem; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: .83rem; font-weight: 750; }
-	.tabs button.activa { color: var(--accion, #07875f); border-color: var(--accion, #07875f); }
-	.tabs span { color: var(--text-muted); }
-	.tabs .punto { width: .4rem; height: .4rem; background: #e9a531; border-radius: 50%; }
-	.pie-editor { position: sticky; bottom: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem 1rem; margin-top: 1rem; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: .8rem; box-shadow: 0 -8px 25px rgba(0,0,0,.04); }
-	.pie-editor > span { color: var(--text-secondary); font-size: .8rem; }
-	.gestion { display: flex; flex-wrap: wrap; gap: .6rem; border-top: 1px solid var(--border-subtle); margin-top: 2rem; padding-top: 1rem; }
-	.gestion button { display: inline-flex; align-items: center; gap: .35rem; border: 0; background: transparent; color: var(--text-secondary); padding: .5rem .6rem; cursor: pointer; font-size: .78rem; }
-	.gestion .peligro { color: #b5483b; }
-	.vacio { border: 1px dashed var(--border-default); border-radius: .9rem; padding: 3rem 1rem; color: var(--text-secondary); text-align: center; }
-	.error { color: #bd3d32; }
-	@media (max-width: 750px) { .cabecera { align-items: stretch; flex-direction: column; } .cabecera-acciones { flex-wrap: wrap; } .pie-editor { align-items: stretch; flex-direction: column; } .enlace { flex-wrap: wrap; } .enlace code { flex-basis: 80%; } }
+	.encuesta-detalle { overflow: auto; }
+	.volver { display: inline-flex; align-items: center; align-self: flex-start; gap: .4rem; width: fit-content; color: var(--text-muted); font-size: .78rem; font-weight: 700; text-decoration: none; }
+	.volver:hover { color: var(--accion); }
+	.detalle-tipo { display: flex; align-items: center; gap: .55rem; color: var(--text-muted); font-size: .67rem; font-weight: 800; letter-spacing: .1em; }
+	.estado { display: inline-flex; align-items: center; min-height: 1.4rem; padding: .15rem .55rem; border-radius: 999px; background: color-mix(in srgb, #d99a24 14%, white); color: #805a10; font-size: .68rem; font-weight: 750; letter-spacing: 0; }
+	.estado.publicada { background: color-mix(in srgb, var(--emerald-500) 13%, white); color: var(--emerald-800); }
+	.estado.cerrada { background: var(--bg-base); color: var(--text-muted); }
+	.enlace { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-width: 0; padding: .85rem 1.1rem; }
+	.enlace > div { display: flex; flex-direction: column; gap: .25rem; min-width: 0; }
+	.enlace-etiqueta { color: var(--text-muted); font-size: .68rem; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
+	.enlace code { overflow: hidden; color: var(--emerald-800); font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
+	.pie-editor { position: sticky; bottom: .75rem; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem 1rem; }
+	.pie-editor > span { display: inline-flex; align-items: center; gap: .5rem; color: var(--text-muted); font-size: .78rem; }
+	.pie-editor > span i { width: .5rem; height: .5rem; border-radius: 50%; background: var(--emerald-500); }
+	.pie-editor > span.cambio-pendiente i { background: #d99a24; }
+	.pie-editor > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+	.acciones-gestion { display: flex; flex-wrap: wrap; gap: .5rem; border-top: 1px solid var(--border-subtle); padding-top: 1rem; }
+	.estado-panel { display: flex; align-items: center; justify-content: center; min-height: 10rem; padding: 2rem; color: var(--text-muted); text-align: center; }
+	.estado-panel.error { color: #b42318; }
+	@media (max-width: 640px) { .encuesta-detalle { padding: 1rem; } .enlace { align-items: stretch; flex-direction: column; } .enlace .btn-secondary { align-self: flex-start; } .pie-editor { align-items: stretch; flex-direction: column; bottom: .5rem; } .pie-editor > div { display: grid; grid-template-columns: 1fr; } .acciones-gestion .btn-secondary, .acciones-gestion .btn-danger { flex: 1; } }
 </style>
