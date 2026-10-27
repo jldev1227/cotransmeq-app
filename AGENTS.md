@@ -107,6 +107,21 @@ lo que se rompió antes:
 
 **Prettier con tabs**, comillas simples, sin coma final, ancho 100.
 
+## Ejecutar las apps web
+
+Cuando el usuario pida "ejecuta las apps web" o una instrucción equivalente,
+inicia y deja corriendo los cuatro procesos con npm run dev:
+
+- Transmeralda: ingreso-svelte (http://localhost:5273) y backend-nest
+  (http://localhost:4100).
+- Cotransmeq: cotransmeq-app (http://localhost:5173) y backend-cotransmeq
+  (http://localhost:4000).
+
+Si alguno ya está corriendo, verifica que corresponda al repositorio y
+reutilízalo. Comprueba que los dos frontends respondan por HTTP y que los dos
+backends hayan iniciado y conectado con sus bases de datos antes de dar la
+tarea por terminada.
+
 ## Comandos
 
 ```bash
