@@ -36,6 +36,10 @@ permisos por módulo en [autenticacion-y-permisos.md](./autenticacion-y-permisos
 | Ingresos | `/dashboard/liquidaciones-terceros/ingresos/canvas` | `liquidaciones-terceros` | Un mes; hojas INGRESOS y ADICIONALES | `ingresos-terceros-engine.ts`, `ingresos-terceros.builder.ts` | La tabla es derivada; la capa editable (INCLUIR, cantidades, conceptos del pie) por REST (`guardar`); anotaciones por `sheet-session` |
 | Liquidaciones de servicios | `/dashboard/liquidaciones-servicios/canvas` | `liquidaciones-servicios` | Todo el histórico; hojas Liquidaciones, Facturas y Terceros | `servicios-historial-engine.ts` y sus tres builders | La hoja es de solo lectura. Editar abre `ModalLiquidacion` con el `LiquidacionEditor` completo; presencia y eventos de dominio por `historial-servicios-session` (room global) |
 
+En el análisis de nómina, el resumen agrupa por el mes en que termina cada
+liquidación. Las pestañas de conceptos filtran por el mes de referencia del
+bono, recargo, pernocte o mantenimiento, aunque pertenezca a un corte distinto.
+
 El código de ingresos conserva nombres del gemelo (`ingresos-transmeralda.ts`,
 tablas `liquidacion_ingreso_transmeralda*`, el rótulo «INGRESOS DE
 TRANSMERALDA» en los comentarios): son los ingresos de la empresa que corre la

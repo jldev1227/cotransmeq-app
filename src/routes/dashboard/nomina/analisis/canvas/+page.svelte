@@ -233,8 +233,8 @@
 	/** «Septiembre», «Sep», «09», «9» y «2026-09» (lo que escribe el canvas) → «09». */
 	function mesClave(m: string): string {
 		const t = normalizar(String(m ?? '').trim());
-		const iso = /^(\d{4})-(\d{2})/.exec(t);
-		if (iso) return iso[2];
+		const iso = /^(\d{4})-(\d{1,2})/.exec(t);
+		if (iso) return iso[2].padStart(2, '0');
 		if (/^\d{1,2}$/.test(t)) return t.padStart(2, '0');
 		const i = MESES.findIndex(
 			(n) => normalizar(n) === t || normalizar(n).startsWith(t.slice(0, 3))
@@ -274,7 +274,7 @@
 	// =============================================
 	// FILTRADO EN CLIENTE
 	// =============================================
-	const liqs = $derived.by(() => {
+	const liqsConBusqueda = $derived.by(() => {
 		const todas = datos?.liquidaciones ?? [];
 		const q = normalizar(filtros.q.trim());
 		if (!q) return todas;
@@ -285,10 +285,34 @@
 				l.vehiculos.some((v) => normalizar(v.placa).includes(q))
 		);
 	});
+	/// El resumen sigue el periodo que termina el corte; los detalles se filtran
+	/// por el mes guardado en cada concepto.
+	const liqs = $derived(
+		liqsConBusqueda.filter(
+			(l) =>
+				(!filtros.anios.length || filtros.anios.includes(String(l.anio))) &&
+				(!filtros.meses.length || filtros.meses.includes(String(l.mes).padStart(2, '0')))
+		)
+	);
 
 	const placaPasa = (placa: string | null) =>
 		!filtros.placas.length || (!!placa && filtros.placas.includes(placa));
-	const mesPasa = (clave: string) => !filtros.meses.length || filtros.meses.includes(clave);
+	function periodoConcepto(valor: string, anioLiquidacion: number, mesRespaldo = 0) {
+		const texto = String(valor ?? '').trim();
+		const iso = /^(\d{4})-(\d{1,2})/.exec(texto);
+		const clave = mesClave(texto);
+		return {
+			anio: iso ? Number(iso[1]) : anioLiquidacion,
+			clave: clave || (mesRespaldo ? String(mesRespaldo).padStart(2, '0') : '')
+		};
+	}
+	const periodoReferenciaPasa = (valor: string, anioLiquidacion: number, mesRespaldo = 0) => {
+		const periodo = periodoConcepto(valor, anioLiquidacion, mesRespaldo);
+		return (
+			(!filtros.anios.length || filtros.anios.includes(String(periodo.anio))) &&
+			(!filtros.meses.length || filtros.meses.includes(periodo.clave))
+		);
+	};
 
 	// ── Bonificaciones ──
 	interface FilaBon {
@@ -304,13 +328,14 @@
 	}
 	const filasBon = $derived.by(() => {
 		const mapa = new Map<string, FilaBon>();
-		for (const l of liqs) {
+		for (const l of liqsConBusqueda) {
 			for (const b of l.bonificaciones) {
 				if (!placaPasa(b.placa)) continue;
 				for (const v of b.valores) {
-					const mk = mesClave(v.mes);
-					if (!mesPasa(mk) || v.cantidad <= 0) continue;
-					const k = `${b.placa}|${b.nombre}|${b.valor_unitario}|${l.conductor.nombre}|${l.anio}|${mk}`;
+					const periodo = periodoConcepto(v.mes, l.anio);
+					const { anio, clave: mk } = periodo;
+					if (!periodoReferenciaPasa(v.mes, l.anio) || v.cantidad <= 0) continue;
+					const k = `${b.placa}|${b.nombre}|${b.valor_unitario}|${l.conductor.nombre}|${anio}|${mk}`;
 					const e = mapa.get(k);
 					if (e) {
 						e.cantidad += v.cantidad;
@@ -322,7 +347,7 @@
 							nombre: b.nombre,
 							mes: mesNombre(mk),
 							mesClave: mk,
-							anio: l.anio,
+							anio,
 							cantidad: v.cantidad,
 							valorUnitario: b.valor_unitario,
 							total: v.cantidad * b.valor_unitario
@@ -349,11 +374,12 @@
 	}
 	const filasRec = $derived.by(() => {
 		const res: FilaRec[] = [];
-		for (const l of liqs) {
+		for (const l of liqsConBusqueda) {
 			for (const r of l.recargos) {
 				if (!placaPasa(r.placa)) continue;
-				const mk = mesClave(r.mes);
-				if (!mesPasa(mk)) continue;
+				const periodo = periodoConcepto(r.mes, l.anio, l.mes);
+				const { anio, clave: mk } = periodo;
+				if (!periodoReferenciaPasa(r.mes, l.anio, l.mes)) continue;
 				if (filtros.pagaCliente === 'si' && !r.paga_cliente) continue;
 				if (filtros.pagaCliente === 'no' && r.paga_cliente) continue;
 				const base = {
@@ -362,7 +388,7 @@
 					cliente: r.cliente || '—',
 					mes: mesNombre(mk),
 					mesClave: mk,
-					anio: l.anio,
+					anio,
 					pagaCliente: r.paga_cliente,
 					porcentaje: r.porcentaje_propietario
 				};
@@ -391,15 +417,47 @@
 	}
 	const filasPer = $derived.by(() => {
 		const res: FilaPer[] = [];
-		for (const l of liqs) {
+		for (const l of liqsConBusqueda) {
 			for (const p of l.pernotes) {
 				if (!placaPasa(p.placa)) continue;
-				if (
-					filtros.meses.length &&
-					p.fechas.length &&
-					!p.fechas.some((f) => filtros.meses.includes(f.slice(5, 7)))
-				)
+				if (!filtros.anios.length && !filtros.meses.length) {
+					res.push({
+						placa: p.placa ?? '—',
+						conductor: l.conductor.nombre,
+						cliente: p.cliente || '—',
+						anio: l.anio,
+						cantidad: p.cantidad,
+						valorUnitario: p.valor_unitario,
+						total: p.cantidad * p.valor_unitario,
+						fechas: fechasAgrupadas(p.fechas)
+					});
 					continue;
+				}
+				if (p.fechas.length) {
+					const porMes = new Map<string, string[]>();
+					for (const fecha of p.fechas) {
+						const referencia = fecha.slice(0, 7);
+						if (!periodoReferenciaPasa(referencia, l.anio)) continue;
+						const lista = porMes.get(referencia) ?? [];
+						lista.push(fecha);
+						porMes.set(referencia, lista);
+					}
+					for (const fechas of porMes.values()) {
+						const cantidad = fechas.length;
+						res.push({
+							placa: p.placa ?? '—',
+							conductor: l.conductor.nombre,
+							cliente: p.cliente || '—',
+							anio: Number(fechas[0].slice(0, 4)) || l.anio,
+							cantidad,
+							valorUnitario: p.valor_unitario,
+							total: cantidad * p.valor_unitario,
+							fechas: fechasAgrupadas(fechas)
+						});
+					}
+					continue;
+				}
+				if (!periodoReferenciaPasa('', l.anio, l.mes)) continue;
 				res.push({
 					placa: p.placa ?? '—',
 					conductor: l.conductor.nombre,
@@ -408,7 +466,7 @@
 					cantidad: p.cantidad,
 					valorUnitario: p.valor_unitario,
 					total: p.cantidad * p.valor_unitario,
-					fechas: fechasAgrupadas(p.fechas)
+					fechas: '—'
 				});
 			}
 		}
@@ -426,13 +484,14 @@
 	}
 	const filasMnt = $derived.by(() => {
 		const mapa = new Map<string, FilaMnt>();
-		for (const l of liqs) {
+		for (const l of liqsConBusqueda) {
 			for (const m of l.mantenimientos) {
 				if (!placaPasa(m.placa)) continue;
 				for (const v of m.valores) {
-					const mk = mesClave(v.mes);
-					if (!mesPasa(mk) || v.cantidad <= 0) continue;
-					const k = `${m.placa}|${l.conductor.nombre}|${l.anio}|${mk}`;
+					const periodo = periodoConcepto(v.mes, l.anio);
+					const { anio, clave: mk } = periodo;
+					if (!periodoReferenciaPasa(v.mes, l.anio) || v.cantidad <= 0) continue;
+					const k = `${m.placa}|${l.conductor.nombre}|${anio}|${mk}`;
 					const e = mapa.get(k);
 					if (e) e.cantidad += v.cantidad;
 					else
@@ -441,7 +500,7 @@
 							conductor: l.conductor.nombre,
 							mes: mesNombre(mk),
 							mesClave: mk,
-							anio: l.anio,
+							anio,
 							cantidad: v.cantidad
 						});
 				}
@@ -481,6 +540,11 @@
 			t.dias += l.dias_laborados;
 			if (l.estado_flujo === 'FIRMADA') t.firmadas++;
 		}
+		/// Las tarjetas de conceptos acompañan sus pestañas: un bono puede pagarse
+		/// en septiembre y referirse a agosto, así que no debe heredar el total del corte.
+		t.bonificaciones = t.bonFilas;
+		t.recargos = t.recFilas;
+		t.pernotes = t.perFilas;
 		return t;
 	});
 
@@ -994,7 +1058,7 @@
 			<p>{errorCarga}</p>
 			<button type="button" class="btn-secondary" onclick={() => cargar(true)}>Reintentar</button>
 		</div>
-	{:else if datos && !liqs.length}
+	{:else if datos && !liqsConBusqueda.length}
 		<div class="an-estado">
 			<img src={mascota('vacio').src} alt="" class="an-estado-mascota" aria-hidden="true" />
 			<p>Ninguna liquidación cumple los filtros.</p>
@@ -1005,7 +1069,7 @@
 	{:else if datos}
 		<!-- ── Cifras ── -->
 		<section class="an-cifras" class:an-cargando={cargando}>
-			{#each [{ etiqueta: 'Liquidaciones', valor: num.format(totales.liquidaciones), detalle: `${totales.conductores} conductores · ${totales.placas} placas` }, { etiqueta: 'Neto pagado', valor: fmt(totales.neto), detalle: `${num.format(totales.dias)} días laborados`, fuerte: true }, { etiqueta: 'Devengado', valor: fmt(totales.devengado), detalle: 'salario del periodo' }, { etiqueta: 'Bonificaciones', valor: fmt(totales.bonificaciones), detalle: `${filasBon.length} filas en detalle` }, { etiqueta: 'Recargos', valor: fmt(totales.recargos), detalle: `${filasRec.length} filas en detalle` }, { etiqueta: 'Pernoctes', valor: fmt(totales.pernotes), detalle: `${filasPer.length} filas en detalle` }, { etiqueta: 'Deducciones', valor: fmt(totales.deducciones), detalle: 'salud, pensión y anticipos' }, { etiqueta: 'Firmadas', valor: `${totales.firmadas} / ${totales.liquidaciones}`, detalle: `${totales.mantenimientos} mantenimientos` }] as c (c.etiqueta)}
+			{#each [{ etiqueta: 'Liquidaciones', valor: num.format(totales.liquidaciones), detalle: `${totales.conductores} conductores · ${totales.placas} placas` }, { etiqueta: 'Neto pagado', valor: fmt(totales.neto), detalle: `${num.format(totales.dias)} días laborados`, fuerte: true }, { etiqueta: 'Devengado', valor: fmt(totales.devengado), detalle: 'salario del periodo' }, { etiqueta: 'Bonificaciones', valor: fmt(totales.bonificaciones), detalle: `${filasBon.length} filas · mes de referencia` }, { etiqueta: 'Recargos', valor: fmt(totales.recargos), detalle: `${filasRec.length} filas · mes de referencia` }, { etiqueta: 'Pernoctes', valor: fmt(totales.pernotes), detalle: `${filasPer.length} filas · mes de referencia` }, { etiqueta: 'Deducciones', valor: fmt(totales.deducciones), detalle: 'salud, pensión y anticipos' }, { etiqueta: 'Firmadas', valor: `${totales.firmadas} / ${totales.liquidaciones}`, detalle: `${totales.mantenimientos} mantenimientos` }] as c (c.etiqueta)}
 				<div class="an-cifra" class:an-cifra--fuerte={c.fuerte}>
 					<span class="an-cifra-etiqueta">{c.etiqueta}</span>
 					<span class="an-cifra-valor">{c.valor}</span>
