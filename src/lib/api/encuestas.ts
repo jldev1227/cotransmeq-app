@@ -28,6 +28,7 @@ export interface EncuestaInput {
 	fecha_cierre: string | null;
 	preguntas: PreguntaEncuesta[];
 }
+export type PropuestaEncuestaIA = Pick<EncuestaInput, 'titulo' | 'descripcion' | 'mensaje_final' | 'preguntas'>;
 export interface Encuesta extends EncuestaInput {
 	id: string;
 	token: string;
@@ -86,6 +87,10 @@ export const encuestasAPI = {
 	},
 	async crear(input: EncuestaInput): Promise<Encuesta> {
 		const { data } = await apiClient.post('/api/encuestas', input);
+		return data.encuesta;
+	},
+	async generar(instrucciones: string): Promise<PropuestaEncuestaIA> {
+		const { data } = await apiClient.post('/api/encuestas/generar', { instrucciones });
 		return data.encuesta;
 	},
 	async actualizar(id: string, input: EncuestaInput): Promise<Encuesta> {

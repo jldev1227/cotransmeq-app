@@ -1,12 +1,17 @@
 <script lang="ts">
-	import { Plus, Trash2, ArrowUp, ArrowDown, Copy, GripVertical } from 'lucide-svelte';
-	import type { EncuestaInput, PreguntaEncuesta, TipoPregunta } from '$lib/api/encuestas';
+	import { Plus, Trash2, ArrowUp, ArrowDown, Copy, GripVertical, Sparkles, LoaderCircle, Check, RotateCcw } from 'lucide-svelte';
+	import { encuestasAPI, type EncuestaInput, type PreguntaEncuesta, type PropuestaEncuestaIA, type TipoPregunta } from '$lib/api/encuestas';
 
 	interface Props {
 		value: EncuestaInput;
 		onChange: (value: EncuestaInput) => void;
 	}
 	let { value, onChange }: Props = $props();
+	let instruccionesIA = $state('');
+	let propuestaIA = $state<PropuestaEncuestaIA | null>(null);
+	let propuestaAplicada = $state(false);
+	let generandoIA = $state(false);
+	let errorIA = $state('');
 
 	const TIPOS: Array<{ value: TipoPregunta; label: string }> = [
 		{ value: 'TEXTO_CORTO', label: 'Texto corto' },
@@ -23,6 +28,29 @@
 
 	function cambiar<K extends keyof EncuestaInput>(clave: K, dato: EncuestaInput[K]) {
 		onChange({ ...value, [clave]: dato });
+	}
+	async function generarConIA() {
+		if (generandoIA || instruccionesIA.trim().length < 5) return;
+		generandoIA = true;
+		errorIA = '';
+		propuestaIA = null;
+		propuestaAplicada = false;
+		try {
+			propuestaIA = await encuestasAPI.generar(instruccionesIA.trim());
+		} catch (error: any) {
+			errorIA = error?.response?.data?.message || error?.message || 'No se pudo preparar la encuesta. Intenta de nuevo.';
+		} finally {
+			generandoIA = false;
+		}
+	}
+	function aplicarPropuesta() {
+		if (!propuestaIA) return;
+		const yaHayContenido = value.preguntas.length > 0 || (value.titulo.trim() && value.titulo !== 'Encuesta nueva') || !!value.descripcion?.trim();
+		if (yaHayContenido && !window.confirm('La propuesta reemplazará el título, la descripción, el mensaje final y las preguntas actuales. Se conservarán las opciones de participantes y procedencia. ¿Quieres continuar?')) return;
+		onChange({ ...value, ...propuestaIA });
+		propuestaIA = null;
+		propuestaAplicada = true;
+		instruccionesIA = '';
 	}
 	function cambiarPregunta(id: string, parcial: Partial<PreguntaEncuesta>) {
 		cambiar('preguntas', value.preguntas.map((p) => p.id === id ? { ...p, ...parcial } : p));
@@ -76,6 +104,24 @@
 </script>
 
 <div class="editor">
+	<section class="page-card ia-panel" aria-labelledby="ia-titulo">
+		<div class="ia-cabecera">
+			<div class="ia-icono"><Sparkles size={18} /></div>
+			<div><span class="ia-etiqueta">ASISTENTE IA</span><h2 id="ia-titulo">Arma la encuesta desde una idea</h2><p>Cuéntame qué quieres conocer o pega aquí tu brief. Prepararé el título y las preguntas en el editor para que los revises.</p></div>
+		</div>
+		<label class="campo ia-instrucciones"><span>¿Sobre qué quieres preguntar?</span><textarea rows="4" maxlength="12000" value={instruccionesIA} oninput={(e) => { instruccionesIA = e.currentTarget.value; errorIA = ''; }} placeholder="Ejemplo: Encuesta anónima para conductores sobre la calidad del servicio de mantenimiento. Crea 8 preguntas: 3 de selección única, una NPS de recomendación, dos escalas de 1 a 5 y dos abiertas. Evalúa tiempos, calidad del trabajo, trato recibido y facilidad para reportar novedades."></textarea></label>
+		<div class="ia-pie"><span>Puedes indicar tipos, cantidad, opciones, preguntas exactas y tono. La IA no publicará ni guardará la encuesta.</span><button type="button" class="btn-primary" disabled={generandoIA || instruccionesIA.trim().length < 5} onclick={() => void generarConIA()}>{#if generandoIA}<LoaderCircle size={16} class="girando" /> Preparando…{:else}<Sparkles size={16} /> Generar propuesta{/if}</button></div>
+		{#if errorIA}<p class="ia-error" role="alert">{errorIA}</p>{/if}
+		{#if propuestaAplicada}<p class="ia-aplicada" role="status"><Check size={16} /> Propuesta incorporada al editor. Revisa y ajusta las preguntas antes de guardar.</p>{/if}
+		{#if propuestaIA}
+			<div class="ia-propuesta">
+				<div class="propuesta-titulo"><div><span class="ia-etiqueta">PROPUESTA LISTA</span><h3>{propuestaIA.titulo}</h3><p>{propuestaIA.preguntas.length} preguntas · Revisa la propuesta antes de incorporarla al formulario.</p></div><span class="propuesta-conteo">{propuestaIA.preguntas.length}</span></div>
+				<ol>{#each propuestaIA.preguntas.slice(0, 5) as pregunta (pregunta.id)}<li><span>{pregunta.titulo}</span><small>{TIPOS.find((tipo) => tipo.value === pregunta.tipo)?.label ?? pregunta.tipo}</small></li>{/each}</ol>
+				{#if propuestaIA.preguntas.length > 5}<p class="mas-preguntas">Y {propuestaIA.preguntas.length - 5} preguntas más…</p>{/if}
+				<div class="propuesta-acciones"><button type="button" class="btn-secondary" onclick={() => { propuestaIA = null; }}>Descartar</button><button type="button" class="btn-primary" onclick={aplicarPropuesta}><Check size={16} /> Usar esta propuesta</button><button type="button" class="btn-secondary" disabled={generandoIA} onclick={() => void generarConIA()}><RotateCcw size={15} /> Generar otra</button></div>
+			</div>
+		{/if}
+	</section>
 	<section class="page-card cabecera-formulario">
 		<div class="eyebrow">01 · Presentación</div>
 		<label class="campo"><span>Título de la encuesta</span><input value={value.titulo} maxlength="180" oninput={(e) => cambiar('titulo', e.currentTarget.value)} placeholder="¿Qué te gustaría preguntar?" /></label>
@@ -154,6 +200,30 @@
 
 <style>
 	.editor { display: grid; gap: 1rem; }
+	.ia-panel { display: grid; gap: .8rem; border-color: color-mix(in srgb, var(--emerald-500) 28%, var(--border-subtle)); background: linear-gradient(145deg, color-mix(in srgb, var(--emerald-500) 6%, var(--bg-surface)) 0%, var(--bg-surface) 62%); }
+	.ia-cabecera { display: flex; align-items: flex-start; gap: .8rem; }
+	.ia-icono { display: grid; place-items: center; width: 2.4rem; height: 2.4rem; flex: 0 0 auto; border-radius: .75rem; color: var(--emerald-800); background: color-mix(in srgb, var(--emerald-500) 14%, white); }
+	.ia-etiqueta { color: var(--emerald-800); font-size: .66rem; font-weight: 850; letter-spacing: .12em; }
+	.ia-cabecera h2 { margin: .25rem 0; }
+	.ia-cabecera p, .propuesta-titulo p { margin: 0; color: var(--text-muted); font-size: .82rem; line-height: 1.5; }
+	.ia-instrucciones { margin: 0; }
+	.ia-instrucciones textarea { min-height: 7rem; }
+	.ia-pie { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+	.ia-pie > span { max-width: 42rem; color: var(--text-muted); font-size: .75rem; line-height: 1.45; }
+	.ia-error { margin: 0; padding: .7rem .85rem; border: 1px solid color-mix(in srgb, #b42318 25%, transparent); border-radius: .65rem; color: #b42318; background: color-mix(in srgb, #b42318 5%, white); font-size: .8rem; }
+	.ia-aplicada { display: flex; align-items: center; gap: .5rem; margin: 0; padding: .75rem .85rem; border: 1px solid color-mix(in srgb, var(--emerald-500) 26%, transparent); border-radius: .65rem; color: var(--emerald-800); background: color-mix(in srgb, var(--emerald-500) 7%, white); font-size: .8rem; font-weight: 650; }
+	.ia-propuesta { display: grid; gap: .7rem; padding: 1rem; border: 1px solid var(--border-subtle); border-radius: .9rem; background: var(--bg-surface); }
+	.propuesta-titulo { display: flex; justify-content: space-between; gap: 1rem; }
+	.propuesta-titulo h3 { margin: .25rem 0; color: var(--text-primary); font-size: 1rem; }
+	.propuesta-conteo { display: grid; place-items: center; width: 2.3rem; height: 2.3rem; flex: 0 0 auto; border-radius: .7rem; color: var(--emerald-800); background: color-mix(in srgb, var(--emerald-500) 12%, white); font-weight: 800; }
+	.ia-propuesta ol { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+	.ia-propuesta li { display: flex; justify-content: space-between; align-items: center; gap: .8rem; padding: .55rem .65rem; border-radius: .55rem; background: var(--bg-base); font-size: .8rem; }
+	.ia-propuesta li span { min-width: 0; }
+	.ia-propuesta li small { flex: 0 0 auto; color: var(--text-muted); font-size: .7rem; }
+	.mas-preguntas { margin: 0; color: var(--text-muted); font-size: .75rem; }
+	.propuesta-acciones { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; }
+	.girando { animation: girar 1s linear infinite; }
+	@keyframes girar { to { transform: rotate(360deg); } }
 	.eyebrow { margin-bottom: .75rem; }
 	h2 { margin: 0 0 .5rem; font-size: 1.15rem; letter-spacing: -.02em; }
 	h2 span { color: var(--text-muted); font-weight: 500; }
@@ -191,5 +261,5 @@
 	.escala-config { max-width: 24rem; }
 	.requerida { border-top: 1px solid var(--border-subtle); padding-top: 1rem; }
 	.agregar-final { width: 100%; display: flex; justify-content: center; align-items: center; gap: .4rem; min-height: 44px; border: 1px dashed var(--border-default); border-radius: 12px; padding: .7rem; background: var(--bg-surface); color: var(--emerald-800); font: inherit; font-weight: 700; cursor: pointer; }
-	@media (max-width: 650px) { .pregunta-principal { grid-template-columns: 1fr; gap: 0; } .preguntas-cabecera { align-items: start; flex-direction: column; } }
+	@media (max-width: 650px) { .pregunta-principal { grid-template-columns: 1fr; gap: 0; } .preguntas-cabecera { align-items: start; flex-direction: column; } .ia-pie { align-items: stretch; flex-direction: column; } .ia-pie .btn-primary { justify-content: center; } .propuesta-acciones { display: grid; grid-template-columns: 1fr; } .ia-propuesta li { align-items: flex-start; flex-direction: column; gap: .2rem; } }
 </style>
