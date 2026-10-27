@@ -112,7 +112,7 @@
 			{/if}
 		</div>
 		<div class="header-title">
-			<div class="co">TRANSPORTES Y SERVICIOS ESMERALDA S.A.S.</div>
+			<div class="co">SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S.</div>
 			<div class="doc-name">{documento.titulo}</div>
 		</div>
 		<div class="header-meta">
@@ -355,7 +355,7 @@
 	<div class="doc-ft">
 		<span class="code">COTRANSMEQ</span>
 		<span>Generado el {hoy}</span>
-		<span>Transportes y Servicios Esmeralda S.A.S.</span>
+		<span>Servicios y Transportes Cotransmeq S.A.S.</span>
 	</div>
 	{/if}
 </div>

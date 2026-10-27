@@ -2,7 +2,7 @@
 //
 // Reproduce la misma data que se renderiza en PreviewTerceroPDF.svelte, en una
 // única hoja "Liquidación" que sigue la estructura visual del PDF:
-//   1. Bloque de título (TRANSPORTES Y SERVICIOS ESMERALDA S.A.S. + GAF-FR-11).
+//   1. Bloque de título (SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S. + GAF-FR-11).
 //   2. Period bar (MES, AÑO, PLACA, CONSECUTIVO, TERCERO).
 //   3. Estado de la liquidación.
 //   4. Tabla principal de LIQUIDACION DE TRANSPORTE (items + adicionales + TOTALES).
@@ -427,7 +427,7 @@ function buildHeader(ws: any, wb: any, imageId: string | null): void {
 
 	// ── Título: C1:O1 (company), C2:O2 (doc), C3:O3 (sub) ──
 	ws.mergeCells('C1:O1');
-	setCell(ws, 'C1', 'TRANSPORTES Y SERVICIOS ESMERALDA S.A.S.', {
+	setCell(ws, 'C1', 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S.', {
 		size: 14,
 		bold: true,
 		color: GREEN,

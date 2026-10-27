@@ -469,7 +469,7 @@
 						<p
 							style="font-family: var(--font-sans); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin: 0 0 0.15rem;"
 						>
-							Transportes y Servicios Esmeralda S.A.S.
+							Servicios y Transportes Cotransmeq S.A.S.
 						</p>
 						<h2
 							style="font-family: var(--font-sans); font-weight: 500; font-size: 1.5rem; line-height: 1.15; color: #0f172a; margin: 0;"
@@ -1004,7 +1004,7 @@
 					GAF-FR-REC · V1
 				</span>
 				<span style="font-family: var(--font-sans);">
-					Generado el {fechaGeneradoLarga} · TRANSPORTES Y SERVICIOS ESMERALDA S.A.S.
+					Generado el {fechaGeneradoLarga} · SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S.
 				</span>
 			</div>
 		</div>

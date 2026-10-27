@@ -58,10 +58,8 @@
 		const esCotransmeq = item.es_cotransmeq || false;
 		const color = '#EA580C';
 		const colorBg = '#FFF7ED';
-		const empresa = esCotransmeq
-			? 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S'
-			: 'TRANSPORTES Y SERVICIOS ESMERALDA S.A.S';
-		const nit = esCotransmeq ? '901983227' : '901528440-3';
+		const empresa = 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S.';
+		const nit = '901983227';
 
 		const conductorNombre = `${safe(item.conductor?.nombre, 'N/A')}`;
 		const conductorCedula = safe(item.conductor?.cedula || item.conductor?.numero_identificacion, 'N/A');

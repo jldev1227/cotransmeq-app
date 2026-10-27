@@ -7,8 +7,8 @@
  * estuviera dentro de los builders, esos archivos dejarían de ser comparables
  * y la siguiente corrección habría que aplicarla a mano dos veces.
  *
- * La razón social es la misma en ambos (así la pinta ya `DocumentoHoja.svelte`
- * en los dos repos); lo que cambia es la marca corta del logotipo y los COLORES.
+ * La razón social identifica a Cotransmeq en este repo; debe coincidir con el
+ * membrete de `DocumentoHoja.svelte`, no con la razón social de Transmeralda.
  *
  * ── POR QUÉ HAY TANTOS TONOS ──────────────────────────────────────────────
  *
@@ -54,7 +54,7 @@
 export const IDENTIDAD = {
 	/** Logotipo escrito, en la esquina superior izquierda de cada hoja. */
 	marca: 'COTRANSMEQ',
-	razonSocial: 'TRANSPORTES Y SERVICIOS ESMERALDA S.A.S.',
+	razonSocial: 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S.',
 	colores: {
 		/** Banda de título de una hoja o de un bloque. El tono más oscuro. */
 		fuerte: '#FB923C',

@@ -287,7 +287,7 @@ function pintarCabecera(ws: any, doc: DocumentoPreview, ancho: number, fila: num
 	const finTitulo = Math.max(1, ancho - 2);
 
 	fusionar(ws, fila, 1, finTitulo);
-	pintar(ws.getCell(fila, 1), 'TRANSPORTES Y SERVICIOS ESMERALDA S.A.S.', {
+	pintar(ws.getCell(fila, 1), 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S.', {
 		size: 12,
 		bold: true,
 		color: VERDE,

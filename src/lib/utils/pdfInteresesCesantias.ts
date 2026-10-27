@@ -28,10 +28,8 @@ export async function generarPdfInteresesCesantias(
 
 	const esCotransmeq = item.es_cotransmeq || false;
 	const color = esCotransmeq ? '#FF9500' : '#2E8B57';
-	const empresa = esCotransmeq
-		? 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S'
-		: 'TRANSPORTES Y SERVICIOS ESMERALDA S.A.S';
-	const nit = esCotransmeq ? '901983227' : '901528440-3';
+	const empresa = 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S.';
+	const nit = '901983227';
 
 	const conductorNombre = `${safeValue(item.conductor?.nombre, 'N/A')}`;
 	const conductorCedula = safeValue((item.conductor as any)?.cedula, 'N/A');
