@@ -23,21 +23,17 @@ const PAREX_EMPRESA_ID = 'cfb258a6-448c-4469-aa71-8eeafa4530ef';
 const GEOPARK_EMPRESA_ID = 'eea5eda5-1b60-45a0-b4c7-606a8c908ff9';
 
 /** Colores e imágenes del diseño 2 para esta empresa. */
-const MARCA_DISENO: Omit<MarcaDesprendible, 'razonSocial' | 'nit' | 'logo' | 'mascota' | 'sello'> & {
+const MARCA_DISENO: Omit<MarcaDesprendible, 'razonSocial' | 'nit' | 'logo' | 'sello'> & {
 	logoUrl: string;
-	mascotaUrl: string;
 	selloUrl: string;
 } = {
 	nombre: 'Cotransmeq',
 	oscuro: '#14532D',
 	suave: '#FFEDD5',
 	acento: '#F97316',
-	kicker: '#FDBA74',
-	periodo: '#FFEDD5',
 	borde: '#FED7AA',
 	fondoSuave: '#FFF7ED',
-	logoUrl: '/assets/logo_nombre_white.webp',
-	mascotaUrl: '/mascot/trabajando.webp',
+	logoUrl: '/assets/logo_nombre.webp',
 	selloUrl: '/assets/sello-firma-terceros.webp'
 };
 
@@ -641,9 +637,8 @@ export async function construirDocDefinition(
 		}
 	}
 
-	const [logoMarca, mascotaMarca, selloMarca] = await Promise.all([
+	const [logoMarca, selloMarca] = await Promise.all([
 		logoPngDataUrl(MARCA_DISENO.logoUrl),
-		logoPngDataUrl(MARCA_DISENO.mascotaUrl),
 		logoPngDataUrl(MARCA_DISENO.selloUrl)
 	]);
 
@@ -652,7 +647,6 @@ export async function construirDocDefinition(
 		razonSocial: empresa,
 		nit,
 		logo: logoMarca,
-		mascota: mascotaMarca,
 		sello: selloMarca
 	};
 	const fechaGeneracion = new Date().toLocaleDateString('es-CO');
