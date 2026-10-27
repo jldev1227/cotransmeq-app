@@ -59,29 +59,32 @@ export function colgarCheckboxSiNo(
 	fUniver: unknown,
 	sheetId: string,
 	columnas: number[],
-	rango: RangoFilas | null
+	rango: RangoFilas | RangoFilas[] | null
 ): boolean {
-	if (!rango || columnas.length === 0) return false;
+	const rangos = Array.isArray(rango) ? rango : rango ? [rango] : [];
+	if (rangos.length === 0 || columnas.length === 0) return false;
 	const api = fUniver as any;
 	if (!hayValidacionDeDatos(api)) return false;
-
-	const filas = rango.hasta - rango.desde + 1;
-	if (filas <= 0) return false;
 
 	try {
 		const hoja = api.getActiveWorkbook?.()?.getSheetBySheetId?.(sheetId);
 		if (!hoja?.getRange) return false;
-		for (const columna of columnas) {
-			// Una regla por columna: `setDataValidation` toma el rango de la
-			// llamada, y dos columnas no contiguas no se pueden expresar en un
-			// solo rango rectangular.
-			const regla = api
-				.newDataValidation()
-				.requireCheckbox(CHECKBOX_SI, CHECKBOX_NO)
-				.build();
-			hoja.getRange(rango.desde, columna, filas, 1).setDataValidation(regla);
+		let aplicada = false;
+		for (const tramo of rangos) {
+			const filas = tramo.hasta - tramo.desde + 1;
+			if (filas <= 0) continue;
+			for (const columna of columnas) {
+				// Una regla por columna y tramo: `setDataValidation` toma el rango
+				// de la llamada; filas retiradas separan los tramos editables.
+				const regla = api
+					.newDataValidation()
+					.requireCheckbox(CHECKBOX_SI, CHECKBOX_NO)
+					.build();
+				hoja.getRange(tramo.desde, columna, filas, 1).setDataValidation(regla);
+				aplicada = true;
+			}
 		}
-		return true;
+		return aplicada;
 	} catch (e) {
 		console.warn('[checkbox-si-no] no se pudo colgar el checkbox', { sheetId, e });
 		return false;

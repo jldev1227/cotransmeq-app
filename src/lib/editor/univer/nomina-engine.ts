@@ -29,6 +29,7 @@ import { contraste } from '../builders/colores-canvas';
 import { TEXT_DARK } from '../builders/historial-comun';
 import { colorDeHoja } from '../builders/nomina-estado';
 import { activarHoja } from './activar-hoja';
+import { colorGuardadoDeHoja } from './sheet-preferences';
 import { clearNominaBindings } from '../business/nomina-cell-binding';
 import { repintando } from './cell-permission-nomina';
 import { suprimirEco } from './apply-remote-patch';
@@ -120,7 +121,7 @@ export function createNominaEngine(opts: NominaEngineOptions): NominaEngineConte
 			try {
 				const wb = ctx.fUniver.getUniverSheet(unitId);
 				const hoja = wb?.getSheetBySheetId?.(sheetId);
-				hoja?.setTabColor?.(colorDeHoja(estado));
+				hoja?.setTabColor?.(colorGuardadoDeHoja(unitId, sheetId) ?? colorDeHoja(estado));
 			} catch {
 				// Si la API de pestañas cambia entre versiones, el color es lo
 				// de menos: la insignia de la barra sigue diciendo el estado.

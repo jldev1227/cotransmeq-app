@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import type { EstadoLiquidacionServicio } from './liquidaciones-servicios';
 
 // ═══ Tipos ═══
 
@@ -62,7 +63,7 @@ export interface FacturaInfoMap {
 export interface LiquidacionAfectada {
 	id: string;
 	consecutivo: string;
-	estado: 'FACTURADA' | 'LIQUIDADA';
+	estado: EstadoLiquidacionServicio;
 	factura_id: string | null;
 	numero_factura: string | null;
 }

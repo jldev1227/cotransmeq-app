@@ -112,6 +112,7 @@ export function faltantesDeBorrador(v: Record<string, unknown>): string[] {
 		if (!v.vehiculo_placa) faltan.push('la placa');
 		if (!v.hora_inicio) faltan.push('la hora inicial');
 		if (!v.hora_fin) faltan.push('la hora final');
+		if (!v.descripcion) faltan.push('la descripción del servicio');
 		return faltan;
 	}
 	if (!tipo) faltan.push('el tipo de día (DISPONIBLE, DESCANSO o MANTENIMIENTO), o placa y horario si es un recorrido');

@@ -33,6 +33,11 @@ import { instalarParcheSubmenusContextuales } from './parche-submenus-contextual
 import UniverPresetSheetsCoreEsES from '@univerjs/preset-sheets-core/locales/es-ES';
 import UniverPresetSheetsDataValidationEsES from '@univerjs/preset-sheets-data-validation/locales/es-ES';
 import UniverPresetSheetsFilterEsES from '@univerjs/preset-sheets-filter/locales/es-ES';
+import {
+  aplicarPreferenciasAlSnapshot,
+  observarPreferenciasHojas,
+  type PreferenciasHojasOptions
+} from './sheet-preferences';
 
 /**
  * Parche de i18n: `@univerjs/sheets-ui` pide las claves
@@ -94,6 +99,8 @@ const engineWorkers = new WeakMap<Univer, Worker>();
 /// Disposers de `anclarEditorDeCelda`, por instancia. Mismo patrón que los
 /// workers: `disposeEngine` los suelta al desmontar el canvas.
 const engineAnclas = new WeakMap<Univer, () => void>();
+/// Preferencias locales de pestañas, por workbook y periodo.
+const engineSheetPreferences = new WeakMap<Univer, () => void>();
 
 export interface EngineOptions {
   container: HTMLElement;
@@ -148,6 +155,8 @@ export interface EngineOptions {
    * la cabecera y los datos; ver `servicios-historial-engine.ts`.
    */
   filtros?: boolean;
+  /** Guarda el orden y los colores de las pestañas por `workbookData.id`. */
+  sheetPreferences?: PreferenciasHojasOptions | false;
 }
 
 export function createLiquidacionEngine(opts: EngineOptions): EngineContext {
@@ -260,7 +269,7 @@ export function createLiquidacionEngine(opts: EngineOptions): EngineContext {
   engineWorkers.set(univer, formulaWorker);
 
   // 9) Crear el workbook con el snapshot mínimo si no se provee uno.
-  const workbookData: IWorkbookData = opts.workbookData ?? {
+  let workbookData: IWorkbookData = opts.workbookData ?? {
     id: `workbook-${Date.now()}`,
     name: 'Liquidación',
     appVersion: '0.25.1',
@@ -292,10 +301,20 @@ export function createLiquidacionEngine(opts: EngineOptions): EngineContext {
       }
     }
   };
+  if (opts.workbookData && opts.sheetPreferences !== false) {
+    workbookData = aplicarPreferenciasAlSnapshot(workbookData, opts.sheetPreferences ?? {});
+  }
   const unitId = workbookData.id;
   workbookData.id = unitId;
 
   fUniver.createWorkbook(workbookData);
+
+  if (opts.workbookData && opts.sheetPreferences !== false) {
+    engineSheetPreferences.set(
+      univer,
+      observarPreferenciasHojas(univer, fUniver, unitId, opts.sheetPreferences ?? {})
+    );
+  }
 
   // Evita que el editor de celda se despegue de su celda al desplazarse.
   // Se cablea aquí y no en cada engine porque los cuatro canvas del módulo
@@ -325,6 +344,15 @@ export function disposeEngine(
   unitId: string,
   container: HTMLElement
 ): void {
+  const soltarPreferencias = engineSheetPreferences.get(univer);
+  if (soltarPreferencias) {
+    try {
+      soltarPreferencias();
+    } catch (e) {
+      console.warn('[editor] preferencias de hojas: error al soltar', e);
+    }
+    engineSheetPreferences.delete(univer);
+  }
   const soltarAncla = engineAnclas.get(univer);
   if (soltarAncla) {
     try {

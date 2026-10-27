@@ -79,6 +79,7 @@ function itemsDeDetalle(d: any): ItemCierre[] {
 			const lt = it.liquidacion_tercero;
 			return {
 				pivoteId: it.id,
+				liquidacion_servicio_id: txt(lt.liquidacion_id ?? lt.liquidacion?.id),
 				liquidacion_servicio_consecutivo: txt(lt.liquidacion?.consecutivo),
 				cliente_nombre: txt(lt.liquidacion?.cliente?.nombre),
 				placa: txt(lt.placa || d.placa),
@@ -199,9 +200,11 @@ function propietariosDeDetalle(d: any): Record<string, boolean> {
 
 /** Detalle de la API → entrada del builder. */
 export function aCierreCompleto(detalle: any): CierreFinalCompleto {
+	const items = itemsDeDetalle(detalle);
 	return {
 		hoja: hojaDeDetalle(detalle),
-		items: itemsDeDetalle(detalle),
+		items: items.filter((item) => !item.excluido),
+		itemsEliminados: items.filter((item) => item.excluido),
 		adicionales: adicionalesDeDetalle(detalle),
 		conceptos: (Array.isArray(detalle.conceptos)
 			? detalle.conceptos

@@ -20,6 +20,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { liquidacionesServiciosAPI } from '$lib/api/liquidaciones-servicios';
 	import { borradorQueue, borradorQueueStore } from '$lib/stores/borradorQueue';
+	import { confirmar } from '$lib/stores/confirm';
 	import { claseBadgeEstado } from '$lib/editor/builders/cierres-finales-estado';
 	import type { CierreHoja } from '$lib/editor/builders/cierres-finales-identidad';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
@@ -225,6 +226,7 @@
 	let temporizador: ReturnType<typeof setTimeout> | null = null;
 
 	let forceNew = $state(false);
+	let confirmandoLanzamiento = $state(false);
 	let lanzando = $state(false);
 	let errorLanzar = $state('');
 
@@ -478,7 +480,34 @@
 	}
 
 	async function lanzar() {
-		if (seleccionadas.size === 0 || lanzando) return;
+		if (seleccionadas.size === 0 || lanzando || confirmandoLanzamiento) return;
+		const origenes = [...new Map(
+			liquidaciones
+				.filter((l) => seleccionadas.has(l.id))
+				.map((l) => [`${l.anio}-${l.mes}`, { anio: l.anio, mes: l.mes }] as const)
+		).values()].sort((a, b) => a.anio - b.anio || a.mes - b.mes);
+		const origenTexto = origenes.length
+			? origenes.map((p) => `${MESES[p.mes - 1] ?? p.mes} ${p.anio}`).join(', ')
+			: 'No se pudo determinar';
+		const destino = `${String(mes).padStart(2, '0')}/${anio}`;
+		confirmandoLanzamiento = true;
+		let confirmado = false;
+		try {
+			confirmado = await confirmar({
+				eyebrow: 'CIERRES FINALES',
+				title: `¿Generar borradores para ${destino}?`,
+				message:
+					`Los servicios seleccionados provienen de: ${origenTexto}. ` +
+					`Los borradores se crearán en ${destino}, periodo fijado por el canvas. ` +
+					'Confirma que esos meses de origen son los que quieres liquidar.',
+				tone: 'warning',
+				confirmText: 'Generar borradores',
+				cancelText: 'Revisar selección'
+			});
+		} finally {
+			confirmandoLanzamiento = false;
+		}
+		if (!confirmado) return;
 		lanzando = true;
 		errorLanzar = '';
 		try {
@@ -517,7 +546,7 @@
 	subtitle={`Periodo ${String(mes).padStart(2, '0')}/${anio} · fijado por el canvas`}
 	tamano="lg"
 	cerrarAlFondo={false}
-	bloqueado={enCurso}
+	bloqueado={enCurso || confirmandoLanzamiento || lanzando}
 	oncerrar={onClose}
 >
 	{#if job && mostrarProgreso}
@@ -805,16 +834,25 @@
 			<span class="gbm-hint">
 				Las hojas irán apareciendo en el canvas conforme se creen.
 			</span>
-			<button class="btn-secondary" onclick={onClose}>Cancelar</button>
+			<button
+				class="btn-secondary"
+				onclick={onClose}
+				disabled={confirmandoLanzamiento || lanzando}
+			>
+				Cancelar
+			</button>
 			<button
 				class="btn-primary"
 				onclick={lanzar}
 				disabled={seleccionadas.size === 0 ||
 					placasAIncluir.length === 0 ||
 					cargandoPlacas ||
+					confirmandoLanzamiento ||
 					lanzando}
 			>
-				{#if lanzando}
+				{#if confirmandoLanzamiento}
+					Confirmando…
+				{:else if lanzando}
 					Lanzando…
 				{:else if cargandoPlacas}
 					Leyendo placas…

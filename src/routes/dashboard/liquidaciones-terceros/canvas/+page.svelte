@@ -56,7 +56,10 @@
 	import { createSheetSession, type SheetSession } from '$lib/editor/canvas/sheet-session.svelte';
 	import { crearColaEscritura } from '$lib/editor/canvas/cola-escritura.svelte';
 	import type { CierreFinalCompleto } from '$lib/editor/builders/cierres-finales.builder';
-	import { estiloAplicaImpuestos } from '$lib/editor/builders/cierres-finales.builder';
+	import {
+		estiloAplicaImpuestos,
+		estiloCeldaFactura
+	} from '$lib/editor/builders/cierres-finales.builder';
 	import { aCierreCompleto, conHojaDelIndice } from '$lib/editor/builders/cierres-finales-mapper';
 	import type { CierreHoja } from '$lib/editor/builders/cierres-finales-identidad';
 	import { esEditable, nombresUnicos } from '$lib/editor/builders/cierres-finales-identidad';
@@ -75,11 +78,11 @@
 	import CierreEstadoHeader from '$lib/components/liquidaciones-terceros/CierreEstadoHeader.svelte';
 	import ModalEstadoLote from '$lib/components/liquidaciones-terceros/ModalEstadoLote.svelte';
 	import GenerarBorradoresModal from '$lib/components/liquidaciones-terceros/GenerarBorradoresModal.svelte';
+	import ConfiguracionTercerosModal from '$lib/components/liquidaciones-terceros/ConfiguracionTercerosModal.svelte';
 	import EliminarCierreModal from '$lib/components/liquidaciones-terceros/EliminarCierreModal.svelte';
 	import ConductoresCierreModal from '$lib/components/liquidaciones-terceros/ConductoresCierreModal.svelte';
 	import PropietariosCierreModal from '$lib/components/liquidaciones-terceros/PropietariosCierreModal.svelte';
 	import ConceptosCierreModal from '$lib/components/liquidaciones-terceros/ConceptosCierreModal.svelte';
-	import ModalConfigGastosPeriodo from '$lib/components/univer/ModalConfigGastosPeriodo.svelte';
 	import ItemsDisponiblesModal from '$lib/components/liquidaciones-terceros/ItemsDisponiblesModal.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
 	import EnviosCierresModal from '$lib/components/liquidaciones-terceros/envios/EnviosCierresModal.svelte';
@@ -190,6 +193,8 @@
 	 */
 	let modalEnvios = $state(false);
 	let session: SheetSession | null = null;
+	/** Eventos de factura recibidos mientras el detalle del periodo se carga. */
+	const eventosFacturaPendientes = new Map<string, any>();
 
 	/**
 	 * Preview de la HOJA ACTIVA, con exportación a PDF.
@@ -717,13 +722,17 @@
 		if (!d) return;
 
 		const porId = new Map(items.map((i) => [i.id, i]));
-		const nuevos = d.items.map((it) => {
+		const actualizarItem = (it: any) => {
 			const upd = porId.get(it.pivoteId);
 			if (!upd) return it;
 			return {
 				...it,
-				aplica_impuestos: upd.aplica_impuestos !== false,
-				excluido: !!upd.excluido,
+				aplica_impuestos:
+					upd.aplica_impuestos == null ? it.aplica_impuestos : upd.aplica_impuestos !== false,
+				excluido: upd.excluido == null ? it.excluido : !!upd.excluido,
+				numero_factura: upd.numero_factura ?? it.numero_factura,
+				factura_anulada:
+					upd.factura_anulada == null ? it.factura_anulada : !!upd.factura_anulada,
 				// El servidor manda las cuatro columnas de dinero cuando se
 				// edita ADMON %. Se adoptan solo si vienen: el toggle de
 				// impuestos las omite y un `?? it.x` evitaría machacarlas con
@@ -738,8 +747,13 @@
 						}
 					: {})
 			};
-		});
-		detalles = { ...detalles, [cierreId]: { ...d, items: nuevos } };
+		};
+		const nuevos = d.items.map(actualizarItem);
+		const nuevosEliminados = (d.itemsEliminados ?? []).map(actualizarItem);
+		detalles = {
+			...detalles,
+			[cierreId]: { ...d, items: nuevos, itemsEliminados: nuevosEliminados }
+		};
 
 		if (!ctx) return;
 		for (const upd of items) {
@@ -759,6 +773,23 @@
 					estiloAplicaImpuestos(!!upd[campo])
 				);
 			}
+			if (Object.prototype.hasOwnProperty.call(upd, 'numero_factura')) {
+				const activoIdx = d.items.findIndex((it) => it.pivoteId === upd.id);
+				const eliminadoIdx = (d.itemsEliminados ?? []).findIndex((it) => it.pivoteId === upd.id);
+				const celda = getCierreCellFor(ctx.unitId, upd.id, 'numero_factura');
+				if (celda) {
+					aplicarCeldaRemota(
+						ctx,
+						celda,
+						String(upd.numero_factura ?? ''),
+						estiloCeldaFactura(
+							activoIdx >= 0 ? activoIdx % 2 === 1 : eliminadoIdx % 2 === 1,
+							!!upd.factura_anulada,
+							eliminadoIdx >= 0
+						)
+					);
+				}
+			}
 			// ADMON % y sus dos derivadas. Van como NÚMERO: las celdas llevan
 			// patrón (`0.00"%"`, moneda) y mandar el texto ya formateado las
 			// convertiría en cadenas, que es de donde venía el aviso de
@@ -773,6 +804,55 @@
 				aplicarCeldaRemota(ctx, celda, Number(upd[campo]));
 			}
 		}
+	}
+
+	async function actualizarFacturaServicioDesdeSocket(evento: any) {
+		const servicioId = String(evento?.id ?? '');
+		if (!servicioId) return;
+		if (loading) {
+			eventosFacturaPendientes.set(servicioId, evento);
+			return;
+		}
+
+		const afectados = Object.values(detalles)
+			.filter((d) =>
+				[...d.items, ...(d.itemsEliminados ?? [])].some(
+					(it) => it.liquidacion_servicio_id === servicioId
+				)
+			)
+			.map((d) => d.hoja.id);
+		await Promise.all(
+			afectados.map(async (cierreId) => {
+				try {
+					const actualizado = aCierreCompleto(
+						await liquidacionesTercerosDescuentosAPI.obtenerPorId(cierreId, {
+							includeDeleted: true
+						})
+					);
+					const filas = [...actualizado.items, ...actualizado.itemsEliminados]
+						.filter((it) => it.liquidacion_servicio_id === servicioId)
+						.map((it) => ({
+							id: it.pivoteId,
+							numero_factura: it.numero_factura,
+							factura_anulada: it.factura_anulada
+						}));
+					if (filas.length) pintarItems(cierreId, filas);
+				} catch (error) {
+					console.warn('[cierres-canvas] no se pudo actualizar factura en tiempo real', {
+						cierreId,
+						servicioId,
+						error
+					});
+				}
+			})
+		);
+	}
+
+	async function drenarEventosFacturaPendientes() {
+		if (loading || eventosFacturaPendientes.size === 0) return;
+		const eventos = [...eventosFacturaPendientes.values()];
+		eventosFacturaPendientes.clear();
+		await Promise.all(eventos.map((evento) => actualizarFacturaServicioDesdeSocket(evento)));
 	}
 
 	/**
@@ -1134,9 +1214,9 @@
 	async function insertarHojaNueva(hoja: CierreHoja, quien?: string) {
 		if (!hoja?.id || indice.some((c) => c.id === hoja.id)) return;
 		try {
-			const [detalle] = await liquidacionesTercerosDescuentosAPI.detallePeriodo(anio, mes, [
-				hoja.id
-			]);
+			const detalle = await liquidacionesTercerosDescuentosAPI.obtenerPorId(hoja.id, {
+				includeDeleted: true
+			});
 			if (!detalle) return;
 
 			const completo = conHojaDelIndice(aCierreCompleto(detalle), hoja);
@@ -1204,7 +1284,7 @@
 	let cierreAEliminar = $state<CierreHoja | null>(null);
 	let eliminando = $state(false);
 	let modalConceptos = $state(false);
-	let modalConfigGastos = $state(false);
+	let modalConfiguracion = $state(false);
 	let modalTraerItems = $state(false);
 	/// Hubo altas o bajas mientras el modal de conceptos estuvo abierto, así que
 	/// al cerrarlo hay que remontar el libro una vez.
@@ -1297,9 +1377,9 @@
 			loading = true;
 		}
 		try {
-			const [detalle] = await liquidacionesTercerosDescuentosAPI.detallePeriodo(anio, mes, [
-				cierreId
-			]);
+			const detalle = await liquidacionesTercerosDescuentosAPI.obtenerPorId(cierreId, {
+				includeDeleted: true
+			});
 			if (!detalle) return;
 
 			const completo = aCierreCompleto(detalle);
@@ -1329,6 +1409,7 @@
 		} finally {
 			loading = false;
 			progreso = '';
+			void drenarEventosFacturaPendientes();
 			// El eco del `invalidate` llega por socket unos milisegundos después
 			// de la respuesta HTTP, así que la guarda no se puede soltar en el
 			// mismo tick o el eco entraría igual.
@@ -1584,6 +1665,8 @@
 		// usuario se queda mirando las hojas del mes anterior mientras carga
 		// el nuevo y parece que el cambio no ha ocurrido.
 		teardownEngine();
+		detalles = {};
+		indice = [];
 
 		loading = true;
 		loadError = '';
@@ -1632,11 +1715,20 @@
 
 				const lote = ids.slice(i, i + TAM_LOTE);
 				progreso = `Cargando ${Math.min(i + lote.length, ids.length)} de ${ids.length} hojas…`;
-				const detalle = await liquidacionesTercerosDescuentosAPI.detallePeriodo(
-					anio,
-					mes,
-					lote,
-					opts
+				const detalle = await Promise.all(
+					lote.map(async (id) => {
+						try {
+							return await liquidacionesTercerosDescuentosAPI.obtenerPorId(id, {
+								includeDeleted: true,
+								signal
+							});
+						} catch (error) {
+							if (!signal.aborted) {
+								console.warn(`[cierres-canvas] fallo al leer el cierre ${id}`, error);
+							}
+							return null;
+						}
+					})
 				);
 				for (const d of detalle) {
 					if (!d?.id) continue;
@@ -1667,6 +1759,7 @@
 			if (token === cargaToken) {
 				loading = false;
 				progreso = '';
+				void drenarEventosFacturaPendientes();
 			}
 		}
 	}
@@ -1816,7 +1909,12 @@
 		// identidad del JWT, no con la que declare el cliente en cada evento.
 		// La carga inicial la dispara el efecto de arriba, que ya se ejecuta
 		// una vez al montar.
-		connectSocket();
+		const socket = connectSocket();
+		const alFacturarLiquidacion = (evento: any) => {
+			void actualizarFacturaServicioDesdeSocket(evento);
+		};
+		socket.on('liquidacion-servicio-facturada', alFacturarLiquidacion);
+		return () => socket.off('liquidacion-servicio-facturada', alFacturarLiquidacion);
 	});
 
 	/**
@@ -2121,6 +2219,9 @@
 				<button class="univer-btn univer-btn-green" onclick={() => (modalBorradores = true)}>
 					Generar borradores
 				</button>
+				<button class="univer-btn" onclick={() => (modalConfiguracion = true)}>
+					Configurar conceptos
+				</button>
 			</div>
 		{:else}
 			<!-- `loading && !accionEnCurso`: durante una acción del carril el velo
@@ -2184,15 +2285,13 @@
 				onSelect: () => (modalConceptos = true)
 			},
 			{
-				id: 'config-gastos',
-				label: 'Gastos del periodo',
-				hint: 'Tarifas de papelería y gastos diversos con las que nacen los borradores de este mes.',
+				id: 'configuracion',
+				label: 'Configurar conceptos',
+				hint: 'Editar impuestos, prestaciones, valores unitarios de conductores y gastos usados al generar cierres.',
 				icon: icoConfigGastos,
-				// No depende de que haya hoja activa: es configuración del MES, y
-				// tiene sentido revisarla justo antes de generar, cuando todavía no
-				// hay ningún cierre abierto.
+				// La configuración se puede revisar antes de generar el primer cierre.
 				disabled: !!accionEnCurso,
-				onSelect: () => (modalConfigGastos = true)
+				onSelect: () => (modalConfiguracion = true)
 			},
 			{
 				id: 'traer-items',
@@ -2318,7 +2417,7 @@
 		scope="cierres"
 		documento={documentoPreview}
 		subtitulo="{cierreActivoObj?.placa ?? ''}  ·  {cierreActivoObj?.tercero_nombre ??
-			''}  ·  {periodDisplay}  ·  {cierreActivoObj?.estado ?? ''}"
+			''}  ·  {periodDisplay}"
 		onClose={() => (previewAbierto = false)}
 	/>
 {/if}
@@ -2386,12 +2485,11 @@
 	/>
 {/if}
 
-<ModalConfigGastosPeriodo
-	open={modalConfigGastos}
+<ConfiguracionTercerosModal
+	open={modalConfiguracion}
 	{anio}
 	{mes}
-	periodo={periodDisplay}
-	onClose={() => (modalConfigGastos = false)}
+	onClose={() => (modalConfiguracion = false)}
 />
 
 {#if modalConceptos && cierreActivoObj && detalleActivo}

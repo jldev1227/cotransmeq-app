@@ -156,6 +156,8 @@ export function crearRecorridosEngine(opts: {
 		// Autofiltro: filtrar por placa o por cliente es la operación más común
 		// sobre esta hoja.
 		filtros: true,
+		// Orden y color de pestañas son preferencias guardadas por corte.
+		sheetPreferences: { persistirOrden: true, persistirColores: true },
 		// Barra de hojas: hay una por conductor y hay que poder saltar entre
 		// ellas sin salir del canvas.
 		footer: { sheetBar: true, statisticBar: true, zoomSlider: true, menus: true }
@@ -556,7 +558,8 @@ export function crearRecorridosEngine(opts: {
 					escribir(c.sheetId, c.row, c.column, fila.tipo_dia, estiloTipo(fila.tipo_dia, false));
 					continue;
 				}
-				const valor = (fila as unknown as Record<string, unknown>)[c.field];
+				const campo = c.field === 'descripcion_servicio' ? 'descripcion' : c.field;
+				const valor = (fila as unknown as Record<string, unknown>)[campo];
 				escribir(c.sheetId, c.row, c.column, valor ?? '');
 			}
 

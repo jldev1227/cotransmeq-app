@@ -18,6 +18,7 @@
 
 import {
 	IUniverInstanceService,
+	UniverInstanceType,
 	type ICommandInfo,
 	type IRange,
 	type Univer
@@ -36,6 +37,7 @@ const SET_CELL_EDIT_VISIBLE = 'sheet.operation.set-cell-edit-visible';
 /// hasta recargar.
 const CLEAR_CONTENT = 'sheet.command.clear-selection-content';
 const CLEAR_ALL = 'sheet.command.clear-selection-all';
+const REMOVE_ROW = 'sheet.command.remove-row';
 
 /**
  * Eliminación de hoja: bloqueada siempre.
@@ -163,7 +165,7 @@ export function installCierresCellPermission(
 ): () => void {
 	const injector = univer.__getInjector();
 	const interceptor = injector.get(SheetInterceptorService);
-	injector.get(IUniverInstanceService);
+	const instancias = injector.get(IUniverInstanceService);
 	// @ts-ignore
 	const editorBridge = injector.get(IEditorBridgeService as any) as {
 		getEditLocation(): null | { unitId: string; sheetId: string; row: number; column: number };
@@ -203,6 +205,38 @@ export function installCierresCellPermission(
 						'se elimina desde su propio flujo, no arrastrando la pestaña.'
 				);
 				return false;
+			}
+
+			if (id === REMOVE_ROW) {
+				const libro: any = params.unitId
+					? instancias.getUnit(params.unitId, UniverInstanceType.UNIVER_SHEET)
+					: instancias.getCurrentUnitOfType(UniverInstanceType.UNIVER_SHEET);
+				if (!libro) return true;
+				const unitId = libro.getUnitId?.();
+				if (params.unitId && unitId !== params.unitId) return true;
+				const sheetId = params.subUnitId ?? libro.getActiveSheet?.()?.getSheetId?.();
+				if (!unitId || !sheetId) return true;
+				const hoja = libro.getSheetBySheetId?.(sheetId);
+				const rangoActivo = hoja?.getActiveRange?.()?.getRange?.();
+				const rangos: IRange[] = params.ranges?.length
+					? params.ranges
+					: params.range
+						? [params.range]
+						: rangoActivo
+							? [rangoActivo]
+							: [];
+				for (const rango of rangos) {
+					for (let r = rango.startRow; r <= rango.endRow; r++) {
+						const field = getCierreBinding(unitId, sheetId, r, 0)?.field;
+						if (!field?.startsWith('eliminado_solo_lectura')) continue;
+						opts.onBloqueado?.({
+							titulo: 'Los items eliminados son solo consulta',
+							detalle: 'Esta fila se conserva en rojo como referencia y no se puede modificar desde el canvas.'
+						});
+						return false;
+					}
+				}
+				return true;
 			}
 
 			// Sin logs por check: esto corre en cada intento de edición y en

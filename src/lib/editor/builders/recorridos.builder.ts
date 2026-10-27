@@ -35,7 +35,7 @@ import { BorderStyleTypes, type IBorderData, type IBorderStyleData } from '@univ
 import { IDENTIDAD } from './identidad-empresa';
 import { rellenarBordesVacios } from './relleno-bordes';
 import { conductorSheetId, recorridosUnitId } from './recorridos-identidad';
-import type { RecorridoBindingSeed } from '../business/recorridos-cell-binding';
+import type { RecorridoBindingSeed, TipoFilaRecorrido } from '../business/recorridos-cell-binding';
 
 // ─── Tipos del DTO que sirve el backend ───────────────────────────────
 
@@ -480,7 +480,8 @@ export function bindingsDeFila(
 		registroDiaId: f.registro_dia_id
 	};
 	const seeds: RecorridoBindingSeed[] = [];
-	const bind = (c: number, field: string) => seeds.push({ r, c, binding: { ...comun, field } });
+	const bind = (c: number, field: string, tipoFila: TipoFilaRecorrido = f.tipo_fila) =>
+		seeds.push({ r, c, binding: { ...comun, tipoFila, field } });
 
 	/// La FECHA se edita en las dos clases de fila. Es la del DÍA: moverla en
 	/// un recorrido mueve la jornada entera con sus demás tramos, y el
@@ -501,7 +502,21 @@ export function bindingsDeFila(
 		bind(COL.KM_INI, 'km_inicial');
 		bind(COL.KM_FIN, 'km_final');
 	} else {
-		bind(COL.DESCRIPCION, 'observaciones');
+		if (f.tipo_dia === 'LABORADO') {
+			/// Los registros LABORADO antiguos pueden existir sin tramo. Sus celdas
+			/// de servicio quedan como borrador local y se convierten en recorrido
+			/// cuando se completa la placa, el horario y la descripción.
+			bind(COL.PLACA, 'vehiculo_placa', 'promocion');
+			bind(COL.DESCRIPCION, 'descripcion', 'promocion');
+			bind(COL.HORA_INI, 'hora_inicio', 'promocion');
+			bind(COL.HORA_FIN, 'hora_fin', 'promocion');
+			bind(COL.HORAS, 'horas_conducidas', 'promocion');
+			bind(COL.CLIENTE, 'cliente_nombre', 'promocion');
+			bind(COL.KM_INI, 'km_inicial', 'promocion');
+			bind(COL.KM_FIN, 'km_final', 'promocion');
+		} else {
+			bind(COL.DESCRIPCION, 'observaciones');
+		}
 		/// PERNOCTE también en las filas de DÍA.
 		///
 		/// Son los días sin recorrido —disponibilidad, descanso—, y en un

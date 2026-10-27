@@ -51,6 +51,13 @@ En Recorridos, las pestañas y el selector del toolbar se ordenan A–Z por nomb
 y apellido. El servidor conserva su orden de respuesta por apellido; la página
 ordena el DTO antes de montar el libro, sin cambiar la persistencia.
 
+El color manual y el orden arrastrado de las pestañas se guardan localmente por
+corte. En las filas de recorrido se pueden editar fecha, placa, descripción del
+servicio, horario y cliente; cambiar la fecha mueve la jornada completa. Un día
+antiguo `LABORADO` sin tramo permite completar esos datos en la misma fila. Se
+conservan como borrador hasta tener placa, horas y descripción; entonces se crea
+el recorrido y la hoja se actualiza con la fila definitiva.
+
 ## Cómo se monta una página de canvas
 
 ```
