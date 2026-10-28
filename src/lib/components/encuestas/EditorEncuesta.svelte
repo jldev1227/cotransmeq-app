@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Plus, Trash2, ArrowUp, ArrowDown, Copy, GripVertical, Sparkles, LoaderCircle, Check, RotateCcw } from 'lucide-svelte';
 	import { encuestasAPI, type EncuestaInput, type PreguntaEncuesta, type PropuestaEncuestaIA, type TipoPregunta } from '$lib/api/encuestas';
+	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 
 	interface Props {
 		value: EncuestaInput;
@@ -12,10 +13,11 @@
 	let propuestaAplicada = $state(false);
 	let generandoIA = $state(false);
 	let errorIA = $state('');
+	let confirmarReemplazo = $state(false);
 
 	const TIPOS: Array<{ value: TipoPregunta; label: string }> = [
-		{ value: 'TEXTO_CORTO', label: 'Texto corto' },
-		{ value: 'TEXTO_LARGO', label: 'Párrafo' },
+		{ value: 'TEXTO_CORTO', label: 'Texto corto · solo respuesta abierta' },
+		{ value: 'TEXTO_LARGO', label: 'Párrafo · solo respuesta abierta' },
 		{ value: 'OPCION_UNICA', label: 'Elegir una opción' },
 		{ value: 'OPCION_MULTIPLE', label: 'Elegir varias' },
 		{ value: 'SI_NO', label: 'Sí o no' },
@@ -45,12 +47,17 @@
 	}
 	function aplicarPropuesta() {
 		if (!propuestaIA) return;
-		const yaHayContenido = value.preguntas.length > 0 || (value.titulo.trim() && value.titulo !== 'Encuesta nueva') || !!value.descripcion?.trim();
-		if (yaHayContenido && !window.confirm('La propuesta reemplazará el título, la descripción, el mensaje final y las preguntas actuales. Se conservarán las opciones de participantes y procedencia. ¿Quieres continuar?')) return;
 		onChange({ ...value, ...propuestaIA });
 		propuestaIA = null;
 		propuestaAplicada = true;
 		instruccionesIA = '';
+		confirmarReemplazo = false;
+	}
+	function solicitarAplicarPropuesta() {
+		if (!propuestaIA) return;
+		const yaHayContenido = value.preguntas.length > 0 || (value.titulo.trim() && value.titulo !== 'Encuesta nueva') || !!value.descripcion?.trim();
+		if (yaHayContenido) confirmarReemplazo = true;
+		else aplicarPropuesta();
 	}
 	function cambiarPregunta(id: string, parcial: Partial<PreguntaEncuesta>) {
 		cambiar('preguntas', value.preguntas.map((p) => p.id === id ? { ...p, ...parcial } : p));
@@ -67,6 +74,7 @@
 	function cambiarTipo(p: PreguntaEncuesta, tipo: TipoPregunta) {
 		cambiarPregunta(p.id, {
 			tipo,
+			permite_otro: ['OPCION_UNICA', 'OPCION_MULTIPLE'].includes(tipo) ? p.permite_otro ?? false : false,
 			opciones: ['OPCION_UNICA', 'OPCION_MULTIPLE'].includes(tipo) && p.opciones.length < 2
 				? [{ id: crypto.randomUUID(), texto: 'Opción 1' }, { id: crypto.randomUUID(), texto: 'Opción 2' }]
 				: p.opciones
@@ -96,6 +104,11 @@
 	function quitarOpcion(p: PreguntaEncuesta, id: string) {
 		cambiarPregunta(p.id, { opciones: p.opciones.filter(o => o.id !== id) });
 	}
+	function cambiarPermiteOtro(p: PreguntaEncuesta, permite: boolean) {
+		const opciones = [...p.opciones];
+		while (!permite && opciones.length < 2) opciones.push({ id: crypto.randomUUID(), texto: `Opción ${opciones.length + 1}` });
+		cambiarPregunta(p.id, { permite_otro: permite, opciones });
+	}
 	function fechaLocal(iso: string | null) {
 		if (!iso) return '';
 		const d = new Date(iso);
@@ -118,7 +131,7 @@
 				<div class="propuesta-titulo"><div><span class="ia-etiqueta">PROPUESTA LISTA</span><h3>{propuestaIA.titulo}</h3><p>{propuestaIA.preguntas.length} preguntas · Revisa la propuesta antes de incorporarla al formulario.</p></div><span class="propuesta-conteo">{propuestaIA.preguntas.length}</span></div>
 				<ol>{#each propuestaIA.preguntas.slice(0, 5) as pregunta (pregunta.id)}<li><span>{pregunta.titulo}</span><small>{TIPOS.find((tipo) => tipo.value === pregunta.tipo)?.label ?? pregunta.tipo}</small></li>{/each}</ol>
 				{#if propuestaIA.preguntas.length > 5}<p class="mas-preguntas">Y {propuestaIA.preguntas.length - 5} preguntas más…</p>{/if}
-				<div class="propuesta-acciones"><button type="button" class="btn-secondary" onclick={() => { propuestaIA = null; }}>Descartar</button><button type="button" class="btn-primary" onclick={aplicarPropuesta}><Check size={16} /> Usar esta propuesta</button><button type="button" class="btn-secondary" disabled={generandoIA} onclick={() => void generarConIA()}><RotateCcw size={15} /> Generar otra</button></div>
+				<div class="propuesta-acciones"><button type="button" class="btn-secondary" onclick={() => { propuestaIA = null; }}>Descartar</button><button type="button" class="btn-primary" onclick={solicitarAplicarPropuesta}><Check size={16} /> Usar esta propuesta</button><button type="button" class="btn-secondary" disabled={generandoIA} onclick={() => void generarConIA()}><RotateCcw size={15} /> Generar otra</button></div>
 			</div>
 		{/if}
 	</section>
@@ -179,9 +192,11 @@
 					<div class="opciones-editor">
 						<span>Opciones de respuesta</span>
 						{#each p.opciones as o, oi (o.id)}
-							<div class="opcion"><b>{oi + 1}</b><input value={o.texto} maxlength="160" oninput={(e) => actualizarOpcion(p, o.id, e.currentTarget.value)} /><button type="button" title="Quitar opción" disabled={p.opciones.length <= 2} onclick={() => quitarOpcion(p, o.id)}><Trash2 size={15} /></button></div>
+							<div class="opcion"><b>{oi + 1}</b><input value={o.texto} maxlength="160" oninput={(e) => actualizarOpcion(p, o.id, e.currentTarget.value)} /><button type="button" title="Quitar opción" disabled={p.opciones.length <= (p.permite_otro ? 0 : 2)} onclick={() => quitarOpcion(p, o.id)}><Trash2 size={15} /></button></div>
 						{/each}
 						<button type="button" class="enlace" disabled={p.opciones.length >= 30} onclick={() => agregarOpcion(p)}><Plus size={15} /> Otra opción</button>
+						<label class="switch otro-switch"><input type="checkbox" checked={p.permite_otro ?? false} onchange={(e) => cambiarPermiteOtro(p, e.currentTarget.checked)} /><span>Permitir una respuesta abierta</span></label>
+						{#if p.permite_otro}<label class="campo otro-etiqueta"><span>Texto de la opción abierta</span><input value={p.otro_etiqueta ?? 'Otra (especificar)'} maxlength="80" oninput={(e) => cambiarPregunta(p.id, { otro_etiqueta: e.currentTarget.value })} placeholder="Otra (especificar)" /><small>Al elegirla, la persona podrá escribir su respuesta.</small></label>{/if}
 					</div>
 				{:else if p.tipo === 'ESCALA'}
 					<div class="config-grid escala-config">
@@ -197,6 +212,16 @@
 		{#if value.preguntas.length > 0}<button type="button" class="agregar-final" onclick={() => nueva()}><Plus size={16} /> Agregar otra pregunta</button>{/if}
 	</section>
 </div>
+
+<ConfirmDialog
+	open={confirmarReemplazo}
+	title="¿Reemplazar el contenido actual?"
+	message="La propuesta reemplazará el título, la descripción, el mensaje final y las preguntas actuales. Se conservarán las opciones de participantes y procedencia."
+	tone="warning"
+	confirmText="Usar propuesta"
+	onconfirm={aplicarPropuesta}
+	oncancel={() => (confirmarReemplazo = false)}
+/>
 
 <style>
 	.editor { display: grid; gap: 1rem; }
@@ -254,6 +279,9 @@
 	.herramientas button:disabled, .opcion button:disabled { opacity: .35; cursor: default; }
 	.pregunta-principal { display: grid; grid-template-columns: minmax(0, 2fr) minmax(11rem, 1fr); gap: 1rem; }
 	.opciones-editor { margin: 1.1rem 0; }
+	.otro-switch { margin-top: .5rem; }
+	.otro-etiqueta { margin: .25rem 0 0; }
+	.otro-etiqueta small { color: var(--text-muted); font-size: .72rem; }
 	.opcion { display: flex; align-items: center; gap: .6rem; margin-top: .45rem; }
 	.opcion b { width: 1.6rem; text-align: center; color: var(--text-muted); font-size: .75rem; }
 	.opcion input { flex: 1; }

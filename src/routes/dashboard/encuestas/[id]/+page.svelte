@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { ArrowLeft, Save, Send, Copy, ExternalLink, LockKeyhole, FilePlus2, Trash2 } from 'lucide-svelte';
+	import { ArrowLeft, Save, Send, Copy, ExternalLink, LockKeyhole, FilePlus2, Trash2, Pencil } from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import { encuestasAPI, type Encuesta, type EncuestaInput, type ResultadoEncuesta } from '$lib/api/encuestas';
 	import { socketUtils } from '$lib/socket';
@@ -10,6 +10,7 @@
 	import { checkAccess } from '$lib/config/permissions';
 	import EditorEncuesta from '$lib/components/encuestas/EditorEncuesta.svelte';
 	import ResultadosEncuesta from '$lib/components/encuestas/ResultadosEncuesta.svelte';
+	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 
 	const id = $derived(page.params.id ?? '');
 	const puedeGestionar = $derived.by(() => {
@@ -24,6 +25,7 @@
 	let trabajando = $state(false);
 	let error = $state('');
 	let cambios = $state(false);
+	let confirmacion = $state<'cerrar' | 'abrir' | 'archivar' | 'descartar' | null>(null);
 
 	function desdeEncuesta(e: Encuesta): EncuestaInput {
 		/// Después del PUT, `e` ya pasó por `$state` y sus preguntas son proxies;
@@ -65,6 +67,17 @@
 		const baja = socketUtils.on('encuestas:respuesta', (evento: { encuestaId: string }) => {
 			if (evento.encuestaId === id) void cargarResultados(resultados?.pagina ?? 1);
 		});
+		const bajaActualizacion = socketUtils.on('encuestas:actualizada', (evento: { encuestaId: string }) => {
+			if (evento.encuestaId !== id) return;
+			void (async () => {
+				try {
+					const actual = await encuestasAPI.obtener(id);
+					encuesta = actual;
+					if (!cambios) formulario = desdeEncuesta(actual);
+					if (actual.estado !== 'BORRADOR') await cargarResultados(resultados?.pagina ?? 1);
+				} catch (e: any) { toast.error(mensaje(e)); }
+			})();
+		});
 		const reconexion = socketUtils.onReconnect(() => {
 			if (encuesta?.estado !== 'BORRADOR') void cargarResultados(resultados?.pagina ?? 1);
 		});
@@ -72,7 +85,7 @@
 		const intervalo = setInterval(() => {
 			if (document.visibilityState === 'visible' && encuesta?.estado !== 'BORRADOR') void cargarResultados(resultados?.pagina ?? 1);
 		}, 30_000);
-		return () => { baja(); reconexion(); clearInterval(intervalo); };
+		return () => { baja(); bajaActualizacion(); reconexion(); clearInterval(intervalo); };
 	});
 	function editar(value: EncuestaInput) {
 		formulario = value;
@@ -85,7 +98,7 @@
 			encuesta = await encuestasAPI.actualizar(id, formulario);
 			formulario = desdeEncuesta(encuesta);
 			cambios = false;
-			toast.success('Borrador guardado');
+			toast.success(encuesta.estado === 'BORRADOR' ? 'Borrador guardado' : 'Cambios guardados y enviados a quienes están respondiendo');
 			return true;
 		} catch (e: any) {
 			toast.error(mensaje(e));
@@ -110,13 +123,56 @@
 		} finally { trabajando = false; }
 	}
 	async function cerrar() {
-		if (!encuesta || trabajando || !window.confirm('¿Cerrar esta encuesta? El enlace dejará de aceptar respuestas.')) return;
+		if (!encuesta || trabajando) return;
+		confirmacion = 'cerrar';
+	}
+	async function abrir() {
+		if (!encuesta || trabajando) return;
+		confirmacion = 'abrir';
+	}
+	function editarEncuesta() {
+		if (!encuesta || !formulario || !puedeGestionar) return;
+		formulario = desdeEncuesta(encuesta);
+		cambios = false;
+		vista = 'editor';
+	}
+	function volverResultados() {
+		if (cambios) {
+			confirmacion = 'descartar';
+			return;
+		}
+		if (encuesta) formulario = desdeEncuesta(encuesta);
+		vista = encuesta?.estado === 'BORRADOR' ? 'editor' : 'resultados';
+	}
+	async function ejecutarConfirmacion() {
+		const accion = confirmacion;
+		if (!accion || trabajando) return;
+		if (accion === 'descartar') {
+			if (encuesta) formulario = desdeEncuesta(encuesta);
+			cambios = false;
+			vista = encuesta?.estado === 'BORRADOR' ? 'editor' : 'resultados';
+			confirmacion = null;
+			return;
+		}
 		trabajando = true;
 		try {
-			encuesta = await encuestasAPI.accion(id, 'cerrar');
-			toast.success('Encuesta cerrada');
-		} catch (e: any) { toast.error(mensaje(e)); }
-		finally { trabajando = false; }
+			if (accion === 'cerrar') {
+				encuesta = await encuestasAPI.accion(id, 'cerrar');
+				toast.success('Encuesta cerrada. Puedes volver a abrirla cuando quieras.');
+			} else if (accion === 'abrir') {
+				encuesta = await encuestasAPI.accion(id, 'abrir');
+				toast.success('Recepción abierta. El enlace vuelve a aceptar respuestas.');
+			} else {
+				await encuestasAPI.archivar(id);
+				toast.success('Encuesta archivada');
+				await goto('/dashboard/encuestas');
+			}
+			if (encuesta) formulario = desdeEncuesta(encuesta);
+			confirmacion = null;
+		} catch (e: any) {
+			confirmacion = null;
+			toast.error(mensaje(e));
+		} finally { trabajando = false; }
 	}
 	async function duplicar() {
 		if (trabajando) return;
@@ -129,12 +185,7 @@
 		finally { trabajando = false; }
 	}
 	async function archivar() {
-		if (!window.confirm('¿Archivar esta encuesta? El enlace dejará de funcionar y se conservarán sus respuestas.')) return;
-		try {
-			await encuestasAPI.archivar(id);
-			toast.success('Encuesta archivada');
-			await goto('/dashboard/encuestas');
-		} catch (e: any) { toast.error(mensaje(e)); }
+		if (!trabajando) confirmacion = 'archivar';
 	}
 	async function copiar() {
 		if (!encuesta) return;
@@ -160,9 +211,14 @@
 			<div class="dir-cabecera-texto">
 				<div class="detalle-tipo">ENCUESTA <span class="estado" class:publicada={encuesta.estado === 'PUBLICADA'} class:cerrada={encuesta.estado === 'CERRADA'}>{encuesta.estado === 'PUBLICADA' ? 'Publicada' : encuesta.estado === 'CERRADA' ? 'Cerrada' : 'Borrador'}</span></div>
 				<h1 class="dir-titulo">{encuesta.titulo}</h1>
-				<p class="dir-desc">{encuesta.estado === 'BORRADOR' ? 'Configura la presentación y las preguntas. Publica cuando esté lista.' : 'Comparte el enlace y revisa las respuestas de tu grupo.'}</p>
+				<p class="dir-desc">{encuesta.estado === 'BORRADOR' ? 'Configura la presentación y las preguntas. Publica cuando esté lista.' : encuesta.estado === 'CERRADA' ? 'La recepción está cerrada. Puedes reabrirla o editar la encuesta.' : 'Comparte el enlace y revisa las respuestas de tu grupo.'}</p>
 			</div>
 			<div class="dir-cabecera-acciones">
+				{#if puedeGestionar && encuesta.estado !== 'BORRADOR'}
+					<button type="button" class="btn-secondary" onclick={() => vista === 'editor' ? volverResultados() : editarEncuesta()}>
+						<Pencil size={16} /> {vista === 'editor' ? 'Ver resultados' : 'Editar encuesta'}
+					</button>
+				{/if}
 				{#if encuesta.estado !== 'BORRADOR'}
 					<button type="button" class="btn-secondary" onclick={() => void copiar()}><Copy size={16} /> Copiar enlace</button>
 					<a class="btn-primary" href={encuestasAPI.enlace(encuesta.token)} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir encuesta</a>
@@ -174,11 +230,15 @@
 			<div class="enlace page-card"><div><span class="enlace-etiqueta">Enlace para compartir</span><code>{encuestasAPI.enlace(encuesta.token)}</code></div><button class="btn-secondary" type="button" title="Copiar enlace" onclick={() => void copiar()}><Copy size={16} /> Copiar</button></div>
 		{/if}
 
-		{#if vista === 'editor' && encuesta.estado === 'BORRADOR' && !puedeGestionar}
-			<div class="estado-panel page-card">Esta encuesta está en borrador. Puedes consultar los resultados cuando se publique.</div>
-		{:else if vista === 'editor' && encuesta.estado === 'BORRADOR'}
+		{#if vista === 'editor' && !puedeGestionar}
+			<div class="estado-panel page-card">{encuesta.estado === 'BORRADOR' ? 'Esta encuesta está en borrador. Puedes consultar los resultados cuando se publique.' : 'No tienes permiso para editar esta encuesta.'}</div>
+		{:else if vista === 'editor' && puedeGestionar}
 			<EditorEncuesta value={formulario} onChange={editar} />
-			<div class="pie-editor page-card"><span class:cambio-pendiente={cambios}><i></i>{cambios ? 'Cambios sin guardar' : 'Todos los cambios están guardados'}</span><div><button type="button" class="btn-secondary" disabled={trabajando || !cambios} onclick={() => void guardar()}><Save size={16} /> Guardar borrador</button><button type="button" class="btn-primary" disabled={trabajando} onclick={() => void publicar()}><Send size={16} /> Publicar y compartir</button></div></div>
+			<div class="pie-editor page-card"><span class:cambio-pendiente={cambios}><i></i>{cambios ? 'Cambios sin guardar' : 'Todos los cambios están guardados'}{encuesta.estado !== 'BORRADOR' ? ' · Al guardar, los participantes activos recibirán una actualización' : ''}</span><div>
+				{#if encuesta.estado !== 'BORRADOR'}<button type="button" class="btn-secondary" disabled={trabajando} onclick={volverResultados}>Cancelar edición</button>{/if}
+				<button type="button" class="btn-secondary" disabled={trabajando || !cambios} onclick={() => void guardar()}><Save size={16} /> {encuesta.estado === 'BORRADOR' ? 'Guardar borrador' : 'Guardar cambios'}</button>
+				{#if encuesta.estado === 'BORRADOR'}<button type="button" class="btn-primary" disabled={trabajando} onclick={() => void publicar()}><Send size={16} /> Publicar y compartir</button>{/if}
+			</div></div>
 		{:else if resultados}
 			<ResultadosEncuesta datos={resultados} onPagina={(pagina) => void cargarResultados(pagina)} onDescargar={(formato) => void descargar(formato)} />
 		{:else}
@@ -188,9 +248,20 @@
 		{#if puedeGestionar}<div class="acciones-gestion" aria-label="Otras acciones de la encuesta">
 			<button type="button" class="btn-secondary" onclick={() => void duplicar()} disabled={trabajando}><FilePlus2 size={16} /> Duplicar</button>
 			{#if encuesta.estado === 'PUBLICADA'}<button type="button" class="btn-secondary" onclick={() => void cerrar()} disabled={trabajando}><LockKeyhole size={16} /> Cerrar recepción</button>{/if}
+			{#if encuesta.estado === 'CERRADA'}<button type="button" class="btn-secondary" onclick={() => void abrir()} disabled={trabajando}><LockKeyhole size={16} /> Abrir recepción</button>{/if}
 			<button type="button" class="btn-danger" onclick={() => void archivar()} disabled={trabajando}><Trash2 size={16} /> Archivar</button>
 		</div>{/if}
 	{/if}
+	<ConfirmDialog
+		open={confirmacion !== null}
+		title={confirmacion === 'cerrar' ? '¿Cerrar la recepción?' : confirmacion === 'abrir' ? '¿Abrir la recepción?' : confirmacion === 'archivar' ? '¿Archivar esta encuesta?' : '¿Descartar los cambios?'}
+		message={confirmacion === 'cerrar' ? 'El enlace dejará de aceptar respuestas. Podrás volver a abrir la encuesta cuando quieras.' : confirmacion === 'abrir' ? 'El enlace volverá a aceptar respuestas hasta que cierres la encuesta o llegue su fecha de cierre.' : confirmacion === 'archivar' ? 'La encuesta se moverá al archivo y dejará de estar disponible en la lista activa.' : 'Los cambios que hiciste en el editor se perderán.'}
+		tone={confirmacion === 'archivar' ? 'danger' : 'warning'}
+		confirmText={confirmacion === 'cerrar' ? 'Cerrar encuesta' : confirmacion === 'abrir' ? 'Abrir encuesta' : confirmacion === 'archivar' ? 'Archivar' : 'Descartar cambios'}
+		loading={trabajando}
+		onconfirm={() => void ejecutarConfirmacion()}
+		oncancel={() => (confirmacion = null)}
+	/>
 </div>
 
 <style>

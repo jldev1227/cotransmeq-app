@@ -17,6 +17,12 @@
 
 	function representar(p: PreguntaEncuesta, valor: unknown): string {
 		if (valor == null) return '—';
+		if (p.permite_otro && valor && typeof valor === 'object' && !Array.isArray(valor)) {
+			const respuesta = valor as { opcion_ids?: string[]; otro_activo?: boolean; otro_texto?: string };
+			const opciones = (respuesta.opcion_ids ?? []).map((id) => p.opciones.find((o) => o.id === id)?.texto ?? id);
+			if (respuesta.otro_activo && respuesta.otro_texto) opciones.push(`${p.otro_etiqueta || 'Otra'}: ${respuesta.otro_texto}`);
+			return opciones.join(', ') || '—';
+		}
 		if (p.tipo === 'OPCION_UNICA') return p.opciones.find(o => o.id === valor)?.texto ?? String(valor);
 		if (p.tipo === 'OPCION_MULTIPLE' && Array.isArray(valor)) return valor.map(v => p.opciones.find(o => o.id === v)?.texto ?? v).join(', ');
 		if (p.tipo === 'SI_NO') return valor ? 'Sí' : 'No';
@@ -69,6 +75,7 @@
 							{#if q.promedio !== null || q.nps !== null}<div class="score">{q.nps !== null ? q.nps : q.promedio}<small>{q.nps !== null ? 'NPS' : 'promedio'}</small></div>{/if}
 							<Grafica tipo={q.opciones.length <= 5 && q.tipo !== 'ESCALA' ? 'dona' : 'barras'} etiquetas={q.opciones.map(o => o.texto)} series={[{ etiqueta: 'Respuestas', datos: q.opciones.map(o => o.total), color: 'primario' }]} alto={230} leyenda={q.opciones.length <= 5 && q.tipo !== 'ESCALA'} />
 							<div class="leyenda-opciones">{#each q.opciones as o}<div><span>{o.texto}</span><strong>{o.porcentaje} %</strong></div>{/each}</div>
+							{#if q.textos.length}<div class="textos respuestas-abiertas"><span class="etiqueta-abiertas">Respuestas abiertas</span>{#each q.textos as texto}<blockquote>{texto}</blockquote>{/each}</div>{/if}
 						{:else if q.tipo === 'NUMERO' && q.promedio !== null}
 							<div class="numero-grande">{q.promedio}<small>promedio de respuestas</small></div>
 						{:else if q.textos.length}
@@ -126,6 +133,8 @@
 	.leyenda-opciones strong { color: var(--text-primary); }
 	.numero-grande { display: flex; align-items: baseline; padding: 2.5rem 0; font-size: 3rem; font-weight: 800; color: var(--accion, #07875f); }
 	.textos { display: grid; gap: .6rem; max-height: 22rem; overflow: auto; }
+	.respuestas-abiertas { margin-top: 1rem; }
+	.etiqueta-abiertas { color: var(--text-secondary); font-size: .72rem; font-weight: 750; }
 	blockquote { margin: 0; padding: .7rem .9rem; border-left: 3px solid var(--accion, #07875f); background: var(--bg-subtle, #f7f9f7); border-radius: .2rem .6rem .6rem .2rem; font-size: .8rem; line-height: 1.5; }
 	.sin-datos { padding: 2rem; color: var(--text-secondary); }
 	.origen { display: flex; align-items: start; gap: .5rem; padding: .9rem 1rem; margin-top: 1rem; color: var(--text-secondary); background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: .8rem; font-size: .78rem; }

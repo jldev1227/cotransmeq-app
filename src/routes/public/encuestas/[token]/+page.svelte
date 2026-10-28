@@ -16,32 +16,166 @@
 	let error = $state('');
 	let terminado = $state(false);
 	let mensajeFinal = $state('');
+	let avisoActualizacion = $state<{ titulo: string; descripcion: string; preguntas: string[] } | null>(null);
+	let preguntasPendientes = $state<Set<string>>(new Set());
+	let cerrarEventos = () => {};
+	let sincronizando = false;
 
 	const contestadas = $derived(
 		encuesta?.preguntas.filter((p) => {
 			const v = respuestas[p.id];
+			if (v && typeof v === 'object' && !Array.isArray(v)) {
+				return (v.opcion_ids?.length ?? 0) > 0 || (v.otro_activo && !!v.otro_texto?.trim());
+			}
 			return v != null && v !== '' && (!Array.isArray(v) || v.length > 0);
 		}).length ?? 0
 	);
 	const total = $derived(encuesta?.preguntas.length ?? 0);
 
-	onMount(async () => {
-		try {
-			encuesta = await encuestasAPI.publica(token);
-		} catch (e: any) {
-			error = e.message || 'No se pudo abrir la encuesta';
-		} finally {
-			cargando = false;
-		}
+	onMount(() => {
+		let activa = true;
+		void (async () => {
+			try {
+				encuesta = await encuestasAPI.publica(token);
+			} catch (e: any) {
+				error = e.message || 'No se pudo abrir la encuesta';
+			} finally {
+				cargando = false;
+			}
+			if (activa && encuesta) {
+				cerrarEventos = encuestasAPI.suscribirActualizaciones(token, () => void sincronizarEncuesta());
+			}
+		})();
+		const alVolver = () => {
+			if (document.visibilityState === 'visible') void sincronizarEncuesta();
+		};
+		document.addEventListener('visibilitychange', alVolver);
+		const respaldo = setInterval(alVolver, 15_000);
+		return () => {
+			activa = false;
+			cerrarEventos();
+			clearInterval(respaldo);
+			document.removeEventListener('visibilitychange', alVolver);
+		};
 	});
+
+	function preguntaRespondida(p: PreguntaEncuesta, valor: any): boolean {
+		if (valor && typeof valor === 'object' && !Array.isArray(valor)) {
+			if (valor.otro_activo && !valor.otro_texto?.trim()) return false;
+			return (valor.opcion_ids?.length ?? 0) > 0 || !!valor.otro_activo;
+		}
+		return valor != null && valor !== '' && (!Array.isArray(valor) || valor.length > 0);
+	}
+
+	function firmaPregunta(p: PreguntaEncuesta): string {
+		return JSON.stringify({
+			titulo: p.titulo, descripcion: p.descripcion, tipo: p.tipo, requerida: p.requerida,
+			opciones: p.opciones, permite_otro: p.permite_otro ?? false,
+			otro_etiqueta: p.otro_etiqueta ?? 'Otra (especificar)', minimo: p.minimo ?? null, maximo: p.maximo ?? null
+		});
+	}
+
+	async function sincronizarEncuesta() {
+		if (sincronizando || terminado || !encuesta) return;
+		sincronizando = true;
+		try {
+			const anterior = encuesta;
+			const nueva = await encuestasAPI.publica(token);
+			if (nueva.actualizada_at === anterior.actualizada_at && nueva.abierta === anterior.abierta && nueva.estado === anterior.estado) return;
+			const anteriores = new Map(anterior.preguntas.map((p) => [p.id, p]));
+			const nuevas = new Map(nueva.preguntas.map((p) => [p.id, p]));
+			const agregadas = nueva.preguntas.filter((p) => !anteriores.has(p.id));
+			const modificadas = nueva.preguntas.filter((p) => {
+				const previa = anteriores.get(p.id);
+				return previa && firmaPregunta(previa) !== firmaPregunta(p);
+			});
+			const eliminadas = anterior.preguntas.filter((p) => !nuevas.has(p.id));
+			const limpiadas = new Set([...agregadas, ...modificadas].map((p) => p.id));
+			const siguientesRespuestas = { ...respuestas };
+			for (const p of [...agregadas, ...modificadas, ...eliminadas]) delete siguientesRespuestas[p.id];
+			respuestas = siguientesRespuestas;
+			const pendientes = new Set([...preguntasPendientes].filter((id) => nuevas.has(id)));
+			for (const id of limpiadas) pendientes.add(id);
+			preguntasPendientes = pendientes;
+			const cambioEstado = nueva.estado !== anterior.estado || nueva.abierta !== anterior.abierta;
+			encuesta = nueva;
+			const titulos = [
+				...agregadas.map((p) => `Nueva: ${p.titulo}`),
+				...modificadas.map((p) => `Actualizada: ${p.titulo}`),
+				...eliminadas.map((p) => `Retirada: ${p.titulo}`)
+			];
+			const detalles: string[] = [];
+			if (agregadas.length || modificadas.length) detalles.push(`${agregadas.length + modificadas.length} pregunta(s) nueva(s) o modificada(s) deben responderse de nuevo.`);
+			if (eliminadas.length) detalles.push(`Se retiraron ${eliminadas.length} pregunta(s); sus respuestas en curso se descartaron.`);
+			if (cambioEstado && !nueva.abierta) detalles.push('La recepción de respuestas está cerrada.');
+			if (cambioEstado && nueva.abierta && !anterior.abierta) detalles.push('La recepción de respuestas está abierta nuevamente.');
+			if (!detalles.length) detalles.push('Tus respuestas actuales se conservaron.');
+			avisoActualizacion = {
+				titulo: cambioEstado && !nueva.abierta ? 'La encuesta se cerró' : cambioEstado && nueva.abierta && !anterior.abierta ? 'La encuesta volvió a abrirse' : 'La encuesta se actualizó',
+				descripcion: detalles.join(' '),
+				preguntas: titulos
+			};
+			error = '';
+		} catch (e: any) {
+			if (/no encontrado|no disponible/i.test(e?.message ?? '')) {
+				encuesta = { ...encuesta, abierta: false, estado: 'CERRADA' };
+				avisoActualizacion = { titulo: 'La encuesta ya no está disponible', descripcion: 'El enlace dejó de aceptar respuestas.', preguntas: [] };
+				cerrarEventos();
+			} else if (document.visibilityState === 'visible') {
+				console.warn('No se pudo sincronizar la encuesta en vivo', e);
+			}
+		} finally {
+			sincronizando = false;
+		}
+	}
 
 	function fijar(id: string, valor: unknown) {
 		respuestas = { ...respuestas, [id]: valor };
+		if (preguntasPendientes.has(id)) {
+			const pregunta = encuesta?.preguntas.find((p) => p.id === id);
+			if (pregunta && preguntaRespondida(pregunta, valor)) {
+				const siguientes = new Set(preguntasPendientes);
+				siguientes.delete(id);
+				preguntasPendientes = siguientes;
+			}
+		}
 	}
 
 	function alternar(id: string, opcion: string, marcado: boolean) {
 		const actuales = Array.isArray(respuestas[id]) ? (respuestas[id] as string[]) : [];
 		fijar(id, marcado ? [...actuales, opcion] : actuales.filter((v) => v !== opcion));
+	}
+
+	function opcionesMarcadas(id: string): string[] {
+		const valor = respuestas[id];
+		if (Array.isArray(valor)) return valor;
+		if (typeof valor === 'string') return [valor];
+		return valor && typeof valor === 'object' ? valor.opcion_ids ?? [] : [];
+	}
+
+	function otraActiva(id: string): boolean {
+		const valor = respuestas[id];
+		return !!valor && typeof valor === 'object' && !Array.isArray(valor) && !!valor.otro_activo;
+	}
+
+	function textoOtra(id: string): string {
+		const valor = respuestas[id];
+		return valor && typeof valor === 'object' && !Array.isArray(valor) ? valor.otro_texto ?? '' : '';
+	}
+
+	function cambiarOpcionesAbiertas(id: string, parcial: { opcion_ids?: string[]; otro_activo?: boolean; otro_texto?: string }) {
+		fijar(id, {
+			opcion_ids: parcial.opcion_ids ?? opcionesMarcadas(id),
+			otro_activo: parcial.otro_activo ?? otraActiva(id),
+			otro_texto: parcial.otro_texto ?? textoOtra(id)
+		});
+	}
+
+	function alternarOpcionAbierta(id: string, opcion: string, marcado: boolean) {
+		const actuales = opcionesMarcadas(id);
+		cambiarOpcionesAbiertas(id, {
+			opcion_ids: marcado ? [...actuales, opcion] : actuales.filter((v) => v !== opcion)
+		});
 	}
 
 	function mostrarNumero(p: PreguntaEncuesta): number[] {
@@ -53,6 +187,12 @@
 	async function enviar(event: SubmitEvent) {
 		event.preventDefault();
 		if (!encuesta || enviando) return;
+		if (preguntasPendientes.size) {
+			const primera = preguntasPendientes.values().next().value;
+			error = 'La encuesta cambió mientras respondías. Completa las preguntas marcadas para continuar.';
+			if (primera) document.getElementById(`pregunta-${primera}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			return;
+		}
 		enviando = true;
 		error = '';
 		try {
@@ -70,7 +210,12 @@
 			terminado = true;
 			window.scrollTo({ top: 0, behavior: 'smooth' });
 		} catch (e: any) {
-			error = e.message || 'No se pudo guardar la respuesta';
+			/// Si la encuesta cambió justo antes del envío, recarga el cuestionario y
+			/// marca las preguntas nuevas para evitar que el usuario pierda el avance.
+			await sincronizarEncuesta();
+			error = preguntasPendientes.size
+				? 'La encuesta cambió mientras enviabas. Revisa y responde de nuevo las preguntas marcadas.'
+				: e.message || 'No se pudo guardar la respuesta';
 		} finally {
 			enviando = false;
 		}
@@ -88,6 +233,7 @@
 			<div class="hero-orbe" aria-hidden="true"></div>
 			<div class="hero-meta"><span class="hero-eyebrow">PARTICIPACIÓN · {COMPANY_NAME}</span>{#if !cargando && encuesta}<span class="estado" class:estado-cerrado={!encuesta.abierta}><span class="estado-punto"></span>{encuesta.abierta ? 'Abierta' : 'Cerrada'}</span>{/if}</div>
 			{#if !cargando && encuesta}<h1 id="titulo-encuesta">{encuesta.titulo}</h1>{#if encuesta.descripcion}<p class="descripcion">{encuesta.descripcion}</p>{/if}{:else}<h1 id="titulo-encuesta">Queremos conocer tu opinión</h1><p class="descripcion">Tus respuestas nos ayudan a entender mejor cada experiencia.</p>{/if}
+				{#if avisoActualizacion}<aside class="aviso-actualizacion" role="status"><strong>{avisoActualizacion.titulo}</strong><p>{avisoActualizacion.descripcion}</p>{#if avisoActualizacion.preguntas.length}<ul>{#each avisoActualizacion.preguntas as titulo}<li>{titulo}</li>{/each}</ul>{/if}</aside>{/if}
 			{#if !cargando && encuesta?.abierta && !terminado}<div class="progreso"><div class="progreso-superior"><span>Tu progreso</span><strong>{contestadas} de {total} respondidas</strong></div><div class="progreso-pista" role="progressbar" aria-label="Preguntas respondidas" aria-valuemin="0" aria-valuemax={total} aria-valuenow={contestadas}><span style:width={total ? Math.round((contestadas / total) * 100) + '%' : '0%'}></span></div></div>{/if}
 		</section>
 		<section class="encuesta-contenido" aria-label="Formulario de encuesta">
@@ -101,12 +247,17 @@
 						{#if encuesta.correo_modo !== 'NO'}<label for="correo">Correo electrónico <span>{encuesta.correo_modo === 'OBLIGATORIO' ? 'Obligatorio' : 'Opcional'}</span></label><input id="correo" type="email" autocomplete="email" maxlength="254" bind:value={correo} required={encuesta.correo_modo === 'OBLIGATORIO'} placeholder="nombre@correo.com" />{/if}
 					</section>{/if}
 					{#each encuesta.preguntas as p, i (p.id)}
-						<fieldset class="tarjeta pregunta"><legend><span class="pregunta-numero">{String(i + 1).padStart(2, '0')}</span><span class="pregunta-titulo">{p.titulo}{#if p.requerida}<span class="obligatoria" aria-label="Obligatoria"> *</span>{/if}</span></legend>
+						<fieldset id={`pregunta-${p.id}`} class="tarjeta pregunta" class:pregunta-actualizada={preguntasPendientes.has(p.id)}><legend><span class="pregunta-numero">{String(i + 1).padStart(2, '0')}</span><span class="pregunta-titulo">{p.titulo}{#if p.requerida}<span class="obligatoria" aria-label="Obligatoria"> *</span>{/if}</span></legend>
+						{#if preguntasPendientes.has(p.id)}<p class="pregunta-aviso">Actualizada mientras respondías. Diligénciala nuevamente para continuar.</p>{/if}
 						{#if p.descripcion}<p class="ayuda">{p.descripcion}</p>{/if}
 						{#if p.tipo === 'TEXTO_CORTO' || p.tipo === 'CORREO'}<input type={p.tipo === 'CORREO' ? 'email' : 'text'} value={respuestas[p.id] ?? ''} oninput={(e) => fijar(p.id, e.currentTarget.value)} required={p.requerida} maxlength="500" placeholder={p.tipo === 'CORREO' ? 'nombre@correo.com' : 'Escribe tu respuesta'} />
 						{:else if p.tipo === 'TEXTO_LARGO'}<textarea rows="4" maxlength="4000" value={respuestas[p.id] ?? ''} oninput={(e) => fijar(p.id, e.currentTarget.value)} required={p.requerida} placeholder="Escribe aquí tu respuesta"></textarea>
-						{:else if p.tipo === 'OPCION_UNICA'}<div class="opciones">{#each p.opciones as o (o.id)}<label class="opcion" class:seleccionada={respuestas[p.id] === o.id}><input type="radio" name={p.id} value={o.id} checked={respuestas[p.id] === o.id} onchange={() => fijar(p.id, o.id)} required={p.requerida} /><span>{o.texto}</span></label>{/each}</div>
-						{:else if p.tipo === 'OPCION_MULTIPLE'}<p class="micro">Puedes seleccionar todas las opciones que apliquen.</p><div class="opciones">{#each p.opciones as o (o.id)}<label class="opcion" class:seleccionada={(respuestas[p.id] ?? []).includes(o.id)}><input type="checkbox" checked={(respuestas[p.id] ?? []).includes(o.id)} onchange={(e) => alternar(p.id, o.id, e.currentTarget.checked)} /><span>{o.texto}</span></label>{/each}</div>
+						{:else if p.tipo === 'OPCION_UNICA'}<div class="opciones">{#each p.opciones as o (o.id)}<label class="opcion" class:seleccionada={p.permite_otro ? opcionesMarcadas(p.id).includes(o.id) : respuestas[p.id] === o.id}><input type="radio" name={p.id} value={o.id} checked={p.permite_otro ? opcionesMarcadas(p.id).includes(o.id) : respuestas[p.id] === o.id} onchange={() => p.permite_otro ? cambiarOpcionesAbiertas(p.id, { opcion_ids: [o.id], otro_activo: false, otro_texto: '' }) : fijar(p.id, o.id)} required={p.requerida} /><span>{o.texto}</span></label>{/each}
+							{#if p.permite_otro}<label class="opcion" class:seleccionada={otraActiva(p.id)}><input type="radio" name={p.id} value="__otra__" checked={otraActiva(p.id)} onchange={() => cambiarOpcionesAbiertas(p.id, { opcion_ids: [], otro_activo: true })} required={p.requerida} /><span>{p.otro_etiqueta || 'Otra (especificar)'}</span></label>{#if otraActiva(p.id)}<input class="respuesta-otra" type="text" maxlength="500" value={textoOtra(p.id)} oninput={(e) => cambiarOpcionesAbiertas(p.id, { otro_texto: e.currentTarget.value })} placeholder="Escribe tu respuesta" aria-label={`Respuesta abierta: ${p.titulo}`} required />{/if}{/if}
+						</div>
+						{:else if p.tipo === 'OPCION_MULTIPLE'}<p class="micro">Puedes seleccionar todas las opciones que apliquen.</p><div class="opciones">{#each p.opciones as o (o.id)}<label class="opcion" class:seleccionada={p.permite_otro ? opcionesMarcadas(p.id).includes(o.id) : (respuestas[p.id] ?? []).includes(o.id)}><input type="checkbox" checked={p.permite_otro ? opcionesMarcadas(p.id).includes(o.id) : (respuestas[p.id] ?? []).includes(o.id)} onchange={(e) => p.permite_otro ? alternarOpcionAbierta(p.id, o.id, e.currentTarget.checked) : alternar(p.id, o.id, e.currentTarget.checked)} /><span>{o.texto}</span></label>{/each}
+							{#if p.permite_otro}<label class="opcion" class:seleccionada={otraActiva(p.id)}><input type="checkbox" checked={otraActiva(p.id)} onchange={(e) => cambiarOpcionesAbiertas(p.id, { otro_activo: e.currentTarget.checked, otro_texto: e.currentTarget.checked ? textoOtra(p.id) : '' })} /><span>{p.otro_etiqueta || 'Otra (especificar)'}</span></label>{#if otraActiva(p.id)}<input class="respuesta-otra" type="text" maxlength="500" value={textoOtra(p.id)} oninput={(e) => cambiarOpcionesAbiertas(p.id, { otro_texto: e.currentTarget.value })} placeholder="Escribe tu respuesta" aria-label={`Respuesta abierta: ${p.titulo}`} required />{/if}{/if}
+						</div>
 						{:else if p.tipo === 'SI_NO'}<div class="opciones opciones-dos">{#each [{ valor: true, texto: 'Sí' }, { valor: false, texto: 'No' }] as o}<label class="opcion opcion-si-no" class:seleccionada={respuestas[p.id] === o.valor}><input type="radio" name={p.id} checked={respuestas[p.id] === o.valor} onchange={() => fijar(p.id, o.valor)} required={p.requerida} /><span>{o.texto}</span></label>{/each}</div>
 						{:else if p.tipo === 'ESCALA' || p.tipo === 'NPS'}<div class="escala" role="group" aria-label={p.titulo}>{#each mostrarNumero(p) as n}<button type="button" class:seleccionada={respuestas[p.id] === n} aria-label={"Calificar con " + n} aria-pressed={respuestas[p.id] === n} onclick={() => fijar(p.id, n)}>{n}</button>{/each}</div><div class="extremos"><span>{p.tipo === 'NPS' ? 'Nada probable' : 'Mínimo'}</span><span>{p.tipo === 'NPS' ? 'Muy probable' : 'Máximo'}</span></div>
 						{:else if p.tipo === 'NUMERO'}<input type="number" value={respuestas[p.id] ?? ''} required={p.requerida} oninput={(e) => fijar(p.id, e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))} placeholder="Ingresa un número" />
@@ -146,8 +297,14 @@
 	.progreso-pista { height:6px; overflow:hidden; border-radius:999px; background:rgba(255,255,255,.18); }
 	.progreso-pista span { display:block; height:100%; border-radius:inherit; background:var(--encuesta-acento); transition:width .24s ease; }
 	.encuesta-formulario { display:grid; gap:.8rem; }
+	.aviso-actualizacion { margin:0 0 1rem; padding:1rem 1.15rem; border:1px solid color-mix(in srgb,var(--encuesta-acento) 32%,var(--encuesta-borde)); border-radius:.9rem; background:color-mix(in srgb,var(--encuesta-acento) 7%,var(--encuesta-superficie)); color:var(--encuesta-texto); font-size:.84rem; line-height:1.5; }
+	.aviso-actualizacion strong { display:block; color:var(--encuesta-tinta); font-size:.92rem; }
+	.aviso-actualizacion p { margin:.25rem 0 0; }
+	.aviso-actualizacion ul { display:grid; gap:.2rem; margin:.5rem 0 0; padding-left:1.2rem; }
 	.tarjeta { min-width:0; border:1px solid var(--encuesta-borde); border-radius:1.1rem; background:var(--encuesta-superficie); box-shadow:var(--shadow-card,0 4px 24px rgba(0,0,0,.04)); }
 	.pregunta { margin:0; padding:1.25rem; }
+	.pregunta-actualizada { border-color:color-mix(in srgb,var(--encuesta-acento) 55%,var(--encuesta-borde)); box-shadow:0 0 0 3px color-mix(in srgb,var(--encuesta-acento) 9%,transparent); }
+	.pregunta-aviso { margin:.75rem 0 .8rem 2.8rem; color:var(--encuesta-acento); font-size:.78rem; font-weight:700; line-height:1.45; }
 	.pregunta legend { display:flex; align-items:flex-start; gap:.8rem; width:100%; padding:0; color:var(--encuesta-tinta); }
 	.pregunta-numero,.seccion-numero { flex:none; display:grid; place-items:center; width:2rem; height:2rem; border-radius:.65rem; background:color-mix(in srgb,var(--encuesta-acento) 10%,white); color:var(--encuesta-acento); font-size:.68rem; font-weight:850; }
 	.pregunta-titulo { padding-top:.12rem; font-size:1rem; font-weight:750; line-height:1.45; }
@@ -164,6 +321,7 @@
 	.opcion:hover,.opcion.seleccionada { border-color:color-mix(in srgb,var(--encuesta-acento) 55%,var(--encuesta-borde)); background:color-mix(in srgb,var(--encuesta-acento) 6%,white); }
 	.opcion input { flex:none; width:1rem; height:1rem; margin:0; accent-color:var(--encuesta-acento); }
 	.opcion span { min-width:0; }
+	.respuesta-otra { margin-top:.5rem; }
 	.escala { display:flex; flex-wrap:wrap; gap:.45rem; }
 	.escala button { min-width:44px; height:44px; border:1px solid var(--encuesta-borde); border-radius:.7rem; background:var(--encuesta-fondo); color:var(--encuesta-texto); font:inherit; font-weight:750; cursor:pointer; transition:.16s ease; }
 	.escala button:hover { border-color:var(--encuesta-acento); color:var(--encuesta-acento); }
@@ -206,6 +364,7 @@
 		.descripcion { font-size:.86rem; }
 		.encuesta-formulario { gap:.65rem; }
 		.pregunta,.identidad { padding:1rem; }
+		.pregunta-aviso { margin-left:2.45rem; }
 		.pregunta legend { gap:.65rem; }
 		.pregunta-numero,.seccion-numero { width:1.8rem; height:1.8rem; border-radius:.55rem; }
 		.pregunta-titulo { padding-top:.06rem; font-size:.94rem; }

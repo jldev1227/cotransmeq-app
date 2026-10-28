@@ -14,6 +14,8 @@ export interface PreguntaEncuesta {
 	tipo: TipoPregunta;
 	requerida: boolean;
 	opciones: Array<{ id: string; texto: string }>;
+	permite_otro?: boolean;
+	otro_etiqueta?: string;
 	minimo?: number;
 	maximo?: number;
 }
@@ -38,9 +40,11 @@ export interface Encuesta extends EncuestaInput {
 	_count?: { respuestas: number };
 }
 export interface EncuestaPublica extends Pick<EncuestaInput, 'titulo' | 'descripcion' | 'mensaje_final' | 'nombre_modo' | 'correo_modo' | 'registrar_origen' | 'preguntas'> {
+	id: string;
 	token: string;
 	estado: Encuesta['estado'];
 	abierta: boolean;
+	actualizada_at: string;
 }
 export interface AnalisisPregunta {
 	id: string;
@@ -51,6 +55,11 @@ export interface AnalisisPregunta {
 	promedio: number | null;
 	nps: number | null;
 	textos: string[];
+}
+export interface RespuestaOpcionesEncuesta {
+	opcion_ids: string[];
+	otro_activo: boolean;
+	otro_texto: string;
 }
 export interface ResultadoEncuesta {
 	encuesta: Encuesta;
@@ -63,7 +72,7 @@ export interface ResultadoEncuesta {
 		id: string;
 		nombre: string | null;
 		correo: string | null;
-		respuestas: Record<string, string | string[] | number | boolean>;
+		respuestas: Record<string, string | string[] | number | boolean | RespuestaOpcionesEncuesta>;
 		coincide_ip: boolean;
 		coincide_dispositivo: boolean;
 		created_at: string;
@@ -97,7 +106,7 @@ export const encuestasAPI = {
 		const { data } = await apiClient.put(`/api/encuestas/${id}`, input);
 		return data.encuesta;
 	},
-	async accion(id: string, accion: 'publicar' | 'cerrar' | 'duplicar'): Promise<Encuesta> {
+	async accion(id: string, accion: 'publicar' | 'cerrar' | 'abrir' | 'duplicar'): Promise<Encuesta> {
 		const { data } = await apiClient.post(`/api/encuestas/${id}/${accion}`);
 		return data.encuesta;
 	},
@@ -123,10 +132,18 @@ export const encuestasAPI = {
 		return `${typeof window === 'undefined' ? '' : window.location.origin}/public/encuestas/${token}`;
 	},
 	async publica(token: string): Promise<EncuestaPublica> {
-		const res = await fetch(`${API_BASE}/api/public/encuestas/${encodeURIComponent(token)}`);
+		const res = await fetch(`${API_BASE}/api/public/encuestas/${encodeURIComponent(token)}`, { cache: 'no-store' });
 		const data = await res.json();
 		if (!res.ok) throw new Error(mensajeError(data, 'No se pudo abrir la encuesta'));
 		return data.encuesta;
+	},
+	suscribirActualizaciones(token: string, callback: (evento: { actualizada_at: string; estado: Encuesta['estado'] }) => void): () => void {
+		const stream = new EventSource(`${API_BASE}/api/public/encuestas/${encodeURIComponent(token)}/eventos`);
+		const recibir = (evento: Event) => {
+			try { callback(JSON.parse((evento as MessageEvent<string>).data)); } catch { /* Evento incompleto: se espera el siguiente */ }
+		};
+		stream.addEventListener('encuestas:actualizada', recibir);
+		return () => stream.close();
 	},
 	async responder(
 		token: string,
