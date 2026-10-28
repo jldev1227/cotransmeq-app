@@ -3500,7 +3500,7 @@
 	open={editarFacturaModalOpen}
 	factura={editarFacturaTarget}
 	liquidaciones={liquidacionesParaEditarFactura}
-	puedeQuitar={isAdmin}
+	puedeQuitar={isAdmin || isFacturacion}
 	loading={liquidacionesEditarLoading}
 	onclose={() => {
 		editarFacturaModalOpen = false;

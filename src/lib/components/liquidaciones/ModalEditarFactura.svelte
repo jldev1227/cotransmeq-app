@@ -208,7 +208,7 @@
 					<h3>Liquidaciones del lote</h3>
 					<p>
 						Desmarca las que deben salir de esta factura; quedarán en estado aprobada.
-						{#if !puedeQuitar} Solo Administración puede quitarlas.{/if}
+						{#if !puedeQuitar} Solo Administración o Facturación pueden quitarlas.{/if}
 					</p>
 				</div>
 				<span class="ef-count">{conservadas.size} incluidas</span>
