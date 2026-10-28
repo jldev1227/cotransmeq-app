@@ -17,7 +17,7 @@
  * devuelve `null` y NO cero: quien llama decide, porque «no es un número» y
  * «es cero» son cosas distintas y confundirlas fue justamente el fallo.
  */
-export function numeroDeCelda(valor: unknown): number | null {
+export function numeroDeCelda(valor: unknown, locale?: 'es-CO'): number | null {
 	if (valor == null) return null;
 	if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null;
 	if (typeof valor === 'boolean') return null;
@@ -29,11 +29,29 @@ export function numeroDeCelda(valor: unknown): number | null {
 		.trim();
 	if (limpio === '') return null;
 
-	// Miles con coma y decimales con punto (1,088,233.5) → se quitan las comas.
-	// Coma única como decimal (1088233,5) → pasa a punto.
-	const normalizado = /^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(limpio)
-		? limpio.replace(/,/g, '')
-		: limpio.replace(',', '.');
+	let normalizado: string;
+	if (locale === 'es-CO') {
+		const ultimoPunto = limpio.lastIndexOf('.');
+		const ultimaComa = limpio.lastIndexOf(',');
+		if (ultimoPunto >= 0 && ultimaComa >= 0) {
+			normalizado =
+				ultimaComa > ultimoPunto
+					? `${limpio.slice(0, ultimaComa).replace(/[.]/g, '')}.${limpio.slice(ultimaComa + 1)}`
+					: limpio.replace(/,/g, '');
+		} else if (ultimaComa >= 0) {
+			normalizado = /^-?\d{1,3}(,\d{3})+$/.test(limpio)
+				? limpio.replace(/,/g, '')
+				: limpio.replace(',', '.');
+		} else {
+			normalizado = /^-?\d{1,3}(\.\d{3})+$/.test(limpio) ? limpio.replace(/[.]/g, '') : limpio;
+		}
+	} else {
+		// Miles con coma y decimales con punto (1,088,233.5) → se quitan las comas.
+		// Coma única como decimal (1088233,5) → pasa a punto.
+		normalizado = /^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(limpio)
+			? limpio.replace(/,/g, '')
+			: limpio.replace(',', '.');
+	}
 	if (!/^-?\d*\.?\d+$/.test(normalizado)) return null;
 
 	const n = Number(normalizado);

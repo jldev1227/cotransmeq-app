@@ -22,18 +22,13 @@
  * haber divergencia entre lo que muestra el canvas y lo que se guarda.
  */
 
-import type {
-	IDisposable,
-	ICommandInfo,
-	IRange,
-	ICommandService,
-	ICellData
-} from '@univerjs/core';
+import type { IDisposable, ICommandInfo, IRange, ICommandService, ICellData } from '@univerjs/core';
 import type { FWorkbook } from '@univerjs/sheets/facade';
 import { getCierreBinding, type CierreBinding } from '../../business/cierres-finales-cell-binding';
-import { anclaDe, type Ancla } from '../../business/zona-libre';
+import { numeroDeCelda } from '../../business/numero-de-celda';
+import { anclaDe, esCeldaBloqueada, type Ancla } from '../../business/zona-libre';
 
-const SET_RANGE_VALUES = 'sheet.command.set-range-values';
+const SET_RANGE_VALUES_MUTATION = 'sheet.mutation.set-range-values';
 /**
  * Cambio de hoja activa. Es una OPERACIÓN, no un comando.
  *
@@ -167,6 +162,8 @@ export interface CambioCelda {
 
 export interface CierresAdapterContext {
 	unitId: string;
+	/** Raíz del canvas, para normalizar valores del portapapeles antes de Univer. */
+	container: HTMLElement;
 	commandService: ICommandService;
 	getWorkbook: () => FWorkbook | null;
 	/** `subUnitId` → id de cierre, o `null` si la hoja no es de este libro. */
@@ -191,7 +188,12 @@ export interface CierresAdapterContext {
 	 * forma de saber por qué. Avisar es lo mínimo; quien lo reciba decide si
 	 * además repinta la celda desde el modelo.
 	 */
-	onDescartado?: (d: { cierreId: string; entityType: string; entityId: string; field: string }) => void;
+	onDescartado?: (d: {
+		cierreId: string;
+		entityType: string;
+		entityId: string;
+		field: string;
+	}) => void;
 	/**
 	 * El usuario escribió en la ZONA LIBRE: una anotación, no un campo de la
 	 * base de datos. No lleva `base_version` de entidad ni cascadea a totales.
@@ -199,6 +201,8 @@ export interface CierresAdapterContext {
 	 * `valor: null` significa que vació la celda, es decir borró la nota.
 	 */
 	onAnotacion?: (a: { sheetKey: string; ancla: Ancla; valor: string | null }) => void;
+	/** Se intentó pegar sobre una celda con fórmula. */
+	onPasteBlocked?: () => void;
 	/**
 	 * `true` mientras se pinta una edición que llegó de otro usuario. Sin
 	 * esta guarda, el `setValue` del patch remoto dispara
@@ -235,6 +239,80 @@ export interface CierresAdapterContext {
 
 export function attachCierresCellChangeAdapter(ctx: CierresAdapterContext): () => void {
 	const disposables: IDisposable[] = [];
+
+	/**
+	 * Univer interpreta el texto pegado con reglas numéricas genéricas antes de
+	 * emitir `set-range-values`. En una instalación con locale `es-ES`, por
+	 * ejemplo, `$79.000` se convierte en el número 79; cuando llega la mutación
+	 * ya no hay forma de distinguirlo de un importe legítimo de $79.
+	 *
+	 * Para un pegado de una sola celda monetaria ligada al cierre, leemos el
+	 * texto original del clipboard y escribimos el número normalizado en la
+	 * misma hoja. Eso sigue pasando por la mutación normal de Univer, el control
+	 * de permisos y el adapter de persistencia. Los rangos, fórmulas, notas y
+	 * otros campos conservan el comportamiento nativo.
+	 */
+	const onPasteMonetario = (event: ClipboardEvent) => {
+		if (ctx.isApplyingRemote?.()) return;
+		const target = event.target;
+		if (!(target instanceof Node) || !ctx.container.contains(target)) return;
+
+		const texto = event.clipboardData?.getData('text/plain');
+		if (texto == null) return;
+		const lineas = texto.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+		while (lineas.length > 1 && lineas[lineas.length - 1] === '') lineas.pop();
+		const matriz = lineas.map((linea) => linea.split('\t'));
+
+		const workbook = ctx.getWorkbook() as any;
+		const sheet = workbook?.getActiveSheet?.();
+		const range = sheet?.getActiveRange?.()?.getRange?.();
+		if (!sheet || !range) return;
+
+		const sheetId = sheet.getSheetId?.();
+		if (!sheetId || !ctx.resolveCierre(sheetId)) return;
+		const altoPegado = Math.max(range.endRow - range.startRow + 1, matriz.length);
+		const anchoPegado = Math.max(
+			range.endColumn - range.startColumn + 1,
+			...matriz.map((fila) => fila.length)
+		);
+		for (let r = range.startRow; r < range.startRow + altoPegado; r++) {
+			for (let c = range.startColumn; c < range.startColumn + anchoPegado; c++) {
+				if (!esCeldaBloqueada(ctx.unitId, sheetId, r, c)) continue;
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				ctx.onPasteBlocked?.();
+				return;
+			}
+		}
+
+		if (
+			range.startRow !== range.endRow ||
+			range.startColumn !== range.endColumn ||
+			matriz.length !== 1 ||
+			matriz[0].length !== 1
+		) {
+			return;
+		}
+		const binding = getCierreBinding(ctx.unitId, sheetId, range.startRow, range.startColumn);
+		if (
+			!binding ||
+			binding.derived ||
+			!(
+				(binding.entityType === 'concepto' || binding.entityType === 'adicional') &&
+				binding.field === 'valor_unitario'
+			)
+		) {
+			return;
+		}
+
+		const valor = numeroDeCelda(matriz[0][0].trim(), 'es-CO');
+		if (valor == null) return;
+
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		sheet.getRange(range.startRow, range.startColumn, 1, 1).setValue(valor);
+	};
+	ctx.container.addEventListener('paste', onPasteMonetario, true);
 
 	const onCmd = (info: Readonly<ICommandInfo>) => {
 		if (COMANDOS_ESTRUCTURALES.has(info.id)) {
@@ -289,29 +367,36 @@ export function attachCierresCellChangeAdapter(ctx: CierresAdapterContext): () =
 	};
 	disposables.push(ctx.commandService.onCommandExecuted(onCmd));
 
-	const onValor = (info: Readonly<ICommandInfo>) => {
-		if (info.id !== SET_RANGE_VALUES) return;
+	/**
+	 * Toda escritura efectiva de celdas: teclado, casillas, pegar y deshacer.
+	 * En Univer el comando solo cubre algunas entradas; pegar escribe
+	 * directamente la mutación, que es el punto común y trae las coordenadas
+	 * exactas de las celdas que cambiaron.
+	 */
+	const onMutacion = (info: Readonly<ICommandInfo>) => {
+		if (info.id !== SET_RANGE_VALUES_MUTATION) return;
 		if (ctx.isApplyingRemote?.()) return;
 		if (!info.params) return;
 		const params = info.params as {
 			unitId?: string;
 			subUnitId?: string;
-			range?: IRange;
-			value?: any;
+			cellValue?: Record<string, Record<string, ICellData | null>>;
 		};
+		if (!params.cellValue) return;
 		const objetivo = objetivoDeComando(ctx, params.unitId, params.subUnitId);
 		if (!objetivo) return;
-		// Sin `range` el comando actúa sobre la selección viva —así lo resuelve
-		// Univer—, así que hay que leerla del libro para saber qué se tocó.
-		const rango =
-			params.range ??
-			(ctx.getWorkbook() as any)
-				?.getSheetBySheetId?.(objetivo.subUnitId)
-				?.getActiveRange?.()
-				?.getRange?.();
-		procesarRango(ctx, objetivo.subUnitId, rango, params.value);
+
+		const celdas: Array<{ r: number; c: number; valorCrudo: ICellData | null }> = [];
+		for (const [rStr, fila] of Object.entries(params.cellValue)) {
+			for (const [cStr, valorCrudo] of Object.entries(fila ?? {})) {
+				// Una mutación de solo formato no es un cambio de dato.
+				if (!valorCrudo || (!('v' in valorCrudo) && !('f' in valorCrudo))) continue;
+				celdas.push({ r: Number(rStr), c: Number(cStr), valorCrudo });
+			}
+		}
+		if (celdas.length) procesarCeldas(ctx, objetivo.subUnitId, celdas);
 	};
-	disposables.push(ctx.commandService.onCommandExecuted(onValor));
+	disposables.push(ctx.commandService.onCommandExecuted(onMutacion));
 
 	/**
 	 * Borrado de contenido (Supr / «Borrar contenido» del menú).
@@ -426,6 +511,7 @@ export function attachCierresCellChangeAdapter(ctx: CierresAdapterContext): () =
 	disposables.push(ctx.commandService.beforeCommandExecuted(onRemoveRow));
 
 	return () => {
+		ctx.container.removeEventListener('paste', onPasteMonetario, true);
 		for (const d of disposables) {
 			try {
 				d.dispose();
@@ -436,13 +522,12 @@ export function attachCierresCellChangeAdapter(ctx: CierresAdapterContext): () =
 	};
 }
 
-function procesarRango(
+function procesarCeldas(
 	ctx: CierresAdapterContext,
 	subUnitId: string | undefined,
-	range: IRange | undefined,
-	valorCrudo: any
+	celdas: Array<{ r: number; c: number; valorCrudo: ICellData | null }>
 ) {
-	if (!range || !subUnitId) return;
+	if (!subUnitId) return;
 
 	// El cierre sale del `subUnitId` del comando, nunca de la hoja activa:
 	// un pegado o un deshacer pueden dirigirse a una hoja que no está en
@@ -457,71 +542,65 @@ function procesarRango(
 
 	const cambios: CambioCelda[] = [];
 
-	for (let r = range.startRow; r <= range.endRow; r++) {
-		for (let c = range.startColumn; c <= range.endColumn; c++) {
-			const binding: CierreBinding | undefined = getCierreBinding(
-				ctx.unitId,
-				subUnitId,
-				r,
-				c
+	for (const { r, c, valorCrudo } of celdas) {
+		const binding: CierreBinding | undefined = getCierreBinding(ctx.unitId, subUnitId, r, c);
+		// ── AQUÍ SE DECIDE EL DESTINO DE LA CELDA ──────────────────────
+		// Con binding, el valor va a su campo en la base de datos y entra
+		// en los recálculos del cierre. Sin binding solo puede ser zona
+		// libre (el permission ya rechazó todo lo demás): es una
+		// ANOTACIÓN, va a `canvas_anotacion` y no toca ni un total.
+		if (!binding) {
+			const ancla = anclaDe(ctx.unitId, subUnitId, r, c);
+			if (!ancla) continue;
+			const crudo = leerValor(sheet, r, c, valorCrudo);
+			ctx.onAnotacion?.({
+				// La `sheet_key` es el id del CIERRE (ya resuelto arriba) y no
+				// el de la hoja de Univer: ese se regenera en cada montaje y
+				// la nota quedaría huérfana al recargar.
+				sheetKey: cierreId,
+				ancla,
+				// Vaciar la celda borra la nota, así que aquí `null` es un
+				// valor válido y no un «no hubo cambio».
+				valor: crudo == null ? null : String(crudo)
+			});
+			continue;
+		}
+		// Las celdas derivadas las escribe el servidor; una edición sobre
+		// ellas ya la rechazó `cell-permission-cierres`, pero si llegara
+		// aquí no debe emitirse.
+		if (binding.derived) continue;
+
+		const crudo = leerValor(sheet, r, c, valorCrudo);
+		const valor = normalizarValor(binding, crudo);
+		if (valor == null) continue;
+
+		const baseVersion = ctx.versionDe(binding.cierreId, binding.entityType, binding.entityId);
+		if (baseVersion == null) {
+			console.warn(
+				`[cierres-adapter] sin versión para ${binding.entityType}:${binding.entityId}; ` +
+					'se descarta el cambio en vez de emitirlo sin compare-and-swap'
 			);
-			// ── AQUÍ SE DECIDE EL DESTINO DE LA CELDA ──────────────────────
-			// Con binding, el valor va a su campo en la base de datos y entra
-			// en los recálculos del cierre. Sin binding solo puede ser zona
-			// libre (el permission ya rechazó todo lo demás): es una
-			// ANOTACIÓN, va a `canvas_anotacion` y no toca ni un total.
-			if (!binding) {
-				const ancla = anclaDe(ctx.unitId, subUnitId, r, c);
-				if (!ancla) continue;
-				const crudo = leerValor(sheet, r, c, range, valorCrudo);
-				ctx.onAnotacion?.({
-					// La `sheet_key` es el id del CIERRE (ya resuelto arriba) y no
-					// el de la hoja de Univer: ese se regenera en cada montaje y
-					// la nota quedaría huérfana al recargar.
-					sheetKey: cierreId,
-					ancla,
-					// Vaciar la celda borra la nota, así que aquí `null` es un
-					// valor válido y no un «no hubo cambio».
-					valor: crudo == null ? null : String(crudo)
-				});
-				continue;
-			}
-			// Las celdas derivadas las escribe el servidor; una edición sobre
-			// ellas ya la rechazó `cell-permission-cierres`, pero si llegara
-			// aquí no debe emitirse.
-			if (binding.derived) continue;
-
-			const valor = leerValor(sheet, r, c, range, valorCrudo);
-			if (valor == null) continue;
-
-			const baseVersion = ctx.versionDe(binding.cierreId, binding.entityType, binding.entityId);
-			if (baseVersion == null) {
-				console.warn(
-					`[cierres-adapter] sin versión para ${binding.entityType}:${binding.entityId}; ` +
-						'se descarta el cambio en vez de emitirlo sin compare-and-swap'
-				);
-				// Descartar es lo correcto —sin `base_version` no hay
-				// compare-and-swap— pero hacerlo EN SILENCIO no: la celda se
-				// queda con el valor tecleado y ninguna vista previa lo
-				// refleja, porque nunca llegó a ser un dato.
-				ctx.onDescartado?.({
-					cierreId: binding.cierreId,
-					entityType: binding.entityType,
-					entityId: binding.entityId,
-					field: binding.field
-				});
-				continue;
-			}
-
-			cambios.push({
+			// Descartar es lo correcto —sin `base_version` no hay
+			// compare-and-swap— pero hacerlo EN SILENCIO no: la celda se
+			// queda con el valor tecleado y ninguna vista previa lo
+			// refleja, porque nunca llegó a ser un dato.
+			ctx.onDescartado?.({
 				cierreId: binding.cierreId,
 				entityType: binding.entityType,
 				entityId: binding.entityId,
-				field: binding.field,
-				value: valor,
-				baseVersion
+				field: binding.field
 			});
+			continue;
 		}
+
+		cambios.push({
+			cierreId: binding.cierreId,
+			entityType: binding.entityType,
+			entityId: binding.entityId,
+			field: binding.field,
+			value: valor,
+			baseVersion
+		});
 	}
 
 	if (cambios.length) ctx.onCambios?.(cambios);
@@ -532,20 +611,35 @@ function leerValor(
 	sheet: any,
 	r: number,
 	c: number,
-	range: IRange,
-	valorCrudo: any
+	valorCrudo: ICellData | null
 ): string | number | boolean | null {
+	// La mutación conserva el valor numérico sin formato. Leer primero la
+	// fachada de la celda puede devolver el texto redondeado por su formato
+	// monetario (p. ej. 78 629,9 como «$78,630») y alterar los decimales pegados.
+	if (valorCrudo?.v != null) return valorCrudo.v as any;
 	if (sheet?.getRange) {
 		const cellData: ICellData | null = sheet.getRange(r, c).getCellData();
 		if (cellData?.v != null) return cellData.v as any;
 	}
-	if (valorCrudo == null) return null;
-	if (Array.isArray(valorCrudo) && Array.isArray(valorCrudo[0])) {
-		return (valorCrudo as ICellData[][])[r - range.startRow]?.[c - range.startColumn]?.v ?? null;
+	return null;
+}
+
+/** Univer devuelve a veces el texto con formato monetario en vez del número. */
+function normalizarValor(binding: CierreBinding, valor: string | number | boolean | null) {
+	if (valor == null || typeof valor === 'boolean') return valor;
+	if (
+		(binding.entityType === 'concepto' || binding.entityType === 'adicional') &&
+		binding.field === 'valor_unitario'
+	) {
+		return numeroDeCelda(valor, 'es-CO');
 	}
-	if (Array.isArray(valorCrudo)) {
-		return (valorCrudo as ICellData[])[r - range.startRow]?.v ?? null;
+	if (
+		(binding.entityType === 'concepto' && ['dias', 'porcentaje'].includes(binding.field)) ||
+		(binding.entityType === 'adicional' &&
+			['valor_unitario', 'cantidad'].includes(binding.field)) ||
+		(binding.entityType === 'item' && binding.field === 'porcentaje_admin')
+	) {
+		return numeroDeCelda(valor);
 	}
-	if (typeof valorCrudo === 'object') return (valorCrudo as ICellData).v ?? null;
-	return valorCrudo;
+	return valor;
 }

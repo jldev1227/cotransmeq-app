@@ -83,9 +83,9 @@
 			id,
 			label: MODULO_LABELS[id] ?? id,
 			descripcion: permiso.description ?? '',
-			// «Limitado» solo se ofrece donde el módulo lo contempla; en el resto
-			// sería un nivel que el backend no sabe interpretar.
-			niveles: (permiso.limited ? ['read', 'limited', 'full'] : ['read', 'full']) as AccessLevel[]
+			// «Limitado» solo se ofrece donde hay un permiso parcial de área o una
+			// capacidad puntual definida para la lista blanca individual.
+			niveles: (permiso.allowLimited || permiso.limited?.length ? ['read', 'limited', 'full'] : ['read', 'full']) as AccessLevel[]
 		}));
 
 	/// `valor` se lee UNA vez, al montar, y a partir de ahí manda el estado

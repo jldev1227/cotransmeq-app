@@ -75,6 +75,12 @@ export const usuariosAPI = {
 		return response.data;
 	},
 
+	/** Cambia la contraseña de un miembro del equipo; el servidor revoca sus sesiones. */
+	async cambiarPassword(id: string, password: string): Promise<{ success: boolean }> {
+		const response = await apiClient.patch(`/api/usuarios/${id}/password`, { password });
+		return response.data;
+	},
+
 	async toggleActivo(id: string, activo: boolean): Promise<Usuario> {
 		const response = await apiClient.patch(`/api/usuarios/${id}/activo`, { activo });
 		return response.data;
@@ -86,7 +92,10 @@ export const usuariosAPI = {
 	},
 
 	// ── Permiso individual: bonos de planilla de días laborados ──
-	async setBonosPlanilla(userIds: string[], granted: boolean): Promise<{
+	async setBonosPlanilla(
+		userIds: string[],
+		granted: boolean
+	): Promise<{
 		success: boolean;
 		updated: Usuario[];
 		granted: boolean;

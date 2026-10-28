@@ -67,6 +67,17 @@ export const recargosApi = {
 		await apiClient.delete(`${BASE_URL}/reservas-planilla/${reservaId}`);
 	},
 
+	/** Reemplaza solo el adjunto de una planilla existente (permiso limitado). */
+	async adjuntarPlanilla(id: string, file: File): Promise<{ id: string; planilla_s3key: string; filename: string }> {
+		const formData = new FormData();
+		formData.append('file', file);
+		const response = await apiClient.post<{
+			success: boolean;
+			data: { id: string; planilla_s3key: string; filename: string };
+		}>(`${BASE_URL}/${encodeURIComponent(id)}/planilla`, formData);
+		return response.data.data;
+	},
+
 	/**
 	 * Obtener un recargo por ID con todas sus relaciones
 	 */

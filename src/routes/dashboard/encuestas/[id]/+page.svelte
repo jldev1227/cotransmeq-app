@@ -26,11 +26,14 @@
 	let cambios = $state(false);
 
 	function desdeEncuesta(e: Encuesta): EncuestaInput {
+		/// Después del PUT, `e` ya pasó por `$state` y sus preguntas son proxies;
+		/// `structuredClone` falla con proxies aunque el contenido sea JSON válido.
+		const preguntas = $state.snapshot(e.preguntas ?? []);
 		return {
 			titulo: e.titulo, descripcion: e.descripcion, mensaje_final: e.mensaje_final,
 			nombre_modo: e.nombre_modo, correo_modo: e.correo_modo,
 			registrar_origen: e.registrar_origen, politica_origen: e.politica_origen,
-			fecha_cierre: e.fecha_cierre, preguntas: structuredClone(e.preguntas ?? [])
+			fecha_cierre: e.fecha_cierre, preguntas: structuredClone(preguntas)
 		};
 	}
 	function mensaje(e: any): string {

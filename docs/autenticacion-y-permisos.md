@@ -97,9 +97,10 @@ HTML inicial el título y la descripción pública del módulo en la vista previ
 (Open Graph), sin publicar datos del registro. Tras autenticarse se abre la
 ruta original.
 
-El `handle` de [hooks.server.ts](../src/hooks.server.ts) solo actúa en
-`/dashboard/**` y solo en cargas completas de página (no hay cargas de servidor,
-así que la navegación de cliente no pasa por él).
+El `handle` de [hooks.server.ts](../src/hooks.server.ts) protege la sesión en
+`/dashboard/**` durante cargas completas. Los permisos se resuelven contra el
+usuario vigente en el API y en la guardia de cliente, para que la lista blanca
+personal no dependa de áreas antiguas congeladas en el JWT.
 
 1. Toma el token de la cookie `transmeralda_token` o de `Authorization`.
 2. Sin token: redirige a `/login?redirect=<ruta + consulta>`. Se conserva la
@@ -108,31 +109,15 @@ así que la navegación de cliente no pasa por él).
 3. Decodifica el payload **sin verificar la firma** y mira `exp`. Si no se
    puede leer, venció o no trae `area` como lista, borra la cookie y manda a
    `/login?redirect=<ruta + consulta>` para conservar el enlace solicitado.
-4. Resuelve el módulo por el primer segmento tras `/dashboard` y llama a
-   `checkAccess(role, area, módulo, payload.permisos_rutas)`. Como el token no
-   trae `permisos_rutas`, aquí siempre mandan las áreas.
-5. Si no hay acceso, redirige a `landingRoute(...)` con `?denied=1` (nadie lee
-   ese parámetro), salvo que el destino sea la misma ruta, para no entrar en un
-   bucle.
-6. Deja `token`, `userRole` y `userArea` en `event.locals`.
+4. No decide el acceso a módulos con el área del token; esa autorización vive
+   en la API y usa `permisos_rutas` en tiempo real.
+5. Deja `token`, `userRole` y `userArea` en `event.locals`.
 
 Trampas de este guardia, todas verificables en el código:
 
-- **`landingRoute` puede mandar a una ruta que no existe.** Si el usuario no
-  tiene `servicios`, devuelve el primer módulo accesible distinto de `perfil`,
-  y el primero del mapa es `dashboard` (general): el destino queda en
-  `/dashboard/dashboard?denied=1`, que es un 404. Le pasa a quien solo tiene
-  áreas sin `servicios` (contabilidad, mantenimiento) al abrir en carga
-  completa una ruta que no le corresponde. El guardia de cliente, en cambio,
-  manda a `/dashboard`.
-- **Usa las áreas del token, no las actuales.** El token congela las áreas del
-  momento del login durante 30 días; el backend ya lee las de la base en cada
-  petición y el guardia de cliente las del perfil refrescado. Tras cambiarle
-  las áreas a alguien, el guardia de servidor puede dejarlo pasar donde ya no
-  debe (lo corta el de cliente) o rechazarlo donde ya puede.
-- **Ignora la lista blanca** (`permisos_rutas`), por lo dicho arriba.
-- Un token con `area: []` pasa sin comprobar módulo (`userArea.length > 0`).
-- `App.Locals.userArea` está tipado como `string` y recibe una lista.
+- La guardia de cliente muestra una pantalla 404 cuando la lista blanca niega
+  una ruta, sin revelar que ese módulo existe. La API también responde 404 en
+  rutas denegadas por `permisos_rutas` y 403 para denegaciones por área.
 
 ## El guardia del cliente
 
@@ -140,8 +125,7 @@ Trampas de este guardia, todas verificables en el código:
 
 - En cada cambio de ruta, salvo `/dashboard`, comprueba el módulo con
   `checkAccess(role || rol, area, módulo, permisos_rutas)` usando el usuario del
-  store (refrescado por el perfil, con lista blanca). Sin acceso: aviso «No
-  tienes permiso para acceder a esta sección» y `goto('/dashboard')`.
+  store. Sin acceso, oculta el contenido protegido y presenta la pantalla 404.
 - Cada 60 s revisa el `exp` del token: avisa cuando quedan 5 minutos o menos y
   cierra la sesión al vencer.
 - Escucha `sesion-cerrada` en el socket: cuando un administrador cierra la
@@ -241,7 +225,7 @@ deja fuera a quien solo tiene `limited`.
 |---|---|---|---|
 | `dashboard`, `actividad`, `perfil`, `flota`, `conductores`, `clientes`, `mis-formularios` | Todos (`general`) | | |
 | `servicios` | administración, operaciones | HSEQ, talento humano, facturación | |
-| `recargos` | administración, operaciones | HSEQ, facturación, talento humano | |
+| `recargos` | administración, operaciones | talento humano | Cualquier área mediante lista blanca individual; permite consultar y adjuntar soportes sin editar datos |
 | `solicitudes` | administración, operaciones | facturación, contabilidad | |
 | `sarlaft` | administración, talento humano | | |
 | `asistencias`, `acciones-correctivas`, `evaluaciones` | administración, HSEQ | | |

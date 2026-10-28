@@ -502,6 +502,7 @@
 
 			canvasDisposers.push(
 				installCierresCellPermission(nuevo.univer, {
+					unitId: nuevo.unitId,
 					// Insertar una fila con el menú de Univer es lo primero que
 					// intenta quien viene de Excel. Ahora se bloquea, y el aviso
 					// dice dónde está el botón que sí crea la fila entera.
@@ -525,6 +526,7 @@
 			canvasDisposers.push(
 				attachCierresCellChangeAdapter({
 					unitId: nuevo.unitId,
+					container,
 					commandService,
 					getWorkbook: () => nuevo.fUniver.getActiveWorkbook() as any,
 					resolveCierre: nuevo.resolveCierre,
@@ -542,6 +544,12 @@
 							valor
 						});
 					},
+					onPasteBlocked: () =>
+						toast.warning('No se puede reemplazar este cálculo', {
+							id: 'cierres-pegado-formula',
+							description:
+								'Edita SALARIO u otro campo editable para que las prestaciones y sus totales se recalculen.'
+						}),
 					/**
 					 * El adapter tuvo que tirar una edición porque no supo la
 					 * versión de la entidad. Antes solo quedaba en la consola:
@@ -1081,14 +1089,10 @@
 				aplicarEstado(cierre_id, estado, version);
 			},
 			onColorChanged: ({ cierre_id, color, by }) => {
-				// `sheet:hoja-color` se difunde a TODO el room, incluido quien
-				// lo provocó — a diferencia de `sheet:patch:applied`, que
-				// excluye al emisor. Volver a pintar aquí sería repintar lo que
-				// el propio usuario acaba de hacer, y realimentar el ciclo.
-				if (by?.id && by.id === $authStore.user?.id) {
-					aplicarColorEnModelo(cierre_id, color);
-					return;
-				}
+				// El evento se difunde a todo el room, incluido el emisor. Pintar
+				// es idempotente: el engine no vuelve a ejecutar setTabColor si ya
+				// tiene ese color y suprime el eco en las otras sesiones del mismo
+				// usuario, que también deben reflejar el cambio en vivo.
 				aplicarColorEnModelo(cierre_id, color);
 				const hoja = indice.find((c) => c.id === cierre_id);
 				ctx?.pintarPestana(
@@ -1098,7 +1102,7 @@
 
 				// Mismo criterio que con los flags: solo molesta si tenías una
 				// escritura de ESE color todavía en la cola.
-				if (colaPendientes > 0) {
+				if (colaPendientes > 0 && by?.id !== $authStore.user?.id) {
 					toast.info(`${by?.name || 'Otro usuario'} cambió el color de ${hoja?.placa ?? ''}`);
 				}
 			},

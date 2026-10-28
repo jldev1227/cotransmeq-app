@@ -74,6 +74,8 @@ interface HojaEditable {
 	itemPorFila: Map<number, string>;
 	/// Filas estructurales que pueden anclarse a la capa pero son de solo lectura.
 	filasBloqueadas: Set<number>;
+	/// Celdas de fórmula: no se anotan ni se editan desde el canvas.
+	celdasBloqueadas: Set<string>;
 	/// Nombre → celda que el builder declara editable-y-persistente por clave.
 	celdaPorClave: Map<string, { fila: number; columna: number }>;
 	/// `${fila}:${columna}` → nombre. El índice inverso, para no recorrer el
@@ -95,6 +97,7 @@ export function registrarHojaEditable(
 		inicioItems?: number;
 		itemPorFila?: Map<number, string>;
 		filasBloqueadas?: Iterable<number>;
+		celdasBloqueadas?: Iterable<{ fila: number; columna: number }>;
 		soloDebajo?: boolean;
 		celdasClave?: Record<string, { fila: number; columna: number }>;
 	}
@@ -109,6 +112,9 @@ export function registrarHojaEditable(
 		inicioItems: datos.inicioItems ?? 0,
 		itemPorFila: datos.itemPorFila ?? new Map(),
 		filasBloqueadas: new Set(datos.filasBloqueadas ?? []),
+		celdasBloqueadas: new Set(
+			Array.from(datos.celdasBloqueadas ?? [], ({ fila, columna }) => `${fila}:${columna}`)
+		),
 		soloDebajo: datos.soloDebajo ?? false,
 		celdaPorClave,
 		clavePorCelda
@@ -130,6 +136,7 @@ export function anclaDe(
 ): Ancla | null {
 	const h = hojas.get(clave(unitId, sheetId));
 	if (!h) return null;
+	if (h.celdasBloqueadas.has(`${fila}:${columna}`)) return null;
 	// Las filas marcadas por el builder son parte del bloque estructurado,
 	// aunque no tengan binding editable. Nunca deben caer como anotaciones.
 	if (h.filasBloqueadas.has(fila)) return null;
@@ -166,6 +173,16 @@ export function esCeldaDeCapa(
 	columna: number
 ): boolean {
 	return anclaDe(unitId, sheetId, fila, columna) != null;
+}
+
+/// ¿La celda pertenece a una fórmula del builder y debe quedar solo consulta?
+export function esCeldaBloqueada(
+	unitId: string,
+	sheetId: string,
+	fila: number,
+	columna: number
+): boolean {
+	return hojas.get(clave(unitId, sheetId))?.celdasBloqueadas.has(`${fila}:${columna}`) ?? false;
 }
 
 /// Fila en la que hay que pintar una celda de la capa, o `null` si su ancla ya

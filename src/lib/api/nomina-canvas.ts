@@ -147,6 +147,7 @@ export interface AnalisisNominaDTO {
 		estados: string[];
 	};
 	total: number;
+	meta: { recargos_jornada_grupos: number };
 }
 
 export const nominaCanvasAPI = {

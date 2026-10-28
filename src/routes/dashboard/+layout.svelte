@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { desuscribirAlCerrarSesion } from '$lib/notificaciones/webPush';
-	import { authStore } from '$lib/stores/auth';
+	import { authStore, type AuthState } from '$lib/stores/auth';
 	import { socketManager } from '$lib/socket';
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import Sidebar from '$lib/components/Sidebar.svelte';
@@ -14,16 +14,18 @@
 	import { toast } from '$lib/stores/toast';
 	import { isTokenExpired, getTimeUntilExpiration } from '$lib/utils/jwt';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
 	import {
 		checkAccess,
-		getAccessibleModules,
 		AREA_LABELS,
 		type Area
 	} from '$lib/config/permissions';
+	import { MENU_ITEMS } from '$lib/config/menu';
 
-	let mounted = false;
+	let mounted = $state(false);
+	let authState = $state<AuthState>({ user: null, token: null, isLoading: false, error: null });
+	let rutaNoEncontrada = $state(false);
 	let tokenCheckInterval: ReturnType<typeof setInterval> | null = null;
+	let bajaAuthStore: (() => void) | undefined;
 
 	// Modal sesión cerrada remotamente
 	let sesionCerradaModal = false;
@@ -45,19 +47,32 @@
 		}, 1000);
 	}
 
-	// Reactive declarations
-	$: user = $authStore.user;
-	$: token = $authStore.token;
+	let user = $derived(authState.user);
+	let token = $derived(authState.token);
+	const rutaDeRetorno = $derived.by(() => {
+		if (!user) return { href: '/dashboard', label: 'Volver al inicio' };
+		const puedeEntrar = (moduleId: string) =>
+			checkAccess(user?.role || user?.rol, user?.area, moduleId, user?.permisos_rutas).allowed;
 
-	// Guard reactivo: verificar permisos al cambiar de ruta
-	$: if (mounted && user && $page.url.pathname !== '/dashboard') {
-		checkRoutePermission($page.url.pathname);
-	}
+		if (puedeEntrar('dashboard')) return { href: '/dashboard', label: 'Volver al inicio' };
+		const primerModulo = MENU_ITEMS.find((item) => item.id !== 'dashboard' && puedeEntrar(item.id));
+		if (primerModulo) return { href: primerModulo.href, label: `Ir a ${primerModulo.label}` };
+
+		/// `perfil` queda accesible incluso cuando la lista blanca no incluye
+		/// módulos de menú; así el enlace de salida nunca vuelve al mismo 404.
+		return { href: '/dashboard/perfil', label: 'Ir a mi perfil' };
+	});
+
+	// El guardado reactivo mantiene el 404 sincronizado con ruta y permisos del usuario.
+	$effect(() => {
+		const pathname = $page.url.pathname;
+		if (mounted && user) checkRoutePermission(pathname);
+	});
 
 	function checkRoutePermission(pathname: string) {
-		const match = pathname.match(/^\/dashboard\/([^/]+)/);
+		const match = pathname.match(/^\/dashboard(?:\/([^/]+))?/);
 		if (!match) return;
-		const moduleId = match[1];
+		const moduleId = match[1] ?? 'dashboard';
 
 		const { allowed } = checkAccess(
 			user?.role || user?.rol,
@@ -67,21 +82,10 @@
 		);
 
 		if (!allowed) {
-			toast.error('No tienes permiso para acceder a esta sección');
-			goto(rutaDeAterrizaje());
+			rutaNoEncontrada = true;
+			return;
 		}
-	}
-
-	/**
-	 * Primera ruta que el usuario sí puede abrir.
-	 *
-	 * Mandar siempre a `/dashboard/servicios` deja de valer con `permisos_rutas`:
-	 * quien tiene lista blanca puede no tener servicios, y el guard se dispararía
-	 * otra vez en el destino, encadenando toasts de error.
-	 */
-	/// El panel de inicio es de todos: lo que no le toca al usuario no se pinta.
-	function rutaDeAterrizaje(): string {
-		return '/dashboard';
+		rutaNoEncontrada = false;
 	}
 
 	/**
@@ -114,8 +118,12 @@
 	let bajaSesionCerrada: (() => void) | undefined;
 
 	onMount(() => {
-		// Inicializar auth store
-		authStore.init();
+		// La suscripción explícita conecta el store legacy con runes y evita que
+		// el layout permanezca en carga tras hidratar usuario y token.
+		bajaAuthStore = authStore.subscribe((state) => {
+			authState = state;
+		});
+		void authStore.init();
 		mounted = true;
 
 		// Verificar token inmediatamente
@@ -136,6 +144,7 @@
 		if (tokenCheckInterval) clearInterval(tokenCheckInterval);
 		if (sesionCerradaTimer) clearInterval(sesionCerradaTimer);
 		bajaSesionCerrada?.();
+		bajaAuthStore?.();
 	});
 
 	function handleSectionChange(event: CustomEvent) {
@@ -201,9 +210,18 @@
 				     páginas que cargan en onMount se quedaban con el registro
 				     anterior (solo cambiaba la URL). Los parámetros de consulta
 				     no remontan: los filtros y modales por URL siguen igual. -->
-				{#key $page.url.pathname}
-					<slot />
-				{/key}
+				{#if rutaNoEncontrada}
+					<section class="mx-auto flex min-h-[60vh] max-w-2xl flex-col items-center justify-center gap-3 px-6 text-center" role="status">
+						<p class="text-xs font-bold uppercase tracking-[.18em] text-[var(--text-muted)]">404 · No encontrado</p>
+						<h1 class="text-2xl font-bold text-[var(--text-primary)]">Esta ruta no está disponible</h1>
+						<p class="text-sm text-[var(--text-muted)]">La dirección no existe o no tienes acceso a ella.</p>
+						<a class="btn-primary mt-2" href={rutaDeRetorno.href}>{rutaDeRetorno.label}</a>
+					</section>
+				{:else}
+					{#key $page.url.pathname}
+						<slot />
+					{/key}
+				{/if}
 			</main>
 		</div>
 	</div>

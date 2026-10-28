@@ -41,10 +41,10 @@ Todas exigen sesión administrativa. Las que no están en el menú se marcan.
 
 | Ruta | Pantalla | Módulo | API |
 |---|---|---|---|
-| `/dashboard` | Panel de inicio: el backend decide qué secciones ve el usuario (operaciones, HSEQ, talento humano, contabilidad, facturación, mantenimiento) y el periodo vive en la URL. | Ninguno: basta la sesión (`dashboard` es `general`). | `dashboard` |
+| `/dashboard` | Panel de inicio: el backend decide qué secciones ve el usuario (operaciones, HSEQ, talento humano, contabilidad, facturación, mantenimiento) y el periodo vive en la URL. Una lista blanca personalizada puede excluirlo; el 404 ofrece el primer módulo autorizado o el perfil. | `dashboard` (general, salvo que lo excluya `permisos_rutas`) | `dashboard` |
 | `/dashboard/actividad` | Registro de actividad del equipo con filtros por persona, módulo, acción, área y fechas. Fuera del menú. | `actividad` (general) | `actividad` |
 | `/dashboard/perfil` | Mi perfil: datos de contacto, firma, sesión actual, contraseña, enlace de la app móvil y conexiones con Claude o ChatGPT (tokens del MCP). Fuera del menú. | `perfil` (siempre accesible) | `auth`, `app-usuarios`, `mcp` |
-| `/dashboard/usuarios` | «Equipo»: usuarios, sesiones, invitaciones, permisos (`bonos-planilla`) y accesos a la app móvil (`?tab=app-movil`, solo rol admin). | `usuarios` | `usuarios`, `sesiones`, `invitaciones` |
+| `/dashboard/usuarios` | «Equipo»: usuarios, sesiones, invitaciones, permisos (`bonos-planilla`), cambio de contraseña y accesos a la app móvil (`?tab=app-movil`, solo rol admin). | `usuarios` | `usuarios`, `sesiones`, `invitaciones` |
 | `/dashboard/directorio` | Pantalla huérfana: presencia, invitaciones y alta manual, lo mismo que cubre «Equipo». Fuera del menú; su propio código pide no añadirle funciones. | `directorio` | `usuarios`, `invitaciones` |
 
 ### Flota, conductores y operación
@@ -59,7 +59,7 @@ Todas exigen sesión administrativa. Las que no están en el menú se marcan.
 | `/dashboard/conductores/recorridos` | Canvas de recorridos (Univer): un libro por corte, una hoja por conductor, una fila por recorrido; alimenta bonos y pernoctes. Se abre desde Conductores. | Servidor: `conductores`. Canvas: `recorridos`. Marcar bonos exige además `bonos-planilla`. | `recorridos-canvas`, `dias-laborados`, `liquidaciones` (configuraciones de liquidación) |
 | `/dashboard/servicios` | Servicios en lista, calendario o canvas; alta y edición en modal con buscador unificado para cliente, municipios, vehículo y conductor; ticket. | `servicios` | `servicios` |
 | `/dashboard/servicios/[id]` | Detalle con título de origen, destino y propósito, indicaciones de operaciones bajo el título, programación (fecha/horas), descarga del rutograma PDF, mapa con capa agrupada de paradas seguras (restaurantes, estaciones y hospedajes), vigencia de la licencia del conductor y días para vencer, ejecución y modal para compartir enlace o ticket. | `servicios` | `servicios` |
-| `/dashboard/recargos` | Planillas de recargos del mes, con la importación de planillas desde la base de Transmeralda (vista previa, alta de vehículos y empresas que falten, sincronización de conductores). | `recargos` | `recargos` (rutas `importar-desde-transmeralda`), `liquidaciones` (vista previa de recargos) |
+| `/dashboard/recargos` | Planillas de recargos del mes, con la importación desde Transmeralda y la subida de soporte en modal con resumen de planilla, empresa, vehículo, conductor y rango de días. | `recargos` | `recargos` (rutas `importar-desde-transmeralda`), `liquidaciones` (vista previa de recargos) |
 | `/dashboard/recargos/configuracion` | Configuración de salarios para recargos. | `recargos` | `recargos` |
 | `/dashboard/viaticos` | Anticipos a conductores, su legalización y los gastos de la empresa. | `viaticos` | `viaticos` |
 | `/dashboard/solicitudes` | Bandeja de las solicitudes del formulario público de la landing, con radicado y prioridad. | `solicitudes` | `solicitudes-web` |

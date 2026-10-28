@@ -1209,7 +1209,7 @@
 								: t.key === 'bonificaciones'
 									? filasBon.length
 									: t.key === 'recargos'
-										? filasJornada.length
+										? (datos?.meta?.recargos_jornada_grupos ?? filasJornada.length)
 										: t.key === 'pernotes'
 											? filasPer.length
 											: filasMnt.length}

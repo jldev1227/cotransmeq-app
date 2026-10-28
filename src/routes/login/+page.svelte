@@ -57,7 +57,6 @@
 		/// autentique. Ahora el destino lleva también la cadena de consulta,
 		/// así que la comprobación importa más que antes.
 		if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return null;
-		if (raw.startsWith('/dashboard/nomina')) return null;
 		return raw;
 	});
 	const modulosCompartibles: Record<string, string> = {
@@ -90,10 +89,9 @@
 
 	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-	/** Destino post-login, ignorando siempre el módulo de nómina. */
+	/** Prioriza el destino compartido; el módulo validará permisos después del login. */
 	function resolveTarget(): string {
-		let savedRedirect = localStorage.getItem('redirect_after_login');
-		if (savedRedirect?.startsWith('/dashboard/nomina')) savedRedirect = null;
+		const savedRedirect = localStorage.getItem('redirect_after_login');
 		const targetPath = redirectPath || savedRedirect || '/dashboard';
 		localStorage.removeItem('redirect_after_login');
 		return targetPath;

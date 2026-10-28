@@ -17,6 +17,8 @@
  */
 
 import {
+	CustomCommandExecutionError,
+	ICommandService,
 	IUniverInstanceService,
 	UniverInstanceType,
 	type ICommandInfo,
@@ -27,10 +29,11 @@ import { SheetInterceptorService } from '@univerjs/sheets';
 // @ts-ignore
 import { IEditorBridgeService } from '@univerjs/sheets-ui';
 import { getCierreBinding } from '../business/cierres-finales-cell-binding';
-import { esCeldaDeCapa } from '../business/zona-libre';
+import { esCeldaBloqueada, esCeldaDeCapa } from '../business/zona-libre';
 import { isApplyingRemote } from './apply-remote-patch';
 
 const SET_RANGE_VALUES = 'sheet.command.set-range-values';
+const SET_RANGE_VALUES_MUTATION = 'sheet.mutation.set-range-values';
 const SET_CELL_EDIT_VISIBLE = 'sheet.operation.set-cell-edit-visible';
 /// Borrar con Supr no pasa por `set-range-values`: sin controlarlo aquí, se
 /// podía vaciar una etiqueta o un valor derivado y desaparecía de la pantalla
@@ -56,10 +59,7 @@ const REMOVE_ROW = 'sheet.command.remove-row';
  * pestaña, la mutación cubre el deshacer. Denegar la mutación hace que ese
  * undo concreto no haga nada, que es preferible a perder la hoja.
  */
-const REMOVE_SHEET = new Set([
-	'sheet.command.remove-sheet',
-	'sheet.mutation.remove-sheet'
-]);
+const REMOVE_SHEET = new Set(['sheet.command.remove-sheet', 'sheet.mutation.remove-sheet']);
 
 /**
  * Insertar y borrar FILAS o COLUMNAS: bloqueado, con explicación.
@@ -149,6 +149,8 @@ function esEditable(entityType: string, field: string, derived?: boolean): boole
 }
 
 export interface CierresPermissionOptions {
+	/** Libro de cierres dueño del interceptor; el pegado a veces omite unitId. */
+	unitId: string;
 	/**
 	 * Se llama cuando se bloquea una operación que el usuario intentó a
 	 * propósito, con un mensaje ya redactado para enseñárselo.
@@ -161,10 +163,11 @@ export interface CierresPermissionOptions {
 
 export function installCierresCellPermission(
 	univer: Univer,
-	opts: CierresPermissionOptions = {}
+	opts: CierresPermissionOptions
 ): () => void {
 	const injector = univer.__getInjector();
 	const interceptor = injector.get(SheetInterceptorService);
+	const commandService = injector.get(ICommandService);
 	const instancias = injector.get(IUniverInstanceService);
 	// @ts-ignore
 	const editorBridge = injector.get(IEditorBridgeService as any) as {
@@ -231,7 +234,8 @@ export function installCierresCellPermission(
 						if (!field?.startsWith('eliminado_solo_lectura')) continue;
 						opts.onBloqueado?.({
 							titulo: 'Los items eliminados son solo consulta',
-							detalle: 'Esta fila se conserva en rojo como referencia y no se puede modificar desde el canvas.'
+							detalle:
+								'Esta fila se conserva en rojo como referencia y no se puede modificar desde el canvas.'
 						});
 						return false;
 					}
@@ -245,6 +249,15 @@ export function installCierresCellPermission(
 				if (params?.visible !== true) return true;
 				const loc = editorBridge.getEditLocation();
 				if (!loc) return true;
+				if (esCeldaBloqueada(loc.unitId, loc.sheetId, loc.row, loc.column)) {
+					opts.onBloqueado?.({
+						titulo: 'No se puede reemplazar este cálculo',
+						detalle:
+							'Esta celda contiene una fórmula del cierre. Edita SALARIO u otro campo ' +
+							'editable para que las prestaciones y sus totales se recalculen.'
+					});
+					return false;
+				}
 				const b = getCierreBinding(loc.unitId, loc.sheetId, loc.row, loc.column);
 				// Sin binding solo se permite la ZONA LIBRE: las filas bajo el
 				// bloque estructurado, anotables por el equipo.
@@ -298,9 +311,86 @@ export function installCierresCellPermission(
 		}
 	});
 
+	/**
+	 * El pegado y el deshacer escriben directamente la mutación, por debajo de
+	 * `set-range-values`; validar solo el comando deja que una fórmula o una
+	 * celda derivada se vea cambiada hasta recargar, aunque nunca pueda guardarse.
+	 * Aquí se revisan las coordenadas reales de la mutación antes de aplicarla.
+	 */
+	const disposableMutacion = commandService.beforeCommandExecuted((info) => {
+		if (info.id !== SET_RANGE_VALUES_MUTATION || isApplyingRemote()) return;
+		const params = (info.params ?? {}) as {
+			unitId?: string;
+			subUnitId?: string;
+			cellValue?: Record<string, Record<string, { v?: unknown; f?: unknown } | null>>;
+		};
+		if (params.unitId && params.unitId !== opts.unitId) return;
+		if (!params.cellValue) return;
+
+		// El pegado puede emitir la mutación sin unitId/subUnitId. Como este
+		// interceptor pertenece a esta instancia de Univer, se resuelven contra
+		// su libro y hoja activos; salir aquí permitiría cambiar una fórmula en
+		// pantalla, aunque nunca se guarde en el servidor.
+		const unitId = opts.unitId;
+		const libro = instancias.getUnit(unitId, UniverInstanceType.UNIVER_SHEET) as any;
+		if (!libro || libro.getUnitId?.() !== unitId) return;
+		const sheetId = params.subUnitId ?? libro.getActiveSheet?.()?.getSheetId?.();
+		if (!sheetId) return;
+		const celdas = Object.entries(params.cellValue).flatMap(([rStr, fila]) =>
+			Object.entries(fila ?? {}).map(([cStr, celda]) => ({
+				r: Number(rStr),
+				c: Number(cStr),
+				celda
+			}))
+		);
+
+		for (const { r, c, celda } of celdas) {
+			if (!celda) continue;
+			const tieneFormula = typeof celda.f === 'string' && celda.f.trim() !== '';
+			const traeValor = 'v' in celda && celda.v !== undefined;
+			// Ignorar cambios de estilo y celdas vacías de la matriz del clipboard.
+			if (!tieneFormula && !traeValor) continue;
+			const formulaDelBuilder = esCeldaBloqueada(unitId, sheetId, r, c);
+			// El motor de fórmulas emite mutaciones de valor sin `trigger` al
+			// calcular fórmulas existentes. Se dejan pasar; la edición humana de
+			// esas celdas se detiene en el evento de pegado o al entrar a editar.
+			if (formulaDelBuilder && !(params as any).trigger && !tieneFormula) continue;
+
+			const binding = getCierreBinding(unitId, sheetId, r, c);
+			const permitida = binding
+				? esEditable(binding.entityType, binding.field, binding.derived)
+				: esCeldaDeCapa(unitId, sheetId, r, c);
+			if (permitida && !tieneFormula) continue;
+
+			const aviso = tieneFormula
+				? {
+						titulo: 'No se pueden pegar fórmulas en esta hoja',
+						detalle:
+							'El canvas guarda valores en el servidor y calcula los campos derivados. ' +
+							'Pega el valor como texto o número sobre una celda editable.'
+					}
+				: formulaDelBuilder
+					? {
+							titulo: 'No se puede reemplazar este cálculo',
+							detalle:
+								'Esta celda contiene una fórmula del cierre. Edita SALARIO u otro campo ' +
+								'editable para que las prestaciones y sus totales se recalculen.'
+						}
+					: {
+							titulo: 'No se puede pegar sobre este cálculo',
+							detalle:
+								'VALOR y TOTAL de prestaciones se calculan a partir del salario y el ' +
+								'porcentaje. Pega sobre una celda editable para que el cambio se guarde.'
+						};
+			opts.onBloqueado?.(aviso);
+			throw new CustomCommandExecutionError('[cierres] pegado en celda no editable');
+		}
+	});
+
 	return () => {
 		try {
 			disposable.dispose();
+			disposableMutacion.dispose();
 		} catch {
 			/* noop */
 		}

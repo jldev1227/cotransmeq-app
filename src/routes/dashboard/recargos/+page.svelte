@@ -26,6 +26,7 @@
 	import ModalFormRecargo from '$lib/components/modals/ModalFormRecargo.svelte';
 	import ModalConfirmarEliminar from '$lib/components/modals/ModalConfirmarEliminar.svelte';
 	import ModalCambiarEstado from '$lib/components/modals/ModalCambiarEstado.svelte';
+	import ModalAdjuntarPlanilla from '$lib/components/modals/ModalAdjuntarPlanilla.svelte';
 	import ModalImportarTransmeralda from '$lib/components/modals/ModalImportarTransmeralda.svelte';
 	import { toast } from 'svelte-sonner';
 	import MultiSelectFilter from '$lib/components/ui/MultiSelectFilter.svelte';
@@ -50,7 +51,7 @@
 	} from '$lib/components/listing/BarraSeleccion.svelte';
 	import { mascota } from '$lib/mascot';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { Copy, Eye, Pencil, RefreshCw, RotateCcw, Tags, Trash2 } from 'lucide-svelte';
+	import { Copy, Eye, Pencil, RefreshCw, RotateCcw, Tags, Trash2, Upload } from 'lucide-svelte';
 
 	/**
 	 * Filtros de la página, y con ellos la URL.
@@ -134,6 +135,32 @@
 	let restoredLoading = $state(false);
 	let estadoLoading = $state(false);
 	let reporteLoading = $state(false);
+	let planillaAdjuntaEnCurso = $state<string | null>(null);
+	let recargoParaAdjuntar = $state<CanvasRecargo | null>(null);
+
+	function abrirModalAdjunto(event: MouseEvent, recargo: CanvasRecargo) {
+		/// La fila/tarjeta es seleccionable; el botón de archivo debe consumir el
+		/// clic aquí y la selección ocurre dentro del modal, fuera de esa fila.
+		event.preventDefault();
+		event.stopPropagation();
+		if (!puedeAdjuntarPlanilla) return;
+		recargoParaAdjuntar = recargo;
+	}
+
+	async function adjuntarDocumentoPlanilla(archivo: File, recargoId: string) {
+		if (!archivo || !puedeAdjuntarPlanilla) return;
+		planillaAdjuntaEnCurso = recargoId;
+		try {
+			await recargosApi.adjuntarPlanilla(recargoId, archivo);
+			toast.success('Adjunto de planilla actualizado');
+			recargoParaAdjuntar = null;
+			await recargosStore.fetchRecargos();
+		} catch (error: any) {
+			toast.error(error?.response?.data?.message || error?.message || 'No se pudo adjuntar la planilla');
+		} finally {
+			planillaAdjuntaEnCurso = null;
+		}
+	}
 
 	// ═══ Popover TM (badge "TM" en columna numero_planilla) ═══
 	// El popover NO puede vivir dentro del `overflow-x-auto` de la tabla
@@ -292,6 +319,9 @@
 	 */
 	const puedeEditarRecargos = $derived(
 		!!$authStore.user && authStore.getAccessLevel('recargos') === 'full'
+	);
+	const puedeAdjuntarPlanilla = $derived(
+		!!$authStore.user && ['limited', 'full'].includes(authStore.getAccessLevel('recargos') ?? '')
 	);
 	const isReadOnly = $derived(isConsultaRole || !puedeEditarRecargos);
 
@@ -2491,6 +2521,18 @@
 											>
 												<Eye size={16} />
 											</button>
+							{#if puedeAdjuntarPlanilla}
+								<button
+									type="button"
+									class="btn-icon"
+									onclick={(e) => abrirModalAdjunto(e, recargo)}
+									aria-label="Adjuntar soporte"
+									title={recargo.tiene_documento ? 'Reemplazar adjunto' : 'Adjuntar soporte'}
+									disabled={planillaAdjuntaEnCurso === recargo.id}
+								>
+									<Upload size={15} />
+								</button>
+							{/if}
 											{#if !isReadOnly}
 												<button
 													type="button"
@@ -2785,8 +2827,20 @@
 														</svg>
 													</button>
 												{/if}
-											</div>
-										{:else if column.key === 'numero_planilla'}
+								{#if puedeAdjuntarPlanilla && !verEliminados}
+														<button
+															type="button"
+										onclick={(e) => abrirModalAdjunto(e, recargo)}
+															class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-600)]"
+															title={recargo.tiene_documento ? 'Reemplazar adjunto' : 'Adjuntar soporte'}
+															aria-label="Adjuntar soporte"
+															disabled={planillaAdjuntaEnCurso === recargo.id}
+														>
+															<Upload size={14} aria-hidden="true" />
+														</button>
+													{/if}
+												</div>
+						{:else if column.key === 'numero_planilla'}
 											<div class="flex items-center gap-1.5">
 												<span class="font-mono-meta text-[0.7rem] text-[var(--emerald-700)]"
 													>{getCellValue(recargo, column)}</span
@@ -2924,6 +2978,18 @@
 </div>
 
 <!-- Modales -->
+{#if recargoParaAdjuntar}
+	<ModalAdjuntarPlanilla
+		open={true}
+		recargo={recargoParaAdjuntar}
+		cargando={planillaAdjuntaEnCurso === recargoParaAdjuntar.id}
+		oncerrar={() => (recargoParaAdjuntar = null)}
+		onsubir={(archivo) => {
+			if (recargoParaAdjuntar) void adjuntarDocumentoPlanilla(archivo, recargoParaAdjuntar.id);
+		}}
+	/>
+{/if}
+
 {#if modalViewIsOpen}
 	<ModalVisualizarRecargo bind:isOpen={modalViewIsOpen} recargoId={selectedRecargoId} />
 {/if}

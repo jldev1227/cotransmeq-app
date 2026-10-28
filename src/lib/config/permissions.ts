@@ -37,6 +37,8 @@ export interface RoutePermission {
 	full: Area[];
 	read?: Area[];
 	limited?: Area[];
+	/** Permite asignar `limited` en la lista blanca individual para acciones puntuales. */
+	allowLimited?: boolean;
 	general?: boolean;
 	description?: string;
 }
@@ -97,8 +99,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 	},
 	recargos: {
 		full: ['administracion', 'operaciones'],
-		read: ['hseq', 'facturacion', 'talento_humano'],
-		description: 'Gestión de recargos/planillas'
+		read: ['talento_humano'],
+		allowLimited: true,
+    description: 'Planillas: consulta para talento humano; nivel limitado permite adjuntar soporte sin editar'
 	},
 	clientes: {
 		full: ['administracion', 'operaciones', 'contabilidad', 'facturacion', 'hseq'],

@@ -475,6 +475,7 @@ export function buildCierreFinalSheet(
 
 	const bindings: BindingSeed[] = [];
 	const filasSoloConsulta = new Set<number>();
+	const celdasFormula: Array<{ fila: number; columna: number }> = [];
 
 	/** Registra una celda editable. En hoja bloqueada no registra nada. */
 	const bind = (
@@ -675,6 +676,7 @@ export function buildCierreFinalSheet(
 	const setFormula = (
 		r: number, col: number, formula: string, cached: number, style: IStyleData
 	) => {
+		celdasFormula.push({ fila: r, columna: col });
 		if (!cellData[r]) cellData[r] = {};
 		cellData[r][col] = {
 			v: cached, t: CellValueType.NUMBER, f: formula, s: style
@@ -1986,7 +1988,8 @@ export function buildCierreFinalSheet(
 		// nuevo.
 		inicioItems: firstItemRow,
 		itemPorFila,
-		filasBloqueadas: filasSoloConsulta
+		filasBloqueadas: filasSoloConsulta,
+		celdasBloqueadas: celdasFormula
 	});
 	aplicarCapa(cellData, unitId, sheetId, anotaciones);
 
