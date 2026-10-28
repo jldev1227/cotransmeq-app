@@ -61,6 +61,8 @@
 	import { ESTADO_CARTERA } from '$lib/api/cartera';
 	import { fechaCorta } from '$lib/pagos/medios';
 	import ModalFacturar from '$lib/components/ModalFacturar.svelte';
+	import ModalEditarFactura from '$lib/components/liquidaciones/ModalEditarFactura.svelte';
+	import ModalAnularFactura from '$lib/components/liquidaciones/ModalAnularFactura.svelte';
 	import ModalRevertirFacturada from '$lib/components/ModalRevertirFacturada.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import SocketEventLogBar from '$lib/components/liquidaciones/SocketEventLogBar.svelte';
@@ -409,11 +411,13 @@
 	let revertirFactura = $state<FacturaActivaDeLiquidacion | null>(null);
 	let anularFacturaModalOpen = $state(false);
 	let anularFacturaTarget = $state<FacturaLiquidacion | null>(null);
-	let anularFacturaMotivo = $state('');
 	let eliminarFacturaModalOpen = $state(false);
 	let eliminarFacturaTarget = $state<FacturaLiquidacion | null>(null);
 	let eliminandoFactura = $state(false);
-	let anulandoFactura = $state(false);
+	let editarFacturaModalOpen = $state(false);
+	let editarFacturaTarget = $state<FacturaLiquidacion | null>(null);
+	let liquidacionesParaEditarFactura = $state<LiquidacionServicio[]>([]);
+	let liquidacionesEditarLoading = $state(false);
 
 	let detalleFactura = $state<FacturaLiquidacion | null>(null);
 
@@ -1422,7 +1426,7 @@
 		}
 	}
 
-	function getEstadoBadge(estado: EstadoLiquidacionServicio) {
+	function getEstadoBadge(estado: EstadoLiquidacionServicio, motivoAnulacion?: string | null) {
 		const map: Record<string, { bg: string; text: string; label: string }> = {
 			BORRADOR: { bg: '#f1f5f9', text: '#64748b', label: 'Borrador' },
 			LIQUIDADA: { bg: '#dbeafe', text: '#2563eb', label: 'Liquidada' },
@@ -1430,7 +1434,11 @@
 			FACTURADA: { bg: '#dcfce7', text: '#c2410c', label: 'Facturada' },
 			ANULADA: { bg: '#fee2e2', text: '#dc2626', label: 'Anulada' }
 		};
-		return map[estado] || map.BORRADOR;
+		const badge = map[estado] || map.BORRADOR;
+		if (estado === 'ANULADA' && motivoAnulacion?.startsWith('[DUPLICIDAD DE FACTURACIÓN]')) {
+			return { ...badge, label: 'Duplicada' };
+		}
+		return badge;
 	}
 
 	function abrirModalFacturar() {
@@ -1512,26 +1520,61 @@
 		}
 	}
 
+	function abrirEditarFactura(factura: FacturaLiquidacion) {
+		editarFacturaTarget = factura;
+		liquidacionesParaEditarFactura = [];
+		editarFacturaModalOpen = true;
+		cargarLiquidacionesParaEditarFactura();
+	}
+
+	async function cargarLiquidacionesParaEditarFactura() {
+		liquidacionesEditarLoading = true;
+		try {
+			const [liquidadas, aprobadas] = await Promise.all([
+				liquidacionesServiciosAPI.listar({ estado: 'LIQUIDADA', page: 1, limit: 1000 }),
+				liquidacionesServiciosAPI.listar({ estado: 'APROBADA', page: 1, limit: 1000 })
+			]);
+			const unicas = new Map<string, LiquidacionServicio>();
+			for (const liquidacion of [...liquidadas.liquidaciones, ...aprobadas.liquidaciones]) {
+				unicas.set(liquidacion.id, liquidacion);
+			}
+			liquidacionesParaEditarFactura = [...unicas.values()];
+		} catch (err: any) {
+			toast.error(err.message || 'No se pudieron cargar las liquidaciones disponibles');
+			liquidacionesParaEditarFactura = [];
+		} finally {
+			liquidacionesEditarLoading = false;
+		}
+	}
+
+	function handleFacturaEdited(
+		resultado: Awaited<ReturnType<typeof facturacionLiquidacionesAPI.editar>>
+	) {
+		const { factura } = resultado;
+		facturas = facturas.map((actual) => (actual.id === factura.id ? factura : actual));
+		if (detalleFactura?.id === factura.id) detalleFactura = factura;
+		editarFacturaModalOpen = false;
+		editarFacturaTarget = null;
+		toast.success('Factura actualizada', { description: factura.numero_factura });
+		cargarFacturas(true);
+		cargarListado(true);
+	}
+
 	function abrirAnularFactura(fac: FacturaLiquidacion) {
 		anularFacturaTarget = fac;
-		anularFacturaMotivo = '';
 		anularFacturaModalOpen = true;
 	}
 
-	async function confirmarAnularFactura() {
-		if (!anularFacturaTarget) return;
-		anulandoFactura = true;
-		try {
-			await facturacionLiquidacionesAPI.anular(anularFacturaTarget.id, anularFacturaMotivo);
-			anularFacturaModalOpen = false;
-			anularFacturaTarget = null;
-			cargarFacturas();
-			cargarListado();
-		} catch (err: any) {
-			toast.error(err.response?.data?.error || err.message || 'No se pudo anular la factura');
-		} finally {
-			anulandoFactura = false;
-		}
+	function handleFacturaAnulada(
+		resultado: FacturaLiquidacion & { estados_resultantes: Record<string, string> }
+	) {
+		facturas = facturas.map((actual) => (actual.id === resultado.id ? resultado : actual));
+		if (detalleFactura?.id === resultado.id) detalleFactura = resultado;
+		anularFacturaModalOpen = false;
+		anularFacturaTarget = null;
+		toast.success('Factura anulada', { description: resultado.numero_factura });
+		cargarFacturas(true);
+		cargarListado(true);
 	}
 
 	function abrirEliminarFactura(fac: FacturaLiquidacion) {
@@ -2141,7 +2184,7 @@
 						</thead>
 						<tbody>
 							{#each filteredLiquidaciones as liq (liq.id)}
-								{@const badge = getEstadoBadge(liq.estado)}
+								{@const badge = getEstadoBadge(liq.estado, liq.motivo_anulacion)}
 								{@const facturaInfo = facturaInfoMap[liq.id]}
 								{@const itemsTotal = liq.total_items || 0}
 								{@const nPlacas = liq.placas?.length ?? 0}
@@ -2245,7 +2288,7 @@
 				<!-- ═══ Tarjetas: una por liquidación ═══ -->
 				<ul class="lq-tarjetas lq-vista-tarjetas">
 					{#each filteredLiquidaciones as liq (liq.id)}
-						{@const badge = getEstadoBadge(liq.estado)}
+						{@const badge = getEstadoBadge(liq.estado, liq.motivo_anulacion)}
 						{@const facturaInfo = facturaInfoMap[liq.id]}
 						<li
 							class="lq-tarjeta"
@@ -2417,14 +2460,14 @@
 						<thead>
 							<tr>
 								<th style="min-width: 130px">N° factura</th>
-								<th style="min-width: 130px">Fecha</th>
+								<th style="min-width: 130px">Emisión</th>
 								<th style="min-width: 220px">Liquidaciones</th>
 								<th class="lq-num" style="min-width: 140px">Total</th>
 								<th style="min-width: 110px">Estado</th>
 								<th class="lq-num" style="min-width: 150px">Saldo · cobro</th>
 								<th style="min-width: 150px">Facturado por</th>
 								<th style="min-width: 180px">Observaciones</th>
-								<th style="width: 120px"></th>
+								<th style="width: 150px"></th>
 							</tr>
 						</thead>
 						<tbody>
@@ -2432,13 +2475,15 @@
 								<tr>
 									<td><span class="lq-mono lq-factura lq-fuerte">{fac.numero_factura}</span></td>
 									<td class="lq-nowrap">
-										{fac.fecha_facturacion
-											? new Date(fac.fecha_facturacion).toLocaleDateString('es-CO', {
+										{fac.fecha_emision
+											? fechaCorta(fac.fecha_emision)
+											: fac.fecha_facturacion
+												? new Date(fac.fecha_facturacion).toLocaleDateString('es-CO', {
 													day: 'numeric',
 													month: 'short',
 													year: 'numeric'
-												})
-											: '—'}
+													})
+												: '—'}
 									</td>
 									<td>
 										<div class="lq-chips">
@@ -2507,6 +2552,16 @@
 											{#if fac.estado === 'ACTIVA'}
 												<button
 													type="button"
+													class="lq-icono"
+													title="Editar factura"
+													aria-label="Editar factura {fac.numero_factura}"
+													onclick={() => abrirEditarFactura(fac)}
+												>
+													<Edit2 class="h-4 w-4" />
+												</button>
+													{#if isAdmin}
+												<button
+													type="button"
 													class="lq-icono lq-icono--peligro"
 													title="Anular"
 													aria-label="Anular la factura {fac.numero_factura}"
@@ -2514,6 +2569,7 @@
 												>
 													<Ban class="h-4 w-4" />
 												</button>
+													{/if}
 											{/if}
 											{#if fac.estado === 'ANULADA' && (isAdmin || isFacturacion)}
 												<button
@@ -2944,7 +3000,7 @@
 									class="status-pill"
 									style="background:{getEstadoBadge(detailLiq.estado).bg};color:{getEstadoBadge(
 										detailLiq.estado
-									).text}">{detailLiq.estado}</span
+									).text}">{getEstadoBadge(detailLiq.estado, detailLiq.motivo_anulacion).label}</span
 								>
 							</div>
 						</div>
@@ -3377,33 +3433,15 @@
 {/if}
 
 <!-- MODAL: ANULAR FACTURA -->
-<ConfirmDialog
+<ModalAnularFactura
 	open={anularFacturaModalOpen && !!anularFacturaTarget}
-	tone="danger"
-	title="¿Anular la factura #{anularFacturaTarget?.numero_factura ?? ''}?"
-	message="Las liquidaciones asociadas volverán a estado LIQUIDADA."
-	confirmText="Anular factura"
-	loading={anulandoFactura}
-	loadingText="Anulando…"
-	confirmDisabled={!anularFacturaMotivo.trim()}
-	onconfirm={confirmarAnularFactura}
-	oncancel={() => {
+	factura={anularFacturaTarget}
+	onclose={() => {
 		anularFacturaModalOpen = false;
 		anularFacturaTarget = null;
 	}}
->
-	<label for="anular-factura-motivo" class="filter-field-label" style="display: block;">
-		Motivo de anulación <span style="color: #DC2626;">*</span>
-	</label>
-	<textarea
-		id="anular-factura-motivo"
-		bind:value={anularFacturaMotivo}
-		rows="3"
-		placeholder="Ej: Error en número de factura, liquidaciones incorrectas..."
-		class="input-glow w-full rounded-xl border p-2.5 text-sm"
-		style="border-color: var(--border-default); background: var(--bg-surface); resize: vertical; font-family: inherit; margin-top: -0.6rem;"
-	></textarea>
-</ConfirmDialog>
+	onannulled={handleFacturaAnulada}
+/>
 
 <!-- MODAL: ELIMINAR FACTURA -->
 <ConfirmDialog
@@ -3432,23 +3470,45 @@
 	}}
 	ondone={({ accion, estados }) => {
 		const id = revertirLiq?.id;
-		if (id && detailLiq?.id === id) detailLiq = { ...detailLiq, estado: 'APROBADA' };
+		if (id && detailLiq?.id === id) {
+			detailLiq = { ...detailLiq, estado: (estados[id] ?? 'APROBADA') as any };
+		}
+		const cantidades = Object.values(estados).reduce<Record<string, number>>((acc, estado) => {
+			acc[estado] = (acc[estado] ?? 0) + 1;
+			return acc;
+		}, {});
+		const detalleEstados = [
+			cantidades.APROBADA ? `${cantidades.APROBADA} aprobada(s)` : '',
+			cantidades.LIQUIDADA ? `${cantidades.LIQUIDADA} para corregir` : '',
+			cantidades.ANULADA ? `${cantidades.ANULADA} marcada(s) por duplicidad` : ''
+		].filter(Boolean).join(' · ');
 		toast.success(
 			accion === 'anular'
 				? `Factura ${revertirFactura?.numero_factura} anulada`
 				: `Liquidación quitada de la factura ${revertirFactura?.numero_factura}`,
 			{
-				description: `${revertirLiq?.consecutivo} quedó APROBADA.${
-					Object.keys(estados).length > 1
-						? ` ${Object.keys(estados).length - 1} liquidación(es) más volvieron a LIQUIDADA.`
-						: ''
-				}`
+				description: accion === 'anular'
+					? detalleEstados
+					: `${revertirLiq?.consecutivo} quedó APROBADA.`
 			}
 		);
 	}}
 />
 
 <!-- MODAL FACTURAR -->
+<ModalEditarFactura
+	open={editarFacturaModalOpen}
+	factura={editarFacturaTarget}
+	liquidaciones={liquidacionesParaEditarFactura}
+	puedeQuitar={isAdmin}
+	loading={liquidacionesEditarLoading}
+	onclose={() => {
+		editarFacturaModalOpen = false;
+		editarFacturaTarget = null;
+	}}
+	onupdated={handleFacturaEdited}
+/>
+
 <ModalFacturar
 	bind:open={facturarModalOpen}
 	liquidaciones={facturablesParaFacturar}

@@ -64,9 +64,12 @@ export interface LiquidacionAfectada {
 	id: string;
 	consecutivo: string;
 	estado: EstadoLiquidacionServicio;
+  estado_anterior?: EstadoLiquidacionServicio;
 	factura_id: string | null;
 	numero_factura: string | null;
 }
+
+export type TipoAnulacionFactura = 'SIN_MODIFICAR' | 'MODIFICAR_LIQUIDACIONES' | 'DUPLICIDAD';
 
 // ═══ API ═══
 
@@ -125,18 +128,20 @@ export const facturacionLiquidacionesAPI = {
 	},
 
 	/**
-	 * `mantener_aprobada`: id de una liquidación de la factura que debe quedar
-	 * APROBADA en vez de volver a LIQUIDADA (solo Administración). Es la que se
-	 * está devolviendo a autorizada desde su ficha.
+	 * El tipo define qué liquidaciones vuelven a LIQUIDADA al anular.
 	 */
 	async anular(
 		id: string,
 		motivo: string,
-		opciones: { mantener_aprobada?: string } = {}
-	): Promise<FacturaLiquidacion> {
-		const res = await apiClient.patch<FacturaLiquidacion>(
+		opciones: {
+			tipo?: TipoAnulacionFactura;
+			liquidaciones_a_liquidar?: string[];
+			liquidacion_duplicada_id?: string;
+		} = {}
+	): Promise<FacturaLiquidacion & { estados_resultantes: Record<string, string> }> {
+		const res = await apiClient.patch<FacturaLiquidacion & { estados_resultantes: Record<string, string> }>(
 			`/api/facturacion-liquidaciones/${id}/anular`,
-			{ motivo, ...opciones }
+			{ motivo, tipo: 'SIN_MODIFICAR', ...opciones }
 		);
 		return res.data;
 	},
@@ -171,24 +176,21 @@ export const facturacionLiquidacionesAPI = {
 	},
 
 	/**
-	 * Quita una liquidación de su factura y la devuelve a LIQUIDADA.
+	 * Quita una liquidación de su factura y la devuelve a APROBADA.
 	 *
 	 * `quedo_vacia` avisa de que la factura se quedó sin liquidaciones: no se
 	 * borra sola, eso lo decide el usuario con anular + eliminar.
 	 */
 	async quitarLiquidacion(
 		facturaId: string,
-		liquidacionId: string,
-		/// `APROBADA` la deja autorizada en vez de LIQUIDADA (solo Administración).
-		destino: 'LIQUIDADA' | 'APROBADA' = 'LIQUIDADA'
+		liquidacionId: string
 	): Promise<{
 		factura: FacturaLiquidacion;
 		quedo_vacia: boolean;
 		liquidaciones_afectadas: LiquidacionAfectada[];
 	}> {
 		const res = await apiClient.delete(
-			`/api/facturacion-liquidaciones/${facturaId}/items/${liquidacionId}`,
-			destino === 'APROBADA' ? { data: { destino } } : undefined
+			`/api/facturacion-liquidaciones/${facturaId}/items/${liquidacionId}`
 		);
 		return res.data;
 	},
@@ -209,6 +211,28 @@ export const facturacionLiquidacionesAPI = {
 		const res = await apiClient.patch<FacturaLiquidacion>(
 			`/api/facturacion-liquidaciones/${id}/condiciones`,
 			c
+		);
+		return res.data;
+	},
+
+	/**
+	 * Edita la cabecera y condiciones de cobro, y agrega liquidaciones nuevas
+	 * en la misma transacción del servidor.
+	 */
+	async editar(
+		id: string,
+		data: {
+			numero_factura: string;
+			observaciones: string | null;
+			fecha_emision: string;
+			plazo_dias: number;
+			liquidacion_ids: string[];
+			quitar_liquidacion_ids: string[];
+		}
+	): Promise<{ factura: FacturaLiquidacion; liquidaciones_afectadas: LiquidacionAfectada[] }> {
+		const res = await apiClient.patch(
+			`/api/facturacion-liquidaciones/${id}/editar`,
+			data
 		);
 		return res.data;
 	},

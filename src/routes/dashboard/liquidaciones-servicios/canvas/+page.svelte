@@ -1083,7 +1083,7 @@
 		if (
 			!(await confirmarEliminacion({
 				title: `¿Quitar ${objetivo.length} liquidación(es) de su factura?`,
-				message: `${consecutivos}\n\nVolverán a estado LIQUIDADA y el total de la factura se recalculará.`,
+				message: `${consecutivos}\n\nVolverán a estado APROBADA y el total de la factura se recalculará.`,
 				confirmText: 'Quitar de la factura'
 			}))
 		) {
@@ -1586,11 +1586,13 @@
 						id: 'desasociar',
 						tone: 'danger',
 						label: 'Quitar de su factura',
-						hint: `Devuelve a LIQUIDADA las ${yaFacturadas.length} liquidación(es) facturadas de la selección y recalcula el total de su factura.`,
+						hint: `Devuelve a APROBADA las ${yaFacturadas.length} liquidación(es) facturadas de la selección y recalcula el total de su factura.`,
 						icon: icoDesasociar,
-						disabled: yaFacturadas.length === 0 || !canFacturar || !!accionEnCurso,
-						disabledHint: !canFacturar
-							? 'Facturar requiere área de Facturación o Administración.'
+						disabled: yaFacturadas.length === 0 || !canFacturar || !isAdmin || !!accionEnCurso,
+						disabledHint: !isAdmin
+							? 'Solo Administración puede quitar servicios de una factura.'
+							: !canFacturar
+								? 'Facturar requiere área de Facturación o Administración.'
 							: seleccionLiq.length === 0
 								? 'Selecciona filas en la hoja para empezar.'
 								: 'Ninguna de las filas seleccionadas está facturada.',
@@ -1731,20 +1733,32 @@
 		revertirFactura = null;
 	}}
 	ondone={({ accion, estados }) => {
-		aplicarCambios(
-			Object.entries(estados).map(([id, estado]) => ({
+		const cambios = Object.entries(estados).map(([id, estado]) => ({
 				id,
 				consecutivo: id === revertirLiq?.id ? revertirLiq.consecutivo : '',
 				estado: estado as any,
 				factura_id: null,
 				numero_factura: null
-			}))
-		);
+			}));
+		aplicarCambios(cambios);
+		const cantidades = cambios.reduce<Record<string, number>>((acc, cambio) => {
+			acc[cambio.estado] = (acc[cambio.estado] ?? 0) + 1;
+			return acc;
+		}, {});
+		const detalleEstados = [
+			cantidades.APROBADA ? `${cantidades.APROBADA} aprobada(s)` : '',
+			cantidades.LIQUIDADA ? `${cantidades.LIQUIDADA} para corregir` : '',
+			cantidades.ANULADA ? `${cantidades.ANULADA} marcada(s) por duplicidad` : ''
+		].filter(Boolean).join(' · ');
 		toast.success(
 			accion === 'anular'
 				? `Factura ${revertirFactura?.numero_factura} anulada`
 				: `Quitada de la factura ${revertirFactura?.numero_factura}`,
-			{ description: `${revertirLiq?.consecutivo} quedó APROBADA.` }
+			{
+				description: accion === 'anular'
+					? detalleEstados
+					: `${revertirLiq?.consecutivo} quedó APROBADA.`
+			}
 		);
 	}}
 />

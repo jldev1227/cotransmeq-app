@@ -1,47 +1,75 @@
 <script lang="ts">
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
-	import { facturacionLiquidacionesAPI } from '$lib/api/facturacionLiquidaciones';
+	import {
+		facturacionLiquidacionesAPI,
+		type FacturaLiquidacion,
+		type TipoAnulacionFactura
+	} from '$lib/api/facturacionLiquidaciones';
 	import type { FacturaActivaDeLiquidacion } from '$lib/api/liquidaciones-servicios';
+	import SelectorAnulacionFactura from '$lib/components/liquidaciones/SelectorAnulacionFactura.svelte';
 
-	/**
-	 * Devolver una liquidación FACTURADA a APROBADA.
-	 *
-	 * Mientras siga dentro de una factura activa, el backend no deja cambiarle
-	 * el estado (409 `FACTURA_ACTIVA`). Este modal sugiere primero anular la
-	 * factura —es lo que pide el flujo contable cuando la factura salió mal— y
-	 * ofrece como alternativa quitar solo esta liquidación, que deja la factura
-	 * viva con el resto. En los dos casos la liquidación queda APROBADA.
-	 */
 	interface Props {
 		open: boolean;
 		liquidacion: { id: string; consecutivo: string } | null;
 		factura: FacturaActivaDeLiquidacion | null;
 		onclose: () => void;
-		/** Tras revertir; `ids` son todas las liquidaciones que cambiaron de estado. */
 		ondone?: (resultado: { accion: Accion; estados: Record<string, string> }) => void;
 	}
 
 	type Accion = 'anular' | 'quitar';
 
 	let { open, liquidacion, factura, onclose, ondone }: Props = $props();
-
 	let accion = $state<Accion>('anular');
 	let motivo = $state('');
+	let tipo = $state<TipoAnulacionFactura>('SIN_MODIFICAR');
+	let liquidacionesALiquidar = $state<string[]>([]);
+	let liquidacionDuplicadaId = $state('');
+	let facturaDetalle = $state<FacturaLiquidacion | null>(null);
+	let cargandoFactura = $state(false);
 	let enviando = $state(false);
 	let error = $state('');
 
-	/// Cada apertura empieza limpia: el motivo de la factura anterior no tiene
-	/// nada que ver con esta.
 	$effect(() => {
-		if (open) {
-			accion = 'anular';
-			motivo = '';
-			error = '';
+		const facturaId = open ? factura?.id : undefined;
+		if (!facturaId) {
+			facturaDetalle = null;
+			cargandoFactura = false;
+			return;
 		}
+
+		let vigente = true;
+		accion = 'anular';
+		motivo = '';
+		tipo = 'SIN_MODIFICAR';
+		liquidacionesALiquidar = [];
+		liquidacionDuplicadaId = '';
+		facturaDetalle = null;
+		cargandoFactura = true;
+		error = '';
+		void facturacionLiquidacionesAPI
+			.obtenerPorId(facturaId)
+			.then((resultado) => {
+				if (vigente) facturaDetalle = resultado;
+			})
+			.catch((e: any) => {
+				if (vigente) error = e?.response?.data?.error ?? e?.message ?? 'No se pudo cargar la factura.';
+			})
+			.finally(() => {
+				if (vigente) cargandoFactura = false;
+			});
+		return () => {
+			vigente = false;
+		};
 	});
 
-	const otras = $derived(Math.max(0, (factura?.liquidaciones_en_factura ?? 1) - 1));
-	const puedeConfirmar = $derived(accion === 'quitar' || motivo.trim().length > 0);
+	const seleccionValida = $derived(
+		tipo === 'SIN_MODIFICAR' ||
+		(tipo === 'MODIFICAR_LIQUIDACIONES' && liquidacionesALiquidar.length > 0) ||
+		(tipo === 'DUPLICIDAD' && !!liquidacionDuplicadaId)
+	);
+	const puedeConfirmar = $derived(
+		!cargandoFactura && !!facturaDetalle && (accion === 'quitar' || (motivo.trim().length > 0 && seleccionValida))
+	);
 
 	async function confirmar() {
 		if (!liquidacion || !factura || !puedeConfirmar) return;
@@ -49,18 +77,15 @@
 		error = '';
 		try {
 			if (accion === 'anular') {
-				const r = await facturacionLiquidacionesAPI.anular(factura.id, motivo.trim(), {
-					mantener_aprobada: liquidacion.id
+				const resultado = await facturacionLiquidacionesAPI.anular(factura.id, motivo.trim(), {
+					tipo,
+					liquidaciones_a_liquidar:
+						tipo === 'MODIFICAR_LIQUIDACIONES' ? liquidacionesALiquidar : [],
+					liquidacion_duplicada_id: tipo === 'DUPLICIDAD' ? liquidacionDuplicadaId : undefined
 				});
-				const estados: Record<string, string> = {};
-				for (const item of r.items ?? []) {
-					const id = item.liquidacion?.id ?? item.liquidacion_id;
-					if (id) estados[id] = id === liquidacion.id ? 'APROBADA' : 'LIQUIDADA';
-				}
-				estados[liquidacion.id] = 'APROBADA';
-				ondone?.({ accion, estados });
+				ondone?.({ accion, estados: resultado.estados_resultantes });
 			} else {
-				await facturacionLiquidacionesAPI.quitarLiquidacion(factura.id, liquidacion.id, 'APROBADA');
+				await facturacionLiquidacionesAPI.quitarLiquidacion(factura.id, liquidacion.id);
 				ondone?.({ accion, estados: { [liquidacion.id]: 'APROBADA' } });
 			}
 			onclose();
@@ -77,12 +102,13 @@
 	tone="warning"
 	eyebrow="LIQUIDACIÓN FACTURADA"
 	mascot="ayuda"
-	title="¿Devolver {liquidacion?.consecutivo ?? ''} a aprobada?"
-	message="Está en la factura {factura?.numero_factura ??
-		''}. Para dejarla aprobada primero hay que sacarla de esa factura."
+	title={accion === 'anular'
+		? `¿Anular la factura #${factura?.numero_factura ?? ''}?`
+		: `¿Devolver ${liquidacion?.consecutivo ?? ''} a aprobada?`}
+	message="Está en la factura {factura?.numero_factura ?? ''}. Elige si anular la factura o quitar solo este servicio."
 	confirmText={accion === 'anular' ? 'Anular factura' : 'Quitar de la factura'}
 	loading={enviando}
-	loadingText="Revirtiendo…"
+	loadingText="Procesando…"
 	confirmDisabled={!puedeConfirmar}
 	onconfirm={confirmar}
 	oncancel={onclose}
@@ -91,26 +117,35 @@
 		<label class="rf-opcion" class:activa={accion === 'anular'}>
 			<input type="radio" name="rf-accion" value="anular" bind:group={accion} />
 			<span>
-				<strong>Anular la factura {factura?.numero_factura} <em>(sugerido)</em></strong>
-				<small>
-					{#if otras > 0}
-						Las otras {otras} liquidación(es) de la factura volverán a LIQUIDADA.
-					{:else}
-						Es la única liquidación de esta factura.
-					{/if}
-				</small>
+				<strong>Anular la factura {factura?.numero_factura}</strong>
+				<small>Define el resultado de cada liquidación del lote según el motivo.</small>
 			</span>
 		</label>
 		<label class="rf-opcion" class:activa={accion === 'quitar'}>
 			<input type="radio" name="rf-accion" value="quitar" bind:group={accion} />
 			<span>
 				<strong>Solo quitar esta liquidación</strong>
-				<small>La factura sigue activa con el resto y su total se recalcula.</small>
+				<small>La factura sigue activa con el resto; esta liquidación queda APROBADA.</small>
 			</span>
 		</label>
 	</div>
 
 	{#if accion === 'anular'}
+		{#if cargandoFactura}
+			<p class="rf-cargando">Cargando las liquidaciones del lote…</p>
+		{:else if facturaDetalle}
+			<SelectorAnulacionFactura
+				items={facturaDetalle.items}
+				prefijoNombre="revertir-facturada"
+				{tipo}
+				{liquidacionesALiquidar}
+				{liquidacionDuplicadaId}
+				deshabilitado={enviando}
+				onTipoChange={(siguiente) => (tipo = siguiente)}
+				onLiquidacionesALiquidarChange={(ids) => (liquidacionesALiquidar = ids)}
+				onLiquidacionDuplicadaChange={(id) => (liquidacionDuplicadaId = id)}
+			/>
+		{/if}
 		<label class="rf-motivo">
 			<span>Motivo de la anulación</span>
 			<textarea
@@ -139,9 +174,7 @@
 		border: 1px solid var(--border-default);
 		border-radius: 14px;
 		cursor: pointer;
-		transition:
-			border-color 0.15s,
-			background 0.15s;
+		transition: border-color 0.15s, background 0.15s;
 	}
 	.rf-opcion.activa {
 		border-color: var(--accion);
@@ -159,12 +192,6 @@
 	.rf-opcion strong {
 		color: var(--text-primary);
 		font-size: 14px;
-	}
-	.rf-opcion em {
-		color: var(--accion-hover);
-		font-style: normal;
-		font-weight: 600;
-		font-size: 12px;
 	}
 	.rf-opcion small {
 		color: var(--text-muted);
@@ -193,6 +220,11 @@
 	.rf-motivo textarea:focus {
 		outline: 2px solid color-mix(in srgb, var(--accion) 35%, transparent);
 		border-color: var(--accion);
+	}
+	.rf-cargando {
+		margin: 0;
+		color: var(--text-muted);
+		font-size: 12px;
 	}
 	.rf-error {
 		margin: 0;

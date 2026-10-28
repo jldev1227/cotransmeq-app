@@ -141,6 +141,12 @@
 		for (const c of nombre) h = (h * 31 + c.charCodeAt(0)) % 360;
 		return h;
 	}
+
+	function descripcionVisible(item: RegistroActividad): string {
+		if (!item.recurso_id) return item.descripcion;
+		const idTecnico = `#${item.recurso_id.slice(0, 8)}`;
+		return item.descripcion.replace(idTecnico, '').replace(/\s+/g, ' ').trim();
+	}
 </script>
 
 <svelte:head>
@@ -259,7 +265,7 @@
 									>{iniciales(it.usuario_nombre)}</span
 								>
 								<div class="ac-texto">
-									<p class="ac-linea"><strong>{it.usuario_nombre}</strong> {it.descripcion}</p>
+									<p class="ac-linea"><strong>{it.usuario_nombre}</strong> {descripcionVisible(it)}</p>
 									<p class="ac-meta">
 										<span class="ac-modulo">{etiquetaModulo(it.modulo)}</span>
 										<span class="ac-accion">{ETIQUETA_ACCION[it.accion] ?? it.accion}</span>
