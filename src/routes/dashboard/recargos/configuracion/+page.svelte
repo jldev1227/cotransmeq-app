@@ -83,15 +83,14 @@
 	// User
 	$: user = $authStore.user;
 	/**
-	 * Sólo lectura si el ROL es `consulta` o si el NIVEL sobre `recargos` no
-	 * llega a `full`. La segunda mitad faltaba, y con ella alguien puesto en
-	 * «Consulta» desde `permisos_rutas` podía crear, editar y borrar
-	 * configuraciones de salarios —que es lo que alimenta el cálculo de todas
-	 * las planillas—. `user` va en la expresión para que se recalcule cuando la
-	 * sesión termine de hidratarse.
+	 * Solo lectura si el nivel efectivo sobre `recargos` no llega a `full`.
+	 * Con ello una personalización por ruta puede limitar el módulo sin
+	 * depender del rol heredado.
+	 * `user` va en la expresión para que se recalcule cuando la sesión termine
+	 * de hidratarse.
 	 */
 	$: isReadOnly =
-		user?.role === 'consulta' || !(user && authStore.getAccessLevel('recargos') === 'full');
+		!(user && authStore.getAccessLevel('recargos') === 'full');
 
 	// Detección de solapamiento de vigencias para el formulario
 	$: solapamientoDetectado = detectarSolapamiento(form, configuraciones, editingId);

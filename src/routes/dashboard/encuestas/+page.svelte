@@ -19,7 +19,7 @@
 
 	const puedeGestionar = $derived.by(() => {
 		const u = $authStore.user;
-		return !!u && checkAccess(u.role || u.rol, u.area, 'encuestas', u.permisos_rutas).level === 'full';
+		return !!u && checkAccess(u.area, 'encuestas', u.permisos_rutas, u.id).level === 'full';
 	});
 
 	interface Filtros {

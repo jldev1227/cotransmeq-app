@@ -550,10 +550,10 @@
 	}
 
 	const accessResult = $derived(checkAccess(
-		$authStore.user?.role,
 		$authStore.user?.area,
 		'liquidaciones-servicios',
-		$authStore.user?.permisos_rutas
+		$authStore.user?.permisos_rutas,
+		$authStore.user?.id
 	));
 	const isFull = $derived(accessResult.level === 'full');
 	const isLimited = $derived(accessResult.level === 'limited');
@@ -568,18 +568,18 @@
 	/// El enlace a los abonos solo se ofrece a quien puede abrir Cartera.
 	const puedeVerCartera = $derived(
 		checkAccess(
-			$authStore.user?.role,
 			$authStore.user?.area,
 			'cartera',
-			$authStore.user?.permisos_rutas
+			$authStore.user?.permisos_rutas,
+			$authStore.user?.id
 		).allowed
 	);
 	const canLiquidar = $derived(isFull); // admin + operaciones: borrador → liquidada
-	const canAprobar = $derived(isAdmin); // solo admin: liquidada → aprobada
-	const canAnular = $derived(isAdmin); // solo admin: anular liquidaciones
+	const canAprobar = $derived(isAdmin && isFull); // solo Administración con acceso completo
+	const canAnular = $derived(isAdmin && isFull); // solo Administración con acceso completo
 	const canRevertirABorrador = $derived(isFull); // admin + operaciones: liquidada → borrador
-	const canRevertirALiquidada = $derived(isAdmin); // solo admin: aprobada → liquidada
-	const canRevertirFacturada = $derived(isAdmin); // solo admin: facturada → aprobada (sacándola de su factura)
+	const canRevertirALiquidada = $derived(isAdmin && isFull); // solo Administración con acceso completo
+	const canRevertirFacturada = $derived(isAdmin && isFull); // solo Administración con acceso completo
 
 	let logoError = $state(false);
 

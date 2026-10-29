@@ -149,10 +149,10 @@
 
 	const acceso = $derived(
 		checkAccess(
-			$authStore.user?.role,
 			$authStore.user?.area,
 			'liquidaciones-servicios',
-			$authStore.user?.permisos_rutas
+			$authStore.user?.permisos_rutas,
+			$authStore.user?.id
 		)
 	);
 	const isFull = $derived(acceso.level === 'full');
@@ -173,12 +173,12 @@
 	/// BORRADOR → LIQUIDADA.
 	const canLiquidar = $derived(isFull);
 	/// LIQUIDADA → APROBADA. Solo administración.
-	const canAprobar = $derived(isAdmin);
+	const canAprobar = $derived(isAdmin && isFull);
 	/// LIQUIDADA → BORRADOR.
 	const canRevertirABorrador = $derived(isFull);
 	/// APROBADA → LIQUIDADA. Solo administración — y el backend lo vuelve a
 	/// exigir: cualquier cambio de estado sobre una APROBADA pide el área.
-	const canRevertirALiquidada = $derived(isAdmin);
+	const canRevertirALiquidada = $derived(isAdmin && isFull);
 	/// Soft-delete. `isFull` y solo sobre BORRADOR (lo exige el listado; el
 	/// backend además rechaza si hay una factura activa asociada).
 	const canEliminar = $derived(isFull);

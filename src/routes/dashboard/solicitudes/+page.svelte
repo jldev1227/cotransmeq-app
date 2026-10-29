@@ -47,7 +47,7 @@
 	const puedeGestionar = $derived.by(() => {
 		const u = $authStore.user;
 		if (!u) return false;
-		const { allowed, level } = checkAccess(u.role || u.rol, u.area, 'solicitudes', u.permisos_rutas);
+		const { allowed, level } = checkAccess(u.area, 'solicitudes', u.permisos_rutas, u.id);
 		return allowed && level === 'full';
 	});
 

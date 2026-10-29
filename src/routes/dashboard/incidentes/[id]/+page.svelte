@@ -63,8 +63,8 @@
 	const nivel = $derived.by(() => {
 		const u = $authStore.user;
 		if (!u) return { incidentes: null as string | null, acciones: null as string | null };
-		const inc = checkAccess(u.role || u.rol, u.area, 'incidentes', u.permisos_rutas);
-		const ac = checkAccess(u.role || u.rol, u.area, 'acciones-correctivas', u.permisos_rutas);
+		const inc = checkAccess(u.area, 'incidentes', u.permisos_rutas, u.id);
+		const ac = checkAccess(u.area, 'acciones-correctivas', u.permisos_rutas, u.id);
 		return { incidentes: inc.allowed ? inc.level : null, acciones: ac.allowed ? ac.level : null };
 	});
 	const puedeEscribir = $derived(nivel.incidentes === 'full');

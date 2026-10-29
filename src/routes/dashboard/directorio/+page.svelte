@@ -31,7 +31,6 @@
 		correo: string;
 		area: string[];
 		cargo?: string | null;
-		role?: string | null;
 		activo: boolean;
 		ultimo_acceso?: string | null;
 		en_linea: boolean;
@@ -81,28 +80,10 @@
 	let mostrarPassword = $state(false);
 	let nuevoTelefono = $state('');
 	let nuevoCargo = $state('');
-	let nuevoRole = $state('usuario');
 	let nuevoAreas = $state<string[]>([]);
 	let nuevoPermisosRutas = $state<Record<string, AccessLevel> | null>(null);
 
 	const AREAS = Object.entries(AREA_LABELS).map(([value, label]) => ({ value, label }));
-
-	/// Valores del enum `enum_users_role` del backend. Si aquí apareciera uno que
-	/// el enum no tiene, el POST revienta en la capa de base de datos, no en la
-	/// validación, y el error que llega a pantalla no dice cuál es el problema.
-	const ROLES = [
-		{ value: 'usuario', label: 'Usuario' },
-		{ value: 'consulta', label: 'Solo consulta' },
-		{ value: 'admin', label: 'Administrador' },
-		{ value: 'liquidador', label: 'Liquidador' },
-		{ value: 'facturador', label: 'Facturador' },
-		{ value: 'aprobador', label: 'Aprobador' },
-		{ value: 'gestor_flota', label: 'Gestor de flota' },
-		{ value: 'gestor_nomina', label: 'Gestor de nómina' },
-		{ value: 'gestor_servicio', label: 'Gestor de servicios' },
-		{ value: 'gestor_planillas', label: 'Gestor de planillas' },
-		{ value: 'kilometraje', label: 'Kilometraje' }
-	];
 
 	/// Semáforos en hex: cotransmeq remapea `emerald-*` a naranja y «en línea»
 	/// tiene que seguir leyéndose como verde.
@@ -159,7 +140,7 @@
 	const nivelDirectorio = $derived.by<AccessLevel | null>(() => {
 		const u = $authStore.user;
 		if (!u) return null;
-		const { level } = checkAccess(u.role || u.rol, u.area, 'directorio', u.permisos_rutas);
+		const { level } = checkAccess(u.area, 'directorio', u.permisos_rutas, u.id);
 		return level;
 	});
 	const puedeEscribir = $derived(nivelDirectorio === 'full');
@@ -279,7 +260,6 @@
 		mostrarPassword = false;
 		nuevoTelefono = '';
 		nuevoCargo = '';
-		nuevoRole = 'usuario';
 		nuevoAreas = [];
 		nuevoPermisosRutas = null;
 		errorCrear = '';
@@ -325,14 +305,8 @@
 				password: nuevoPassword,
 				telefono: nuevoTelefono.trim() || undefined,
 				cargo: nuevoCargo.trim() || undefined,
-				role: nuevoRole,
 				area: nuevoAreas,
-				// `{}` y `null` significan lo mismo para el backend («manda el
-				// área»); se normaliza aquí para no guardar objetos vacíos.
-				permisos_rutas:
-					nuevoPermisosRutas && Object.keys(nuevoPermisosRutas).length > 0
-						? nuevoPermisosRutas
-						: null
+				permisos_rutas: nuevoPermisosRutas
 			});
 			toast.success(`${nuevoNombre.trim()} creado correctamente`);
 			modalCrearAbierto = false;
@@ -749,22 +723,6 @@
 			{/if}
 		</fieldset>
 
-		<!-- Rol -->
-		<!-- 20rem es la medida del propio control, no un tope de página. -->
-		<div class="eq-campo" style="max-width: 20rem;">
-			<label for="new-role">Rol</label>
-			<select id="new-role" bind:value={nuevoRole} class="eq-input">
-				{#each ROLES as rol (rol.value)}
-					<option value={rol.value}>{rol.label}</option>
-				{/each}
-			</select>
-			{#if nuevoRole === 'admin'}
-				<p class="eq-ayuda">
-					Los administradores conservan acceso total: los permisos por ruta no se les aplican.
-				</p>
-			{/if}
-		</div>
-
 		<!-- Áreas -->
 		<div class="eq-campo">
 			<p class="eq-etiqueta">Área(s) <span class="eq-req">*</span></p>
@@ -789,7 +747,6 @@
 			<PermisosRutasPicker
 				idPrefix="crear"
 				areas={nuevoAreas}
-				role={nuevoRole}
 				valor={nuevoPermisosRutas}
 				onchange={(v) => (nuevoPermisosRutas = v)}
 			/>

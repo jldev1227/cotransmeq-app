@@ -189,9 +189,12 @@
 		}
 	}
 
-	const isAdmin = $derived($authStore.user?.rol === 'admin' || $authStore.user?.role === 'admin');
-	const isOperaciones = $derived($authStore.user?.area?.includes('operaciones'));
-	const isTalentoHumano = $derived($authStore.user?.area?.includes('talento_humano'));
+	const areasUsuario = $derived(
+		!$authStore.user?.area ? [] : Array.isArray($authStore.user.area) ? $authStore.user.area : [$authStore.user.area]
+	);
+	const isAdmin = $derived(areasUsuario.includes('administracion'));
+	const isOperaciones = $derived(areasUsuario.includes('operaciones'));
+	const isTalentoHumano = $derived(areasUsuario.includes('talento_humano'));
 	const canAccessSpecialViews = $derived(isAdmin || isOperaciones || isTalentoHumano);
 
 	// Filtros activos (para chips removibles)

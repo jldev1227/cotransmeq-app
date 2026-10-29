@@ -17,7 +17,6 @@
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import ModalEditarUsuario from '$lib/components/usuarios/ModalEditarUsuario.svelte';
-	import ModalPermisosModulos from '$lib/components/usuarios/ModalPermisosModulos.svelte';
 	import ModalInvitarUsuario from '$lib/components/usuarios/ModalInvitarUsuario.svelte';
 	import ModalNuevoUsuario from '$lib/components/usuarios/ModalNuevoUsuario.svelte';
 	import { mascota } from '$lib/mascot';
@@ -30,7 +29,6 @@
 		Pencil,
 		Power,
 		RefreshCw,
-		ShieldCheck,
 		UserPlus,
 		X
 	} from 'lucide-svelte';
@@ -232,7 +230,11 @@
 	let actividadMovil = $state<ActividadMovil[]>([]);
 	let loadingMovil = $state(false);
 	let errorMovil = $state<string | null>(null);
-	const soloAdmin = $derived($authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin');
+	const soloAdmin = $derived(
+		(Array.isArray($authStore.user?.area)
+			? ($authStore.user!.area as string[])
+			: $authStore.user?.area ? [$authStore.user.area as string] : []).includes('administracion')
+	);
 	const POR_PAGINA_MOVIL = 20;
 	const actividadVisible = $derived(
 		actividadMovil.filter((a) => {
@@ -318,9 +320,6 @@
 	let confirmUsuario = $state<Usuario | null>(null);
 	let confirmAction = $state<'disable' | 'enable'>('disable');
 	let savingToggle = $state(false);
-
-	let showPermisosModal = $state(false);
-	let permisosUsuario = $state<Usuario | null>(null);
 
 	let detailUsuario = $state<Usuario | null>(null);
 	let detailSesiones = $state<Sesion[]>([]);
@@ -666,14 +665,6 @@
 		}
 	}
 
-	function abrirPermisos(usuario: Usuario) {
-		permisosUsuario = usuario;
-		showPermisosModal = true;
-	}
-	function cerrarPermisosModal() {
-		showPermisosModal = false;
-	}
-
 	// ─── Detalle lateral de usuario ─────────────────────────────────────
 	function verDetalleUsuario(usuario: Usuario) {
 		detailUsuario = usuario;
@@ -797,15 +788,7 @@
 	let bonosSeleccionados = $state(new Set<string>());
 	let guardandoBonos = $state(false);
 
-	const isAdminUser = $derived(
-		$authStore.user?.role === 'admin' ||
-			$authStore.user?.rol === 'admin' ||
-			(
-				(Array.isArray($authStore.user?.area)
-					? ($authStore.user!.area as string[])
-					: []) as string[]
-			).includes('administracion')
-	);
+	const isAdminUser = $derived(soloAdmin);
 
 	const usuariosBonos = $derived(
 		usuarios
@@ -982,7 +965,7 @@
 					label: 'Invitaciones',
 					cuenta: invitacionesPendientes.length || null
 				},
-				{ id: 'permisos', label: 'Permisos' }
+				{ id: 'permisos', label: 'Bonos de planilla' }
 			]}
 			activa={filtros.tab}
 			etiqueta="Secciones de equipo"
@@ -1107,12 +1090,6 @@
 											icono: Pencil,
 											onClick: () => abrirEditModal(u)
 										},
-										{
-											id: 'permisos',
-											etiqueta: 'Permisos',
-											icono: ShieldCheck,
-											onClick: () => abrirPermisos(u)
-										}
 									]}
 								/>
 							{/if}
@@ -1631,13 +1608,6 @@
 	loadingText={confirmAction === 'disable' ? 'Deshabilitando…' : 'Habilitando…'}
 	onconfirm={confirmarToggle}
 	oncancel={cerrarConfirmModal}
-/>
-
-<ModalPermisosModulos
-	open={showPermisosModal}
-	usuario={permisosUsuario}
-	oncerrar={cerrarPermisosModal}
-	onguardado={alGuardarUsuario}
 />
 
 <ModalInvitarUsuario

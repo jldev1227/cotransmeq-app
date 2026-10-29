@@ -13,8 +13,8 @@ export interface Usuario {
 	firma_url?: string;
 	permisos?: Record<string, boolean>;
 	/**
-	 * Lista blanca de módulos por usuario (`users.permisos_rutas`). `null` deja
-	 * mandar a las reglas por área; con claves las sustituye por completo.
+	 * Límites personalizados por ruta (`users.permisos_rutas`). `null` hereda
+	 * del área; un objeto puede reducir el acceso, nunca ampliarlo.
 	 */
 	permisos_rutas?: Record<string, AccessLevel> | null;
 	ultimo_acceso?: string;
@@ -29,7 +29,6 @@ export interface CrearUsuarioPayload {
 	password: string;
 	telefono?: string;
 	cargo?: string;
-	role: string;
 	area: string[];
 	permisos_rutas: Record<string, AccessLevel> | null;
 }
@@ -67,7 +66,7 @@ export const usuariosAPI = {
 		data: Partial<
 			Pick<
 				Usuario,
-				'nombre' | 'correo' | 'telefono' | 'role' | 'cargo' | 'area' | 'activo' | 'permisos_rutas'
+				'nombre' | 'correo' | 'telefono' | 'cargo' | 'area' | 'activo' | 'permisos_rutas'
 			>
 		>
 	): Promise<Usuario> {

@@ -52,7 +52,7 @@
 	const rutaDeRetorno = $derived.by(() => {
 		if (!user) return { href: '/dashboard', label: 'Volver al inicio' };
 		const puedeEntrar = (moduleId: string) =>
-			checkAccess(user?.role || user?.rol, user?.area, moduleId, user?.permisos_rutas).allowed;
+			checkAccess(user?.area, moduleId, user?.permisos_rutas, user?.id).allowed;
 
 		if (puedeEntrar('dashboard')) return { href: '/dashboard', label: 'Volver al inicio' };
 		const primerModulo = MENU_ITEMS.find((item) => item.id !== 'dashboard' && puedeEntrar(item.id));
@@ -72,14 +72,10 @@
 	function checkRoutePermission(pathname: string) {
 		const match = pathname.match(/^\/dashboard(?:\/([^/]+))?/);
 		if (!match) return;
-		const moduleId = match[1] ?? 'dashboard';
+		const esRecorridos = pathname.startsWith('/dashboard/conductores/recorridos');
+		const moduleId = esRecorridos ? 'recorridos' : match[1] ?? 'dashboard';
 
-		const { allowed } = checkAccess(
-			user?.role || user?.rol,
-			user?.area,
-			moduleId,
-			user?.permisos_rutas
-		);
+		const { allowed } = checkAccess(user?.area, moduleId, user?.permisos_rutas, user?.id);
 
 		if (!allowed) {
 			rutaNoEncontrada = true;

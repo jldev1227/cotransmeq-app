@@ -39,6 +39,7 @@
 	import { page } from '$app/stores';
 	import { apiClient } from '$lib/api/apiClient';
 	import { authStore } from '$lib/stores/auth';
+	import { checkAccess } from '$lib/config/permissions';
 	import { confirmar, confirmarEliminacion } from '$lib/stores/confirm';
 	import { toast } from 'svelte-sonner';
 	import Skeleton from '$lib/components/Skeleton.svelte';
@@ -884,7 +885,14 @@
 			? [$authStore.user.area]
 			: [];
 	$: isAdmin = userAreas.includes('administracion');
-	$: canSeeTerceros = isAdmin || userAreas.includes('facturacion');
+	$: accesoSeccion06 = checkAccess(
+		$authStore.user?.area,
+		'liquidaciones-servicios-seccion06',
+		$authStore.user?.permisos_rutas,
+		$authStore.user?.id
+	);
+	$: canSeeTerceros = accesoSeccion06.allowed;
+	$: canEditTerceros = accesoSeccion06.level === 'full' && !viewMode;
 
 	// ─── CMD/CTRL + P → abre el modal de impresión (intercepta el nativo) ────
 	// El atajo nativo del navegador dispara window.print() sobre el DOM vivo
@@ -1758,10 +1766,12 @@
 	$: (rows.length, syncTerceroRows());
 
 	function delTerceroRow(idx: number) {
+		if (!canEditTerceros) return;
 		terceroRows = terceroRows.filter((_, i) => i !== idx);
 	}
 
 	function resetTerceroFromItems() {
+		if (!canEditTerceros) return;
 		terceroRows = rows.map((r, i) => ({
 			src_index: i,
 			placa: r.placa || '',
@@ -1877,6 +1887,7 @@
 	}
 
 	function selectTercero(idx: number, t: TerceroOption) {
+		if (!canEditTerceros) return;
 		terceroRows[idx].tercero_id = t.id;
 		terceroRows[idx].nombre_tercero = t.nombre_completo;
 		terceroRows[idx].tercero_identificacion = t.identificacion || '';
@@ -1886,6 +1897,7 @@
 	}
 
 	function clearTercero(idx: number) {
+		if (!canEditTerceros) return;
 		terceroRows[idx].tercero_id = '';
 		terceroRows[idx].nombre_tercero = '';
 		terceroRows[idx].tercero_identificacion = '';
@@ -3975,6 +3987,7 @@
 				<!-- ═══ CARD 6: LIQUIDACIÓN DE TERCEROS (HOJA 4) ═══ -->
 				{#if canSeeTerceros && rows.length > 0}
 					<article class="wb-card">
+						<fieldset class="wb-terceros-permission" disabled={!canEditTerceros}>
 						<header class="wb-card-hd wb-card-hd-flex">
 							<div class="wb-card-hd-text">
 								<span class="wb-card-eyebrow">SECCIÓN 06</span>
@@ -3982,6 +3995,9 @@
 									Liquidación de terceros <span class="wb-card-title-soft">Hoja 4</span>
 								</h2>
 								<p class="wb-card-sub">Propietarios, valores a liquidar e ingresos</p>
+								{#if !canEditTerceros}
+									<p class="wb-card-sub">Consulta: solo Administración y Omar pueden actualizar estos valores.</p>
+								{/if}
 							</div>
 							<button
 								class="btn-primary wb-btn-sync"
@@ -4266,6 +4282,7 @@
 								</div>
 							</div>
 						</div>
+						</fieldset>
 					</article>
 				{/if}
 
@@ -8283,6 +8300,13 @@
 	}
 
 	/* ⑥ Terceros (Hoja 4) — columnas más anchas */
+	.wb-terceros-permission {
+		border: 0;
+		margin: 0;
+		min-width: 0;
+		padding: 0;
+	}
+
 	.wb-row-terceros .wb-cell-placa {
 		width: 100%;
 		display: flex;

@@ -33,8 +33,8 @@ export interface User {
 	ultimo_acceso?: string;
 	permisos?: UserPermisos;
 	/**
-	 * Lista blanca de módulos propia del usuario (`users.permisos_rutas`).
-	 * `null`/`{}` deja mandar al área; con claves la sustituye por completo.
+	 * Límites propios por ruta (`users.permisos_rutas`). `null` hereda del área;
+	 * un objeto puede retirar módulos o reducir su nivel, nunca ampliarlo.
 	 */
 	permisos_rutas?: PermisosRutas;
 	avatar?: string;
@@ -320,7 +320,7 @@ function createAuthStore() {
 			const user = currentState.user;
 			if (!user) return false;
 			
-			const { allowed } = checkAccess(user.role || user.rol, user.area, routeId, user.permisos_rutas);
+			const { allowed } = checkAccess(user.area, routeId, user.permisos_rutas, user.id);
 			return allowed;
 		},
 
@@ -333,7 +333,7 @@ function createAuthStore() {
 			const user = currentState.user;
 			if (!user) return null;
 			
-			const { level } = checkAccess(user.role || user.rol, user.area, routeId, user.permisos_rutas);
+			const { level } = checkAccess(user.area, routeId, user.permisos_rutas, user.id);
 			return level;
 		},
 

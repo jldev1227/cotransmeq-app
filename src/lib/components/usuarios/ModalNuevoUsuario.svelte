@@ -30,29 +30,6 @@
 
 	let { open, oncerrar, oncreado }: Props = $props();
 
-	/**
-	 * Roles que ofrece el alta manual. Son los valores del enum
-	 * `enum_users_role` del backend; el label es solo para leerlos.
-	 *
-	 * El rol NO reemplaza a las áreas: quien decide a qué módulos entra
-	 * alguien es `area` (y, si se afina, `permisos_rutas`). Aquí se elige
-	 * porque `POST /api/usuarios` lo acepta y su default —`usuario`— no
-	 * siempre es el que toca.
-	 */
-	const ROLES: Array<{ value: string; label: string }> = [
-		{ value: 'usuario', label: 'Usuario' },
-		{ value: 'admin', label: 'Administrador' },
-		{ value: 'liquidador', label: 'Liquidador' },
-		{ value: 'facturador', label: 'Facturador' },
-		{ value: 'aprobador', label: 'Aprobador' },
-		{ value: 'gestor_flota', label: 'Gestor de flota' },
-		{ value: 'gestor_nomina', label: 'Gestor de nómina' },
-		{ value: 'gestor_servicio', label: 'Gestor de servicios' },
-		{ value: 'gestor_planillas', label: 'Gestor de planillas' },
-		{ value: 'kilometraje', label: 'Kilometraje' },
-		{ value: 'consulta', label: 'Consulta' }
-	];
-
 	const idForm = `nuevo-usuario-${Math.random().toString(36).slice(2, 8)}`;
 
 	let creando = $state(false);
@@ -62,7 +39,6 @@
 	let passwordConfirm = $state('');
 	let telefono = $state('');
 	let cargo = $state('');
-	let role = $state('usuario');
 	let areas = $state<string[]>([]);
 	let verPassword = $state(false);
 	let error = $state('');
@@ -78,7 +54,6 @@
 			passwordConfirm = '';
 			telefono = '';
 			cargo = '';
-			role = 'usuario';
 			areas = [];
 			verPassword = false;
 			error = '';
@@ -121,7 +96,6 @@
 				password,
 				telefono: telefono.trim() || undefined,
 				cargo: cargo.trim() || undefined,
-				role,
 				area: areas
 			});
 			toast.success(`Usuario ${nombre.trim()} creado`);
@@ -224,14 +198,6 @@
 				/>
 			</Campo>
 		</div>
-
-		<Campo id="{idForm}-role" label="Rol">
-			<select id="{idForm}-role" bind:value={role} class="uf-input">
-				{#each ROLES as r (r.value)}
-					<option value={r.value}>{r.label}</option>
-				{/each}
-			</select>
-		</Campo>
 
 		<SelectorAreas seleccion={areas} onCambiar={(a) => (areas = a)} requerido />
 	</FormularioUsuario>

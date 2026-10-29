@@ -29,7 +29,6 @@
 	const idForm = `editar-usuario-${Math.random().toString(36).slice(2, 8)}`;
 
 	let usuarioId = $state('');
-	let rol = $state('usuario');
 	let nombre = $state('');
 	let correo = $state('');
 	let telefono = $state('');
@@ -53,7 +52,6 @@
 		const u = usuario;
 		untrack(() => {
 			usuarioId = u.id;
-			rol = u.role ?? 'usuario';
 			nombre = u.nombre;
 			correo = u.correo;
 			telefono = u.telefono || '';
@@ -74,10 +72,7 @@
 				correo,
 				telefono,
 				area: areas,
-				// `{}` y `null` significan lo mismo («manda el área»); se normaliza
-				// para no dejar objetos vacíos que luego cueste distinguir.
-				permisos_rutas:
-					permisosRutas && Object.keys(permisosRutas).length > 0 ? permisosRutas : null
+				permisos_rutas: permisosRutas
 			});
 			onguardado(actualizado);
 			toast.success(`${nombre} actualizado correctamente`);
@@ -155,7 +150,7 @@
 				<PermisosRutasPicker
 					idPrefix="editar"
 					{areas}
-					role={rol}
+					userId={usuarioId}
 					valor={permisosRutas}
 					onchange={(v) => (permisosRutas = v)}
 				/>

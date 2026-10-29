@@ -9,9 +9,8 @@
 	Dos modos, y la diferencia importa:
 	  · «Heredar del área» guarda `null`: el usuario sigue las reglas del área y
 	    hereda automáticamente los módulos que se añadan en el futuro.
-	  · «Personalizar rutas» guarda un objeto: es una LISTA BLANCA que sustituye
-	    por completo a las reglas por área. Lo que no esté aquí, no se ve — ni
-	    siquiera los módulos marcados como generales.
+	  · «Personalizar rutas» guarda un objeto: cada ruta limita el nivel que el
+	    área ya concede. No puede ampliar el acceso de un área.
 
 	Al pasar a personalizar se precarga lo que las áreas ya conceden, porque el
 	trabajo real es recortar (quitar módulos, bajar de nivel), no partir de cero.
@@ -20,6 +19,8 @@
 	import { untrack } from 'svelte';
 	import {
 		ROUTE_PERMISSIONS,
+		OMAR_OPERACIONES_ID,
+		PERMISOS_RUTA_ESPECIALES,
 		getAccessibleModules,
 		type AccessLevel,
 		type Area
@@ -28,17 +29,17 @@
 	interface Props {
 		/** Áreas seleccionadas en el formulario padre — alimentan la precarga. */
 		areas: string[];
-		/** Rol del usuario; `admin` ignora la lista blanca (se avisa en la UI). */
-		role?: string;
-		/** Valor inicial. `null` o `{}` ⇒ arranca en modo «heredar del área». */
+		/** Usuario editado: activa las excepciones individuales explícitas. */
+		userId?: string;
+		/** Valor inicial. `null` hereda del área; `{}` deja solo el perfil. */
 		valor?: Record<string, AccessLevel> | null;
-		/** Se llama con `null` (heredar) o con la lista blanca completa. */
+		/** Se llama con `null` (heredar) o con el mapa personalizado por ruta. */
 		onchange: (valor: Record<string, AccessLevel> | null) => void;
 		/** Prefijo para los `id`/`name` — hay dos pickers vivos en la misma app. */
 		idPrefix?: string;
 	}
 
-	let { areas, role = 'usuario', valor = null, onchange, idPrefix = 'pr' }: Props = $props();
+	let { areas, userId = '', valor = null, onchange, idPrefix = 'pr' }: Props = $props();
 
 	/// Etiqueta corta de cada módulo. Vive aquí y no en `config/permissions.ts`
 	/// porque ese fichero es espejo exacto del backend: meterle texto de UI lo
@@ -60,13 +61,16 @@
 		nomina: 'Nómina',
 		extractos: 'Extractos',
 		'liquidaciones-servicios': 'Liq. de servicios',
+		'liquidaciones-servicios-seccion06': 'Liq. servicios — Sección 06',
 		'liquidaciones-terceros': 'Liq. de terceros',
 		'liquidaciones-terceros-adicionales': 'Liq. terceros — adicionales',
 		certificados: 'Certificados tributarios',
+		contabilidad: 'Contabilidad',
 		terceros: 'Terceros',
 		usuarios: 'Usuarios del sistema',
 		sesiones: 'Sesiones',
-		directorio: 'Equipo / directorio'
+		directorio: 'Equipo / directorio',
+		recorridos: 'Recorridos y días laborados'
 	};
 
 	const NIVEL_LABELS: Record<AccessLevel, string> = {
@@ -76,7 +80,7 @@
 	};
 
 	/// `perfil` se excluye de la lista editable: `checkAccess` lo concede siempre,
-	/// incluso con lista blanca, así que ofrecer un interruptor sería mentir.
+	/// incluso con una personalización vacía, así que ofrecer un interruptor sería mentir.
 	const modulos = Object.entries(ROUTE_PERMISSIONS)
 		.filter(([id]) => id !== 'perfil')
 		.map(([id, permiso]) => ({
@@ -84,23 +88,36 @@
 			label: MODULO_LABELS[id] ?? id,
 			descripcion: permiso.description ?? '',
 			// «Limitado» solo se ofrece donde hay un permiso parcial de área o una
-			// capacidad puntual definida para la lista blanca individual.
+			// capacidad puntual definida para la ruta.
 			niveles: (permiso.allowLimited || permiso.limited?.length ? ['read', 'limited', 'full'] : ['read', 'full']) as AccessLevel[]
 		}));
 
 	/// `valor` se lee UNA vez, al montar, y a partir de ahí manda el estado
 	/// interno: el padre recibe cada cambio por `onchange` y volver a leerlo
 	/// pisaría lo que el usuario acaba de marcar. `untrack` lo hace explícito.
-	let modo = $state<'area' | 'rutas'>(
-		untrack(() => (valor && Object.keys(valor).length > 0 ? 'rutas' : 'area'))
-	);
+	let modo = $state<'area' | 'rutas'>(untrack(() => (valor !== null ? 'rutas' : 'area')));
 	let seleccion = $state<Record<string, AccessLevel>>(untrack(() => ({ ...(valor ?? {}) })));
 	let filtro = $state('');
-
-	const esAdmin = $derived((role ?? '').toLowerCase() === 'admin');
+	let personalizacionInicializada = $state(valor !== null && valor !== undefined);
 
 	/** Lo que las áreas marcadas conceden hoy — base de la precarga y del resumen. */
-	const heredado = $derived(getAccessibleModules(role, areas as Area[], null));
+	const heredado = $derived(getAccessibleModules(areas as Area[], null, userId));
+	const jerarquia: AccessLevel[] = ['limited', 'read', 'full'];
+	const permisoEspecial = $derived(PERMISOS_RUTA_ESPECIALES[userId] ?? {});
+	const nivelEspecialRecorridos = $derived.by(() => {
+		const nivel = modo === 'rutas' ? seleccion.recorridos : heredado.recorridos;
+		return nivel ? limitarNivel(heredado.recorridos, nivel) : null;
+	});
+	const nivelEspecialSeccion06 = $derived.by(() => {
+		const id = 'liquidaciones-servicios-seccion06';
+		const nivel = modo === 'rutas' ? seleccion[id] : heredado[id];
+		return nivel ? limitarNivel(heredado[id], nivel) : null;
+	});
+
+	function limitarNivel(base: AccessLevel | undefined, personalizado: AccessLevel): AccessLevel | null {
+		if (!base) return null;
+		return jerarquia[Math.min(jerarquia.indexOf(base), jerarquia.indexOf(personalizado))];
+	}
 
 	const modulosVisibles = $derived.by(() => {
 		const t = filtro.trim().toLowerCase();
@@ -110,15 +127,20 @@
 		);
 	});
 
-	const concedidos = $derived.by(() => {
-		const fuente = modo === 'rutas' ? seleccion : heredado;
-		return modulos
-			.filter((m) => fuente[m.id])
-			.map((m) => ({ label: m.label, nivel: fuente[m.id] as AccessLevel }));
-	});
+	const concedidos = $derived.by(() =>
+		modulos.flatMap((modulo) => {
+			const nivelArea = heredado[modulo.id];
+			const nivel = modo === 'rutas'
+				? seleccion[modulo.id]
+					? limitarNivel(nivelArea, seleccion[modulo.id])
+					: null
+				: nivelArea;
+			if (!nivel) return [];
+			return [{ label: modulo.label, nivel }];
+		})
+	);
 
-	/// Con lista blanca vacía el backend vuelve a las reglas del área (`{}` ≡ `null`).
-	/// Hay que decirlo en pantalla o parece que se guardó un usuario sin acceso.
+	/// `{}` es una personalización explícita sin rutas: solo queda el perfil.
 	const listaVacia = $derived(modo === 'rutas' && Object.keys(seleccion).length === 0);
 
 	function emitir() {
@@ -130,7 +152,10 @@
 		modo = nuevo;
 		// Precarga al entrar en «personalizar»: ajustar es quitar y bajar de
 		// nivel, no reconstruir a mano lo que el área ya concedía.
-		if (nuevo === 'rutas' && Object.keys(seleccion).length === 0) precargarDesdeAreas();
+		if (nuevo === 'rutas' && !personalizacionInicializada) {
+			precargarDesdeAreas();
+			personalizacionInicializada = true;
+		}
 		emitir();
 	}
 
@@ -157,8 +182,10 @@
 		} else {
 			const copia: Record<string, AccessLevel> = {};
 			for (const m of modulos) {
-				// Un módulo sin `limited` no puede recibirlo en una acción masiva.
-				copia[m.id] = m.niveles.includes(nivel) ? nivel : 'read';
+				const nivelArea = heredado[m.id];
+				if (!nivelArea) continue;
+				const elegido = m.niveles.includes(nivel) ? nivel : 'read';
+				copia[m.id] = limitarNivel(nivelArea, elegido) ?? nivelArea;
 			}
 			seleccion = copia;
 		}
@@ -169,6 +196,21 @@
 		precargarDesdeAreas();
 		emitir();
 	}
+
+	/// Cambiar de área puede dejar de permitir un nivel elegido antes; nunca se
+	/// conserva en la base personalizada un nivel que la nueva área no concede.
+	$effect(() => {
+		if (modo !== 'rutas') return;
+		const ajustada: Record<string, AccessLevel> = {};
+		for (const [moduleId, nivel] of Object.entries(seleccion)) {
+			const efectivo = limitarNivel(heredado[moduleId], nivel);
+			if (efectivo) ajustada[moduleId] = efectivo;
+		}
+		if (JSON.stringify(ajustada) !== JSON.stringify(seleccion)) {
+			seleccion = ajustada;
+			onchange({ ...ajustada });
+		}
+	});
 </script>
 
 <div class="prp">
@@ -198,17 +240,32 @@
 		>
 			<span class="prp__modo-titulo">Personalizar rutas</span>
 			<span class="prp__modo-desc">
-				Lista blanca: <strong>solo</strong> los módulos marcados aquí, con el nivel exacto que les pongas.
-				Sustituye por completo a las reglas del área.
+				Limita las rutas y niveles que las áreas ya permiten. No concede acceso a módulos fuera de
+				ellas.
 			</span>
 		</button>
 	</div>
 
-	{#if esAdmin}
-		<p class="prp__aviso prp__aviso--info">
-			Este usuario tiene rol <strong>admin</strong>: conserva acceso total y la lista blanca no se
-			le aplica.
-		</p>
+	{#if userId === OMAR_OPERACIONES_ID && areas.includes('operaciones')}
+		<div class="prp__aviso prp__aviso--info">
+			<strong>Permisos individuales de Omar (Operaciones)</strong>
+			<ul>
+				{#if permisoEspecial.recorridos}
+					<li>
+						Recorridos y días laborados: {nivelEspecialRecorridos ? NIVEL_LABELS[nivelEspecialRecorridos] : 'Sin acceso'}.
+						{#if nivelEspecialRecorridos === 'full'}Puede modificarlos.{:else}Solo puede consultarlos o no tiene acceso.{/if}
+					</li>
+				{/if}
+				{#if permisoEspecial['liquidaciones-servicios-seccion06']}
+					<li>
+						Liquidaciones de servicios — SECCIÓN 06, Hoja 4:
+						{nivelEspecialSeccion06 ? NIVEL_LABELS[nivelEspecialSeccion06] : 'Sin acceso'}.
+						{#if nivelEspecialSeccion06 === 'full'}Puede actualizar los valores de terceros.{:else}No puede modificar los valores.{/if}
+					</li>
+				{/if}
+			</ul>
+			La personalización por ruta puede conservar, reducir o quitar estos accesos.
+		</div>
 	{/if}
 
 	{#if modo === 'rutas'}
@@ -242,8 +299,8 @@
 
 		{#if listaVacia}
 			<p class="prp__aviso prp__aviso--warn">
-				No hay ningún módulo marcado. Una lista blanca vacía equivale a «heredar del área»: se
-				guardará como tal.
+				No hay ninguna ruta marcada. Se guardará la personalización vacía y el usuario solo conservará
+				acceso a su perfil.
 			</p>
 		{/if}
 
@@ -251,9 +308,15 @@
 		<div class="prp__lista">
 			{#each modulosVisibles as modulo (modulo.id)}
 				{@const actual = seleccion[modulo.id] ?? null}
+				{@const nivelArea = heredado[modulo.id]}
+				{@const efectivo = actual ? limitarNivel(nivelArea, actual) : null}
 				<div class="prp__fila" class:prp__fila--activa={actual !== null}>
 					<div class="prp__info">
 						<span class="prp__label">{modulo.label}</span>
+						<span class="prp__base">
+							Área: {nivelArea ? NIVEL_LABELS[nivelArea] : 'Sin acceso'}
+							{#if modo === 'rutas'} · efectivo: {efectivo ? NIVEL_LABELS[efectivo] : 'Sin acceso'}{/if}
+						</span>
 						{#if modulo.descripcion}
 							<span class="prp__desc">{modulo.descripcion}</span>
 						{/if}
@@ -265,17 +328,20 @@
 							class:prp__nivel--sel={actual === null}
 							role="radio"
 							aria-checked={actual === null}
+							disabled={!nivelArea}
 							onclick={() => setNivel(modulo.id, null)}
 						>
 							Sin acceso
 						</button>
 						{#each modulo.niveles as nivel}
+							{@const permitido = limitarNivel(nivelArea, nivel) === nivel}
 							<button
 								type="button"
 								class="prp__nivel prp__nivel--{nivel}"
 								class:prp__nivel--sel={actual === nivel}
 								role="radio"
 								aria-checked={actual === nivel}
+								disabled={!permitido}
 								onclick={() => setNivel(modulo.id, nivel)}
 							>
 								{NIVEL_LABELS[nivel]}
@@ -292,8 +358,8 @@
 
 	<!-- ─── Resumen legible ──────────────────────────────────────────────── -->
 	<div class="prp__resumen">
-		<span class="prp__resumen-titulo">
-			{modo === 'rutas' ? 'Quedará con acceso a' : 'Con las áreas marcadas tendría acceso a'}
+				<span class="prp__resumen-titulo">
+			{modo === 'rutas' ? 'Acceso efectivo después de limitarlo' : 'Con las áreas marcadas tendría acceso a'}
 		</span>
 		{#if areas.length === 0 && modo === 'area'}
 			<p class="prp__vacio">Sin áreas seleccionadas todavía.</p>
@@ -478,6 +544,12 @@
 		color: var(--text-primary, #0f172a);
 	}
 
+	.prp__base {
+		font-size: 0.6875rem;
+		line-height: 1.35;
+		color: var(--text-secondary, #4b5563);
+	}
+
 	.prp__desc {
 		font-size: 0.6875rem;
 		line-height: 1.35;
@@ -504,6 +576,11 @@
 		color: var(--text-muted, #6b7280);
 		cursor: pointer;
 		white-space: nowrap;
+	}
+
+	.prp__nivel:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
 	}
 
 	.prp__nivel:hover {

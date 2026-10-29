@@ -42,12 +42,7 @@
 	// Permiso reactivo: si cambia la ruta o el user, revalidar
 	$effect(() => {
 		if (mounted && user) {
-			const { allowed } = checkAccess(
-				user.role || user.rol,
-				user.area,
-				moduleId,
-				user.permisos_rutas
-			);
+			const { allowed } = checkAccess(user.area, moduleId, user.permisos_rutas, user.id);
 			if (!allowed) {
 				toast.error('No tienes permiso para acceder a esta sección');
 				goto(redirectTo);

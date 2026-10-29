@@ -127,10 +127,14 @@
 	/// Atajos de lectura, para no cambiar todo el marcado de golpe.
 	const vistaActual = $derived(filtros.vista_lista as VistaActual);
 
-	const isAdmin = $derived($authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin');
-	const isOperaciones = $derived($authStore.user?.area?.includes('operaciones'));
-	const isTalentoHumano = $derived($authStore.user?.area?.includes('talento_humano'));
+	const areasUsuario = $derived(
+		!$authStore.user?.area ? [] : Array.isArray($authStore.user.area) ? $authStore.user.area : [$authStore.user.area]
+	);
+	const isAdmin = $derived(areasUsuario.includes('administracion'));
+	const isOperaciones = $derived(areasUsuario.includes('operaciones'));
+	const isTalentoHumano = $derived(areasUsuario.includes('talento_humano'));
 	const canAccessSpecialViews = $derived(isAdmin || isOperaciones || isTalentoHumano);
+	const puedeVerRecorridos = $derived(!!$authStore.user && authStore.hasPermission('recorridos'));
 
 	// ══════════════════════════════════════════════════════
 	//  URL PARAMS: sincroniza el estado del page con la URL
@@ -684,6 +688,7 @@
 					</svg>
 					Lista
 				</button>
+				{#if puedeVerRecorridos}
 				<button
 					onclick={() => irAlCanvasDeRecorridos()}
 					class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
@@ -706,6 +711,7 @@
 					</svg>
 					Recorridos
 				</button>
+				{/if}
 			</div>
 
 			<!-- Vistas rápidas: ocultos y papelera -->
@@ -957,7 +963,8 @@
 									id: 'recorridos',
 									etiqueta: 'Ver recorridos / bonos de planilla',
 									icono: Route,
-									onClick: () => irAlCanvasDeRecorridos(c.id)
+					onClick: () => irAlCanvasDeRecorridos(c.id),
+					oculta: !puedeVerRecorridos
 								},
 								{
 									id: 'editar',

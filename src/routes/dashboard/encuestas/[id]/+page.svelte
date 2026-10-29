@@ -15,7 +15,7 @@
 	const id = $derived(page.params.id ?? '');
 	const puedeGestionar = $derived.by(() => {
 		const u = $authStore.user;
-		return !!u && checkAccess(u.role || u.rol, u.area, 'encuestas', u.permisos_rutas).level === 'full';
+		return !!u && checkAccess(u.area, 'encuestas', u.permisos_rutas, u.id).level === 'full';
 	});
 	let encuesta = $state<Encuesta | null>(null);
 	let formulario = $state<EncuestaInput | null>(null);

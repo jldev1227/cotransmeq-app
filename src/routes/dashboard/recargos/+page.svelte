@@ -303,10 +303,8 @@
 	// listado de eliminados
 	let verEliminados = $state(false);
 
-	// User role checks
-	const user = $derived($authStore.user);
-	const isKilometrajeRole = $derived(user?.role === 'kilometraje');
-	const isConsultaRole = $derived(user?.role === 'consulta');
+	// La personalización de ruta concentra consulta, limitación y escritura;
+	// ya no se mezclan reglas paralelas basadas en el rol heredado.
 	/**
 	 * Sólo lectura si el ROL es `consulta` —como siempre— o si el NIVEL sobre el
 	 * módulo `recargos` no llega a `full`.
@@ -323,7 +321,7 @@
 	const puedeAdjuntarPlanilla = $derived(
 		!!$authStore.user && ['limited', 'full'].includes(authStore.getAccessLevel('recargos') ?? '')
 	);
-	const isReadOnly = $derived(isConsultaRole || !puedeEditarRecargos);
+	const isReadOnly = $derived(!puedeEditarRecargos);
 
 	// Store data
 	const recargos = $derived($recargosStore.recargos);
@@ -760,7 +758,7 @@
 				onClick: handleCopySelectedRows
 			}
 		];
-		if (!isKilometrajeRole && !isReadOnly && !bulkRecalcRunning) {
+		if (!isReadOnly && !bulkRecalcRunning) {
 			acciones.push({
 				id: 'recalcular',
 				etiqueta: 'Recalcular',
@@ -905,7 +903,7 @@
 	}
 
 	async function handleDeleteSelected() {
-		if (isKilometrajeRole || isReadOnly) return;
+		if (isReadOnly) return;
 		if (selectedRows.size === 0) return;
 
 		// Abrir modal de confirmación
@@ -981,7 +979,7 @@
 	}
 
 	function handleOpenFormModal() {
-		if (isKilometrajeRole || isReadOnly) return;
+		if (isReadOnly) return;
 		selectedRecargoId = null;
 		modalFormIsOpen = true;
 	}
@@ -1863,7 +1861,7 @@
 		</p>
 		{#if filtrosActivos > 0}
 			<button type="button" onclick={limpiarFiltros} class="btn-secondary">Limpiar filtros</button>
-		{:else if !verEliminados && !isKilometrajeRole && !isReadOnly}
+		{:else if !verEliminados && !isReadOnly}
 			<button
 				type="button"
 				onclick={handleOpenFormModal}
@@ -1903,7 +1901,7 @@
 			<!-- Progreso del recálculo masivo. Antes solo se veía con filas marcadas;
 			     ahora también al reanudarlo tras recargar la página, cuando la
 			     selección ya no existe pero el servidor sigue trabajando. -->
-			{#if bulkRecalcRunning && !isKilometrajeRole && !isReadOnly}
+			{#if bulkRecalcRunning && !isReadOnly}
 				<div
 					class="rec-recalc"
 					role="status"
@@ -2004,7 +2002,7 @@
 			</a>
 
 			<!-- Botón Crear -->
-			{#if !isKilometrajeRole && !isReadOnly}
+			{#if !isReadOnly}
 				<button
 					onclick={handleOpenFormModal}
 					disabled={bloqueoPorRecalc}
