@@ -26,9 +26,11 @@
 	} from 'lucide-svelte';
 
 	// ==================== ESTADO ====================
+	export let anioInicial = new Date().getFullYear();
+
 	let configuraciones: ConfiguracionLiquidacion[] = [];
 	let aniosDisponibles: number[] = [];
-	let anioSeleccionado: number = new Date().getFullYear();
+	let anioSeleccionado = anioInicial;
 	let loading = true;
 
 	// Edición inline

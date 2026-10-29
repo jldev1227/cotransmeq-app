@@ -210,16 +210,6 @@ export interface ConceptoDTO {
 	 * enteros y en el auxilio cuando la liquidación lo tiene descontado.
 	 */
 	baseMensual?: number;
-	/**
-	 * Cantidad desde la que el concepto se paga ENTERO, sin prorratear.
-	 *
-	 * Solo lo trae la NIVELACIÓN DE SALARIO: con 17 días de Villanueva o más se
-	 * paga la diferencia completa del mes. La fórmula tiene que respetarlo o la
-	 * celda enseñaría menos de lo que el servidor guarda al teclear 20 días.
-	 * Ausente en todo lo demás —y en los snapshots anteriores al bono—, que
-	 * prorratean siempre.
-	 */
-	umbralCompleto?: number;
 	/// Fila que solo es un rótulo de sección («OTROS»). Ausente en payloads
 	/// viejos, donde no existía.
 	seccion?: boolean;
@@ -2809,20 +2799,9 @@ function zonaDesprendible(args: {
 			const baseProrrateo =
 				baseSalario ?? (dev.baseMensual != null ? String(dev.baseMensual) : null);
 			const celdaCant = `${L(colDevCant)}${r + 1}`;
-			/**
-			 * Con TOPE la fórmula lleva el `IF` dentro.
-			 *
-			 * La nivelación de salario se prorratea hasta los 16 días de
-			 * Villanueva y desde los 17 se paga entera. Sin el `IF`, teclear 20
-			 * enseñaba dos tercios del bono y el servidor guardaba el completo:
-			 * la hoja y el desprendible decían cifras distintas del mismo
-			 * concepto hasta que alguien comparaba los dos papeles.
-			 */
 			const formulaValor =
 				!ref?.valor && baseProrrateo && dev.baseMensual != null
-					? dev.umbralCompleto
-						? `=ROUND(IF(${celdaCant}>=${dev.umbralCompleto},${baseProrrateo},${baseProrrateo}/30*${celdaCant}),0)`
-						: `=ROUND(${baseProrrateo}/30*${celdaCant},0)`
+					? `=ROUND(${baseProrrateo}/30*${celdaCant},0)`
 					: null;
 
 			const fValorCubo = codigoCubo

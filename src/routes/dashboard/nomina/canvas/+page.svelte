@@ -88,6 +88,7 @@
 	import UniverActionOverlay from '$lib/components/univer/UniverActionOverlay.svelte';
 	import PresenceAvatars from '$lib/components/PresenceAvatars.svelte';
 	import AutosaveIndicator from '$lib/components/AutosaveIndicator.svelte';
+	import { Settings } from 'lucide-svelte';
 	import { authStore } from '$lib/stores/auth';
 
 	const MESES = [
@@ -1466,8 +1467,21 @@
 		goto('/dashboard');
 	}
 
+	function abrirConfiguracionNomina() {
+		antesDeSalir();
+		const periodo = new URLSearchParams({ anio: String(anio), mes: String(mes) });
+		void goto(`/dashboard/nomina/configuraciones?${periodo}`);
+	}
+
 	// ─── Carril ────────────────────────────────────────────
 	let railItems = $derived<RailItem[]>([
+		{
+			id: 'configuracion-nomina',
+			label: 'Configuración de nómina',
+			hint: 'Edita el salario de Villanueva y el auxilio de transporte por año.',
+			icon: iconoConfiguracionNomina,
+			onSelect: abrirConfiguracionNomina
+		},
 		{
 			id: 'recargar',
 			label: 'Recalcular periodo',
@@ -1838,6 +1852,11 @@
 			d="M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z"
 		/>
 	</svg>
+{/snippet}
+
+{#snippet iconoConfiguracionNomina()}
+	<!-- Engranaje: valores que alimentan la liquidación del año seleccionado. -->
+	<Settings size={20} strokeWidth={1.8} />
 {/snippet}
 
 {#snippet iconoTablasRecargos()}
