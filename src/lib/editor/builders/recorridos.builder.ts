@@ -900,15 +900,13 @@ export function diaSemana(iso: string): string {
  * La hora, y de qué día es cuando no es el del registro.
  *
  * En la celda no cabe la fecha completa —la columna es estrecha y son cientos
- * de filas—, así que se abrevia a «(día sig.)» / «(+2 días)». Sigue siendo
- * legible, que es lo que el «+1» a secas no era: nadie sabía si era una hora
- * más, un día más o el día anterior.
+ * de filas—, así que se muestra un sufijo breve que también se puede teclear.
  */
 function horaConDia(hora: string | null, diasOffset: number): string {
 	if (!hora) return '';
 	const n = Math.max(0, Math.trunc(Number(diasOffset) || 0));
 	if (n === 0) return hora;
-	return n === 1 ? `${hora} (día sig.)` : `${hora} (+${n} días)`;
+	return `${hora} (+${n} ${n === 1 ? 'día' : 'días'})`;
 }
 
 function letra(c: number): string {

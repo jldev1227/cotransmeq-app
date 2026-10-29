@@ -500,6 +500,7 @@
 			mes,
 			user: { id: user.id, name: user.nombre ?? user.correo ?? 'Usuario' },
 			onRemotePatch: (p: any) => {
+				if (p.recargar) { void montar(); return; }
 				const fila = filaPorId.get(String(p.entity_id));
 				if (!fila) return;
 				aplicarEnModelo(fila, p.field, p.value, p.derivados);
@@ -509,6 +510,7 @@
 			},
 			onAck: (a: any) => {
 				pendientes = Math.max(0, pendientes - 1);
+				if (a.recargar) { void montar(); return; }
 				previos.delete(`${a.entity_id}:${a.field}`);
 				const borradorDia = borradores.get(String(a.entity_id));
 				if (a.field === 'fecha' && borradorDia?.promocionDia) {
