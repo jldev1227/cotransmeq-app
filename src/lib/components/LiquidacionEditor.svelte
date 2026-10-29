@@ -3996,7 +3996,10 @@
 								</h2>
 								<p class="wb-card-sub">Propietarios, valores a liquidar e ingresos</p>
 								{#if !canEditTerceros}
-									<p class="wb-card-sub">Consulta: solo Administración y Omar pueden actualizar estos valores.</p>
+									<p class="wb-card-sub">
+										Consulta: se requiere permiso Completo en Sección 06 para
+										actualizar estos valores.
+									</p>
 								{/if}
 							</div>
 							<button

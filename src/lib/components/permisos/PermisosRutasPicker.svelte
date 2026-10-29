@@ -9,8 +9,8 @@
 	Dos modos, y la diferencia importa:
 	  · «Heredar del área» guarda `null`: el usuario sigue las reglas del área y
 	    hereda automáticamente los módulos que se añadan en el futuro.
-	  · «Personalizar rutas» guarda un objeto: cada ruta limita el nivel que el
-	    área ya concede. No puede ampliar el acceso de un área.
+	  · «Personalizar rutas» guarda una lista individual: puede quitar o limitar
+	    cualquier ruta y asignar edición en las rutas delegables.
 
 	Al pasar a personalizar se precarga lo que las áreas ya conceden, porque el
 	trabajo real es recortar (quitar módulos, bajar de nivel), no partir de cero.
@@ -19,8 +19,6 @@
 	import { untrack } from 'svelte';
 	import {
 		ROUTE_PERMISSIONS,
-		OMAR_OPERACIONES_ID,
-		PERMISOS_RUTA_ESPECIALES,
 		getAccessibleModules,
 		type AccessLevel,
 		type Area
@@ -29,7 +27,7 @@
 	interface Props {
 		/** Áreas seleccionadas en el formulario padre — alimentan la precarga. */
 		areas: string[];
-		/** Usuario editado: activa las excepciones individuales explícitas. */
+		/** Usuario editado: conserva asignaciones personales históricas. */
 		userId?: string;
 		/** Valor inicial. `null` hereda del área; `{}` deja solo el perfil. */
 		valor?: Record<string, AccessLevel> | null;
@@ -103,16 +101,11 @@
 	/** Lo que las áreas marcadas conceden hoy — base de la precarga y del resumen. */
 	const heredado = $derived(getAccessibleModules(areas as Area[], null, userId));
 	const jerarquia: AccessLevel[] = ['limited', 'read', 'full'];
-	const permisoEspecial = $derived(PERMISOS_RUTA_ESPECIALES[userId] ?? {});
-	const nivelEspecialRecorridos = $derived.by(() => {
-		const nivel = modo === 'rutas' ? seleccion.recorridos : heredado.recorridos;
-		return nivel ? limitarNivel(heredado.recorridos, nivel) : null;
-	});
-	const nivelEspecialSeccion06 = $derived.by(() => {
-		const id = 'liquidaciones-servicios-seccion06';
-		const nivel = modo === 'rutas' ? seleccion[id] : heredado[id];
-		return nivel ? limitarNivel(heredado[id], nivel) : null;
-	});
+	function nivelMaximo(moduloId: string): AccessLevel | undefined {
+		const permiso = ROUTE_PERMISSIONS[moduloId];
+		if (permiso?.elevableAreas?.some((area) => areas.includes(area))) return 'full';
+		return heredado[moduloId];
+	}
 
 	function limitarNivel(base: AccessLevel | undefined, personalizado: AccessLevel): AccessLevel | null {
 		if (!base) return null;
@@ -130,11 +123,12 @@
 	const concedidos = $derived.by(() =>
 		modulos.flatMap((modulo) => {
 			const nivelArea = heredado[modulo.id];
-			const nivel = modo === 'rutas'
-				? seleccion[modulo.id]
-					? limitarNivel(nivelArea, seleccion[modulo.id])
-					: null
-				: nivelArea;
+			const nivel =
+				modo === 'rutas'
+					? seleccion[modulo.id]
+						? limitarNivel(nivelMaximo(modulo.id), seleccion[modulo.id])
+						: null
+					: nivelArea;
 			if (!nivel) return [];
 			return [{ label: modulo.label, nivel }];
 		})
@@ -203,7 +197,7 @@
 		if (modo !== 'rutas') return;
 		const ajustada: Record<string, AccessLevel> = {};
 		for (const [moduleId, nivel] of Object.entries(seleccion)) {
-			const efectivo = limitarNivel(heredado[moduleId], nivel);
+			const efectivo = limitarNivel(nivelMaximo(moduleId), nivel);
 			if (efectivo) ajustada[moduleId] = efectivo;
 		}
 		if (JSON.stringify(ajustada) !== JSON.stringify(seleccion)) {
@@ -240,31 +234,18 @@
 		>
 			<span class="prp__modo-titulo">Personalizar rutas</span>
 			<span class="prp__modo-desc">
-				Limita las rutas y niveles que las áreas ya permiten. No concede acceso a módulos fuera de
-				ellas.
+				Limita rutas y niveles. En Recorridos y Sección 06 se puede asignar
+				edición a una persona de Operaciones.
 			</span>
 		</button>
 	</div>
 
-	{#if userId === OMAR_OPERACIONES_ID && areas.includes('operaciones')}
+	{#if areas.includes('operaciones')}
 		<div class="prp__aviso prp__aviso--info">
-			<strong>Permisos individuales de Omar (Operaciones)</strong>
-			<ul>
-				{#if permisoEspecial.recorridos}
-					<li>
-						Recorridos y días laborados: {nivelEspecialRecorridos ? NIVEL_LABELS[nivelEspecialRecorridos] : 'Sin acceso'}.
-						{#if nivelEspecialRecorridos === 'full'}Puede modificarlos.{:else}Solo puede consultarlos o no tiene acceso.{/if}
-					</li>
-				{/if}
-				{#if permisoEspecial['liquidaciones-servicios-seccion06']}
-					<li>
-						Liquidaciones de servicios — SECCIÓN 06, Hoja 4:
-						{nivelEspecialSeccion06 ? NIVEL_LABELS[nivelEspecialSeccion06] : 'Sin acceso'}.
-						{#if nivelEspecialSeccion06 === 'full'}Puede actualizar los valores de terceros.{:else}No puede modificar los valores.{/if}
-					</li>
-				{/if}
-			</ul>
-			La personalización por ruta puede conservar, reducir o quitar estos accesos.
+			<strong>Asignaciones individuales de Operaciones</strong>
+			En Recorridos y Liquidaciones de servicios — Sección 06, puedes otorgar
+			nivel Completo a este usuario. La asignación se guarda en su lista
+			personalizada y no cambia los permisos del resto del área.
 		</div>
 	{/if}
 
@@ -309,12 +290,14 @@
 			{#each modulosVisibles as modulo (modulo.id)}
 				{@const actual = seleccion[modulo.id] ?? null}
 				{@const nivelArea = heredado[modulo.id]}
-				{@const efectivo = actual ? limitarNivel(nivelArea, actual) : null}
+				{@const maximo = nivelMaximo(modulo.id)}
+				{@const efectivo = actual ? limitarNivel(maximo, actual) : null}
 				<div class="prp__fila" class:prp__fila--activa={actual !== null}>
 					<div class="prp__info">
 						<span class="prp__label">{modulo.label}</span>
 						<span class="prp__base">
 							Área: {nivelArea ? NIVEL_LABELS[nivelArea] : 'Sin acceso'}
+							{#if maximo && maximo !== nivelArea} · máximo asignable: {NIVEL_LABELS[maximo]}{/if}
 							{#if modo === 'rutas'} · efectivo: {efectivo ? NIVEL_LABELS[efectivo] : 'Sin acceso'}{/if}
 						</span>
 						{#if modulo.descripcion}
@@ -334,7 +317,7 @@
 							Sin acceso
 						</button>
 						{#each modulo.niveles as nivel}
-							{@const permitido = limitarNivel(nivelArea, nivel) === nivel}
+							{@const permitido = limitarNivel(maximo, nivel) === nivel}
 							<button
 								type="button"
 								class="prp__nivel prp__nivel--{nivel}"

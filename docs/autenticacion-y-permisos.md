@@ -124,7 +124,7 @@ Trampas de este guardia, todas verificables en el código:
 [dashboard/+layout.svelte](../src/routes/dashboard/+layout.svelte):
 
 - En cada cambio de ruta, salvo `/dashboard`, comprueba el módulo con
-  `checkAccess(role || rol, area, módulo, permisos_rutas)` usando el usuario del
+  `checkAccess(area, módulo, permisos_rutas, user.id)` usando el usuario del
   store. Sin acceso, oculta el contenido protegido y presenta la pantalla 404.
 - Cada 60 s revisa el `exp` del token: avisa cuando quedan 5 minutos o menos y
   cierra la sesión al vencer.
@@ -209,17 +209,21 @@ p. ej. facturación solo registra facturas en liquidaciones de servicios). La
 jerarquía del backend es `limited` < `read` < `full`: una ruta que pide `read`
 deja fuera a quien solo tiene `limited`.
 
-**Cómo resuelve `checkAccess(rol, áreas, módulo, permisos_rutas)`**, en orden:
+**Cómo resuelve `checkAccess(áreas, módulo, permisos_rutas, usuario)`**, en orden:
 
-1. Módulo desconocido: denegado. Por eso todo `moduleId` que se pase a un
-   guardia tiene que existir en el mapa.
-2. Lista blanca (`users.permisos_rutas` con al menos una clave) y el rol no es
-   `admin`: sustituye por completo a las áreas. Solo los módulos listados, con
-   el nivel listado, incluidos los `general`. `perfil` siempre se concede.
-3. `general: true`: cualquier sesión, nivel `full`.
-4. Áreas: `full` si alguna está en `full`, luego `read`, luego `limited`.
+1. Módulo desconocido o usuario sin áreas: denegado.
+2. Se obtiene el nivel base más alto que conceden las áreas del usuario.
+3. Sin lista blanca, se conserva ese nivel base; con una lista personalizada,
+   solo quedan las rutas incluidas y se aplica su nivel. Un mapa vacío deja solo
+   `perfil`.
+4. En las rutas declaradas con `elevableAreas`, una asignación explícita puede
+   elevar el nivel de un usuario que ya tenga acceso base. Actualmente, una
+   persona de Operaciones puede recibir `full` en Recorridos y Sección 06. En los
+   demás módulos la personalización solo puede reducir el nivel del área.
+5. `perfil` permanece accesible para recuperar la cuenta.
 
-`getAccessibleModules` aplica lo mismo a todo el mapa.
+El campo heredado `role`/`rol` no participa. `getAccessibleModules` aplica lo
+mismo a todo el mapa.
 
 | Módulo | `full` | `read` | `limited` |
 |---|---|---|---|
@@ -259,10 +263,6 @@ backend.
 - En `perfil`, `flota`, `conductores` y `clientes` la lista `full` del backend
   incluye `mantenimiento` y la del front no. No cambia nada porque son
   `general`.
-- Con lista blanca y rol `admin`, el backend concede `full` en todo; el front
-  ignora la lista y aplica las áreas, así que a un `admin` sin el área
-  `administracion` el menú le puede mostrar menos de lo que la API le permite.
-  El front compara el rol sin distinguir mayúsculas; el backend, exacto.
 - El backend normaliza la lista blanca (descarta claves que no son módulos y
   niveles que no son `full`/`read`/`limited`); el front la usa tal cual.
 - El backend lee `permisos_rutas` de la base en cada petición (caché de 30 s);
@@ -292,7 +292,7 @@ aplica de inmediato en la API y en el front al recargar.
 [menu.ts](../src/lib/config/menu.ts) es la lista única de entradas (`id`,
 etiqueta, icono de `lucide-svelte`, `href`); es idéntica a la de Transmeralda.
 El `id` es el módulo de permiso. [Sidebar.svelte](../src/lib/components/Sidebar.svelte)
-filtra con `checkAccess(role || rol, area, id, permisos_rutas)` y resalta la
+filtra con `checkAccess(area, id, permisos_rutas, user.id)` y resalta la
 sección por el prefijo de la ruta (los canvas de terceros resaltan «Liq.
 Terceros»; sesiones y directorio, «Equipo»).
 

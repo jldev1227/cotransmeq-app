@@ -37,6 +37,8 @@ export interface RoutePermission {
 	full: Area[];
 	read?: Area[];
 	limited?: Area[];
+	/** Áreas cuyos usuarios pueden recibir un nivel explícito superior por ruta. */
+	elevableAreas?: Area[];
 	/** Permite asignar `limited` en la lista blanca individual para acciones puntuales. */
 	allowLimited?: boolean;
 	description?: string;
@@ -193,13 +195,15 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 	// sus recorridos: la hoja alimenta los bonos y el pernocte que acaban en la
 	// nómina, así que editarla es una operación contable, no una consulta.
 	//
-	// Administración edita. Operaciones consulta; el rol heredado no concede edición.
+	// Administración edita. Operaciones consulta salvo asignación individual
+	// explícita en las rutas declaradas como elevables.
 	//
 	// Espejo EXACTO de `backend-cotransmeq/src/config/permissions.ts`. Si aquí y
 	// allí no coinciden, el sidebar muestra una entrada que la API rechaza con 403.
 	recorridos: {
 		full: ['administracion'],
 		read: ['operaciones', 'contabilidad', 'facturacion', 'talento_humano', 'hseq', 'mantenimiento'],
+		elevableAreas: ['operaciones'],
 		description: 'Canvas de recorridos, días laborados de conductores y bonos de planilla'
 	},
 
@@ -211,6 +215,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 	'liquidaciones-servicios-seccion06': {
 		full: ['administracion'],
 		read: ['operaciones', 'facturacion'],
+		elevableAreas: ['operaciones'],
 		description: 'SECCIÓN 06 — Hoja 4: liquidación de terceros'
 	},
 	'liquidaciones-terceros': {
@@ -280,7 +285,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 export type PermisosRutas = Record<string, AccessLevel> | null | undefined;
 const NIVELES_VALIDOS: readonly AccessLevel[] = ['full', 'read', 'limited'];
 
+/** Asignación histórica de Omar, mantenida por compatibilidad. */
 export const OMAR_OPERACIONES_ID = '77c70289-a726-4b4d-bde9-d1997f9e471f';
+/** Asignaciones históricas de compatibilidad; las nuevas se guardan por usuario. */
 export const PERMISOS_RUTA_ESPECIALES: Record<string, Record<string, AccessLevel>> = {
 	[OMAR_OPERACIONES_ID]: {
 		recorridos: 'full',
@@ -300,7 +307,7 @@ export function normalizarRutasOverride(valor: unknown): Record<string, AccessLe
 	return limpio;
 }
 
-/** Resuelve el nivel base del área y aplica `permisos_rutas` solo como límite. */
+/** Resuelve el nivel del área y aplica las asignaciones por ruta declaradas. */
 export function checkAccess(
 	userAreas: Area[] | Area | null | undefined,
 	moduleId: string,
@@ -324,6 +331,9 @@ export function checkAccess(
 	if (!override || moduleId === 'perfil') return { allowed: true, level: nivelArea };
 	const nivelUsuario = override[moduleId];
 	if (!nivelUsuario) return { allowed: false, level: null };
+	if (permission.elevableAreas?.some((area) => areas.includes(area))) {
+		return { allowed: true, level: nivelUsuario };
+	}
 	const jerarquia: AccessLevel[] = ['limited', 'read', 'full'];
 	return {
 		allowed: true,
