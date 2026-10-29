@@ -2094,6 +2094,7 @@
 									bind:value={dias_laborados_villanueva}
 									min="0"
 									max="31"
+									step="0.1"
 									class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
 								/>
 							</div>
@@ -2879,6 +2880,7 @@
 									type="number"
 									min="0"
 									max="30"
+									step="0.1"
 									bind:value={diasAjusteDeducciones}
 									placeholder="Todos"
 									class="input-glow w-24 rounded-xl border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm"

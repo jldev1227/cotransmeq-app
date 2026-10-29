@@ -754,6 +754,8 @@ const MIN_COLUMNAS = 27;
 // ─── Estilos ──────────────────────────────────────────────────────────
 
 const FMT_COP = '"$"#,##0;[Red]-"$"#,##0';
+/// Este campo admite fracciones de día y debe conservar una cifra decimal visible.
+const FMT_DIAS_1 = '0.0';
 /**
  * Las horas van SIN patrón a propósito.
  *
@@ -2774,7 +2776,11 @@ function zonaDesprendible(args: {
 					: ref?.horas
 						? { f: `=${ref.horas}` }
 						: { v: dev.cantidad ?? '' }),
-				s: { ...estilo, ht: HorizontalAlign.CENTER }
+				s: {
+					...estilo,
+					ht: HorizontalAlign.CENTER,
+					...(dev.clave === 'ajuste_salarial' ? { n: { pattern: FMT_DIAS_1 } } : {})
+				}
 			});
 
 			/**
@@ -3191,7 +3197,7 @@ function zonaDesprendible(args: {
 		celdaDiasBase = `${L(colDevValor)}${r + 1}`;
 		campo(r, colDevValor, SPAN.DESP_VALOR, {
 			v: hoja.diasAjusteDeducciones ?? '',
-			s: { ...editable(), ht: HorizontalAlign.CENTER }
+			s: { ...editable(), ht: HorizontalAlign.CENTER, n: { pattern: FMT_DIAS_1 } }
 		});
 		bind(r, colDevValor, {
 			entityType: 'liquidacion',
