@@ -565,6 +565,9 @@
 	const isAdmin = $derived(userAreas.includes('administracion'));
 	const isFacturacion = $derived(userAreas.includes('facturacion'));
 	const isOperaciones = $derived(userAreas.includes('operaciones'));
+	const puedeAnularFactura = $derived(
+		(isAdmin || isFacturacion) && (isFull || isLimited)
+	);
 	/// El enlace a los abonos solo se ofrece a quien puede abrir Cartera.
 	const puedeVerCartera = $derived(
 		checkAccess(
@@ -2559,7 +2562,7 @@
 												>
 													<Edit2 class="h-4 w-4" />
 												</button>
-													{#if isAdmin}
+									{#if puedeAnularFactura}
 												<button
 													type="button"
 													class="lq-icono lq-icono--peligro"
@@ -3436,6 +3439,7 @@
 <ModalAnularFactura
 	open={anularFacturaModalOpen && !!anularFacturaTarget}
 	factura={anularFacturaTarget}
+	puedeElegirResultadoLiquidaciones={isFacturacion || (isAdmin && isFull)}
 	onclose={() => {
 		anularFacturaModalOpen = false;
 		anularFacturaTarget = null;

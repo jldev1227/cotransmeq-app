@@ -10,11 +10,12 @@
 	interface Props {
 		open: boolean;
 		factura: FacturaLiquidacion | null;
+		puedeElegirResultadoLiquidaciones: boolean;
 		onclose: () => void;
 		onannulled: (factura: FacturaLiquidacion & { estados_resultantes: Record<string, string> }) => void;
 	}
 
-	let { open, factura, onclose, onannulled }: Props = $props();
+	let { open, factura, puedeElegirResultadoLiquidaciones, onclose, onannulled }: Props = $props();
 	let motivo = $state('');
 	let tipo = $state<TipoAnulacionFactura>('SIN_MODIFICAR');
 	let liquidacionesALiquidar = $state<string[]>([]);
@@ -62,7 +63,9 @@
 	{open}
 	tone="danger"
 	title="¿Anular la factura #{factura?.numero_factura ?? ''}?"
-	message="Elige el resultado para cada liquidación del lote."
+	message={puedeElegirResultadoLiquidaciones
+		? 'Elige el resultado para cada liquidación del lote.'
+		: 'Todas las liquidaciones asociadas volverán a APROBADA.'}
 	confirmText="Anular factura"
 	loading={enviando}
 	loadingText="Anulando…"
@@ -71,17 +74,19 @@
 	oncancel={onclose}
 >
 	<div class="ma-contenido">
-		<SelectorAnulacionFactura
-			items={factura?.items ?? []}
-			prefijoNombre="anular-factura-principal"
-			{tipo}
-			{liquidacionesALiquidar}
-			{liquidacionDuplicadaId}
-			deshabilitado={enviando}
-			onTipoChange={(siguiente) => (tipo = siguiente)}
-			onLiquidacionesALiquidarChange={(ids) => (liquidacionesALiquidar = ids)}
-			onLiquidacionDuplicadaChange={(id) => (liquidacionDuplicadaId = id)}
-		/>
+		{#if puedeElegirResultadoLiquidaciones}
+			<SelectorAnulacionFactura
+				items={factura?.items ?? []}
+				prefijoNombre="anular-factura-principal"
+				{tipo}
+				{liquidacionesALiquidar}
+				{liquidacionDuplicadaId}
+				deshabilitado={enviando}
+				onTipoChange={(siguiente) => (tipo = siguiente)}
+				onLiquidacionesALiquidarChange={(ids) => (liquidacionesALiquidar = ids)}
+				onLiquidacionDuplicadaChange={(id) => (liquidacionDuplicadaId = id)}
+			/>
+		{/if}
 		<label class="ma-motivo">
 			<span>Motivo de anulación <b>*</b></span>
 			<textarea

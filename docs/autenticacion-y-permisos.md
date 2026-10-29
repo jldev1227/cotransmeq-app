@@ -205,7 +205,7 @@ que el usuario sí puede usar.
 usuario puede tener varias; manda la mejor.
 
 **Niveles:** `full` (todo), `read` (consulta), `limited` (una función concreta,
-p. ej. facturación solo registra facturas en liquidaciones de servicios). La
+p. ej. Facturación registra y anula facturas, y define el destino de sus liquidaciones; no las edita directamente). La
 jerarquía del backend es `limited` < `read` < `full`: una ruta que pide `read`
 deja fuera a quien solo tiene `limited`.
 

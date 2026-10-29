@@ -209,7 +209,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 
 	'liquidaciones-servicios': {
 		full: ['administracion', 'operaciones'],
-		limited: ['facturacion'],
+		limited: ['facturacion'], // Gestiona facturas y sus destinos al anular; no edita liquidaciones directamente
 		description: 'Liquidaciones de servicios'
 	},
 	'liquidaciones-servicios-seccion06': {
