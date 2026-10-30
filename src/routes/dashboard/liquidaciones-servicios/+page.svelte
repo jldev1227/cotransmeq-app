@@ -1987,7 +1987,7 @@
 		{/snippet}
 
 		{@render tabBtn('liquidaciones', 'Liquidaciones', FileText)}
-		{#if isAdmin || isFacturacion}
+		{#if isAdmin || isFacturacion || (isOperaciones && accessResult.allowed)}
 			{@render tabBtn('facturas', 'Facturas', Receipt)}
 			{@render tabBtn('terceros', 'Terceros', Users)}
 		{/if}
@@ -2553,15 +2553,17 @@
 												<Eye class="h-4 w-4" />
 											</button>
 											{#if fac.estado === 'ACTIVA'}
-												<button
-													type="button"
-													class="lq-icono"
-													title="Editar factura"
-													aria-label="Editar factura {fac.numero_factura}"
-													onclick={() => abrirEditarFactura(fac)}
-												>
-													<Edit2 class="h-4 w-4" />
-												</button>
+												{#if isAdmin || isFacturacion}
+													<button
+														type="button"
+														class="lq-icono"
+														title="Editar factura"
+														aria-label="Editar factura {fac.numero_factura}"
+														onclick={() => abrirEditarFactura(fac)}
+													>
+														<Edit2 class="h-4 w-4" />
+													</button>
+												{/if}
 									{#if puedeAnularFactura}
 												<button
 													type="button"
