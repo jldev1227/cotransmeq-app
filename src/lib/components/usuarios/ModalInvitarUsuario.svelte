@@ -7,6 +7,7 @@
 	import FormularioUsuario from './FormularioUsuario.svelte';
 	import SelectorAreas from './SelectorAreas.svelte';
 	import { apiClient } from '$lib/api/apiClient';
+	import { OPCIONES_VINCULACION } from '$lib/config/personal';
 
 	/**
 	 * Invitar a alguien por correo: la persona elige su contraseña al aceptar.
@@ -27,6 +28,7 @@
 	let correo = $state('');
 	let areas = $state<string[]>([]);
 	let cargo = $state('');
+	let tipoVinculacion = $state('por_definir');
 	let error = $state('');
 
 	/// Cada apertura empieza en blanco, como hacía la página al abrirlo.
@@ -36,6 +38,7 @@
 			correo = '';
 			areas = [];
 			cargo = '';
+			tipoVinculacion = 'por_definir';
 			error = '';
 		});
 	});
@@ -55,7 +58,8 @@
 			await apiClient.post('/api/invitaciones', {
 				correo,
 				area: areas,
-				cargo: cargo || undefined
+				cargo: cargo || undefined,
+				tipo_vinculacion: tipoVinculacion
 			});
 			toast.success('Invitación enviada');
 			oncerrar();
@@ -95,6 +99,11 @@
 				class="uf-input"
 				placeholder="Ej: Coordinador de operaciones"
 			/>
+		</Campo>
+		<Campo id="{idForm}-vinculacion" label="Tipo de vinculación">
+			<select id="{idForm}-vinculacion" bind:value={tipoVinculacion} class="uf-input">
+				{#each OPCIONES_VINCULACION as opcion (opcion.value)}<option value={opcion.value}>{opcion.label}</option>{/each}
+			</select>
 		</Campo>
 		<SelectorAreas seleccion={areas} onCambiar={(a) => (areas = a)} requerido />
 	</FormularioUsuario>

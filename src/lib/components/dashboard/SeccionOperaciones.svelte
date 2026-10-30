@@ -194,7 +194,7 @@
 		valor={numero(k.ahora.conductores_en_servicio)}
 		detalle={`${numero(k.ahora.conductores_programados)} programados · ${numero(k.ahora.conductores_disponibles)} disponibles`}
 		icono={Users}
-		href="/dashboard/conductores?estado=servicio"
+		href="/dashboard/personal?tipo=conductor&estado=servicio"
 	/>
 	<Kpi
 		etiqueta="Placas en servicio"

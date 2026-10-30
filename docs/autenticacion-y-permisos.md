@@ -227,8 +227,11 @@ mismo a todo el mapa.
 
 | Módulo | `full` | `read` | `limited` |
 |---|---|---|---|
-| `dashboard`, `actividad`, `perfil`, `flota`, `conductores`, `clientes`, `mis-formularios` | Todos (`general`) | | |
+| `dashboard`, `actividad`, `perfil`, `flota`, `conductores`, `clientes`, `mis-formularios` | Todas las áreas asignables | | |
+| `personal`, `capacitaciones` | Todas las áreas asignables | | |
+| `capacitaciones-gestion` | administración, HSEQ | | |
 | `servicios` | administración, operaciones | HSEQ, talento humano, facturación | |
+| `rastreo_servicios` | administración, operaciones | HSEQ, talento humano, mantenimiento | |
 | `recargos` | administración, operaciones | talento humano | Cualquier área mediante lista blanca individual; permite consultar y adjuntar soportes sin editar datos |
 | `solicitudes` | administración, operaciones | facturación, contabilidad | |
 | `sarlaft` | administración, talento humano | | |

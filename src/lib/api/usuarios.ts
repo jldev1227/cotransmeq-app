@@ -6,20 +6,27 @@ export interface Usuario {
 	nombre: string;
 	correo: string;
 	telefono?: string;
+	numero_documento?: string | null;
+	fecha_ingreso?: string | null;
 	role?: string;
 	cargo?: string;
+	tipo_vinculacion?: string;
 	area?: string[];
 	activo?: boolean;
 	firma_url?: string;
 	permisos?: Record<string, boolean>;
 	/**
-	 * Límites personalizados por ruta (`users.permisos_rutas`). `null` hereda
-	 * del área; un objeto puede reducir el acceso, nunca ampliarlo.
+	 * Lista blanca de módulos por usuario (`users.permisos_rutas`). `null` deja
+	 * mandar a las reglas por área; con claves las sustituye por completo.
 	 */
 	permisos_rutas?: Record<string, AccessLevel> | null;
 	ultimo_acceso?: string;
 	created_at?: string;
 	updated_at?: string;
+	es_invitado?: boolean;
+	invitado_por_id?: string | null;
+	creado_por_id?: string | null;
+	actor_alta?: { id: string; nombre: string; correo: string } | null;
 }
 
 /** Payload del alta manual: aquí la contraseña la pone quien crea, no el invitado. */
@@ -29,6 +36,8 @@ export interface CrearUsuarioPayload {
 	password: string;
 	telefono?: string;
 	cargo?: string;
+	tipo_vinculacion?: string;
+	role: string;
 	area: string[];
 	permisos_rutas: Record<string, AccessLevel> | null;
 }
@@ -66,7 +75,7 @@ export const usuariosAPI = {
 		data: Partial<
 			Pick<
 				Usuario,
-				'nombre' | 'correo' | 'telefono' | 'cargo' | 'area' | 'activo' | 'permisos_rutas'
+				'nombre' | 'correo' | 'telefono' | 'role' | 'cargo' | 'tipo_vinculacion' | 'area' | 'activo' | 'permisos_rutas'
 			>
 		>
 	): Promise<Usuario> {
@@ -91,10 +100,7 @@ export const usuariosAPI = {
 	},
 
 	// ── Permiso individual: bonos de planilla de días laborados ──
-	async setBonosPlanilla(
-		userIds: string[],
-		granted: boolean
-	): Promise<{
+	async setBonosPlanilla(userIds: string[], granted: boolean): Promise<{
 		success: boolean;
 		updated: Usuario[];
 		granted: boolean;

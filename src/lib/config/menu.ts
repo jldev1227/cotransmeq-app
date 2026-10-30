@@ -19,8 +19,8 @@ import {
 	ClipboardPen,
 	FileText,
 	Fuel,
+	GraduationCap,
 	HandCoins,
-	IdCard,
 	Inbox,
 	LayoutDashboard,
 	LayoutTemplate,
@@ -67,13 +67,25 @@ export const MENU_ITEMS: MenuItem[] = [
 		href: '/dashboard/flota'
 	},
 	{
-		id: 'conductores',
-		label: 'Conductores',
-		/// Licencia, no «personas»: `Users` era la silueta genérica y competía
-		/// con `UserCog` de Equipo. Un conductor se identifica por su pase.
-		icon: IdCard,
+		id: 'personal',
+		label: 'Personal',
+		icon: UserCog,
 		badge: null,
-		href: '/dashboard/conductores'
+		href: '/dashboard/personal'
+	},
+	{
+		id: 'capacitaciones',
+		label: 'Capacitaciones',
+		icon: GraduationCap,
+		badge: null,
+		href: '/dashboard/capacitaciones'
+	},
+	{
+		id: 'capacitaciones-gestion',
+		label: 'Gestión de cursos',
+		icon: GraduationCap,
+		badge: null,
+		href: '/dashboard/capacitaciones/gestion'
 	},
 	{
 		id: 'recorridos',
@@ -296,16 +308,7 @@ export const MENU_ITEMS: MenuItem[] = [
 		badge: null,
 		href: '/dashboard/certificados'
 	},
-	{
-		id: 'usuarios',
-		label: 'Equipo',
-		/// La entrada cubre usuarios, sesiones y directorio: es administración de
-		/// cuentas, y el engranaje la distingue de «Conductores», que también son
-		/// personas pero no se gestionan aquí.
-		icon: UserCog,
-		badge: null,
-		href: '/dashboard/usuarios'
-	}
+
 	// {
 	// 	id: 'rutas',
 	// 	label: 'Rutas',

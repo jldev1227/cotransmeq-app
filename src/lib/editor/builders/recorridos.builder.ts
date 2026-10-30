@@ -531,6 +531,17 @@ export function bindingsDeFila(
 	return seeds;
 }
 
+/**
+ * El binding nombra la columna persistida, pero el DTO normaliza las dos
+ * descripciones en `descripcion`. Sin esta traducción, vincular una fila nueva
+ * repinta la celda con `undefined` y borra lo que acaba de devolver el servidor.
+ */
+export function valorCampoFilaDto(fila: FilaRecorrido, campo: string): unknown {
+	const campoDto =
+		campo === 'descripcion_servicio' || campo === 'observaciones' ? 'descripcion' : campo;
+	return (fila as unknown as Record<string, unknown>)[campoDto];
+}
+
 
 export function buildHojaRecorridos(opts: {
 	sheetId: string;

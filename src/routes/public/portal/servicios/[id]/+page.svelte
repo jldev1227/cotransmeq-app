@@ -6,6 +6,7 @@
 	import { quintOut } from 'svelte/easing';
 	import mapboxgl from 'mapbox-gl';
 	import 'mapbox-gl/dist/mapbox-gl.css';
+	import { MAPBOX_WARM_STYLE } from '$lib/mapbox';
 	import { isAuthenticated } from '$lib/stores/portalStore';
 	import { labelPropositoServicio } from '$lib/config/proposito-servicio';
 	import {
@@ -398,7 +399,7 @@
 			mapboxgl.accessToken = MAPBOX_TOKEN;
 			map = new mapboxgl.Map({
 				container,
-				style: 'mapbox://styles/mapbox/outdoors-v12',
+				style: MAPBOX_WARM_STYLE,
 				center: [oLng, oLat],
 				zoom: 10,
 				projection: 'mercator',

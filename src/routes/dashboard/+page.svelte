@@ -26,6 +26,7 @@
 	import SeccionTalentoHumano from '$lib/components/dashboard/SeccionTalentoHumano.svelte';
 	import SeccionFacturacion from '$lib/components/dashboard/SeccionFacturacion.svelte';
 	import SeccionContabilidad from '$lib/components/dashboard/SeccionContabilidad.svelte';
+	import SeccionSimit from '$lib/components/dashboard/SeccionSimit.svelte';
 
 	const EMPRESA = 'Cotransmeq';
 
@@ -206,6 +207,8 @@
 							<SeccionFacturacion {datos} />
 						{:else if seccionActiva.id === 'contabilidad'}
 							<SeccionContabilidad {datos} />
+						{:else if seccionActiva.id === 'simit'}
+							<SeccionSimit {datos} />
 						{/if}
 					</div>
 				{/if}

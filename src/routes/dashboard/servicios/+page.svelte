@@ -1084,6 +1084,14 @@
 		</div>
 
 		<div class="dir-cabecera-acciones">
+			<button
+				type="button"
+				class="btn-secondary"
+				onclick={() => goto('/dashboard/servicios/mapa')}
+			>
+				<MapIcon class="h-4 w-4" />
+				Seguimiento GPS
+			</button>
 			{#if puedeEditar}
 				<button data-tour="srv-btn-nuevo" onclick={handleNuevoServicio} class="btn-primary">
 					<Plus class="h-4 w-4" />

@@ -3,6 +3,7 @@
 	import { MapPin, Route } from 'lucide-svelte';
 	import mapboxgl from 'mapbox-gl';
 	import 'mapbox-gl/dist/mapbox-gl.css';
+	import { MAPBOX_WARM_STYLE } from '$lib/mapbox';
 
 	interface Punto {
 		nombre?: string | null;
@@ -68,7 +69,7 @@
 		mapboxgl.accessToken = token;
 		const instancia = new mapboxgl.Map({
 			container: contenedor,
-			style: 'mapbox://styles/mapbox/outdoors-v12',
+			style: MAPBOX_WARM_STYLE,
 			center: [-74.2, 4.6],
 			zoom: 5.1,
 			projection: 'mercator',

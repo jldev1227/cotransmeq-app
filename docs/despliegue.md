@@ -70,9 +70,12 @@ los frenos por IP (ver [variables-de-entorno.md](./variables-de-entorno.md#tramp
 El frontend aplica CSP desde `svelte.config.js`: SvelteKit genera nonces para
 las páginas dinámicas y hashes para las prerenderizadas. La política permite
 los orígenes usados por la API, Socket.IO, Iconify, mapas y almacenamiento de
-archivos. Así se protegen scripts sin bloquear los SVG, imágenes ni workers que
-usa la app. `hooks.server.ts` añade HSTS y las cabeceras de tipo, framing,
-referer y permisos a las respuestas de la aplicación. Cloudflare fuerza HTTPS
+archivos. En desarrollo permite `localhost` y `127.0.0.1` para el backend:
+CSP compara esos hosts literalmente. Esas entradas se omiten en producción y
+en el despliegue `node`. Así se protegen scripts sin bloquear los SVG, imágenes
+ni workers que usa la app. `hooks.server.ts` añade HSTS y las cabeceras de tipo,
+framing, referer y permisos a las respuestas de la aplicación. Cloudflare fuerza
+HTTPS
 para `app.cotransmeq.com` con una regla que conserva ruta y consulta.
 
 En producción Vite elimina las llamadas de la app a `console.log`, `console.info`,

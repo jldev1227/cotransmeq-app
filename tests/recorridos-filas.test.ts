@@ -21,6 +21,7 @@ import {
 	FORMATO_HORAS,
 	BORRADOR_BG,
 	formulaPie,
+	valorCampoFilaDto,
 	type RecorridosPeriodoDTO
 } from '$lib/editor/builders/recorridos.builder';
 import {
@@ -175,6 +176,20 @@ describe('builder: fecha, día y horas', () => {
 		expect(campos.has('vehiculo_placa')).toBe(true);
 		expect(campos.has(`bono:${BONO}`)).toBe(true);
 		expect(seeds.every((s) => s.r === 7 && s.binding.tipoFila === 'nueva')).toBe(true);
+	});
+});
+
+describe('repintado de filas guardadas', () => {
+	it('mantiene la descripción del servicio devuelta por el DTO al vincular un LABORADO', () => {
+		const fila = { ...recorrido('s-nuevo', '2026-09-10'), descripcion: 'Transporte a Rubiales' };
+
+		expect(valorCampoFilaDto(fila, 'descripcion_servicio')).toBe('Transporte a Rubiales');
+	});
+
+	it('resuelve la descripción de un día a la misma propiedad normalizada del DTO', () => {
+		const fila = { ...dia('d-nuevo', '2026-09-11'), descripcion: 'Novedad del día' };
+
+		expect(valorCampoFilaDto(fila, 'observaciones')).toBe('Novedad del día');
 	});
 });
 

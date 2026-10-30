@@ -1453,7 +1453,7 @@
 	subtitle={dto
 		? `${dto.etiqueta} · ${hojasImprimibles.length} de ${dto.hojas.length} conductores con recorridos · ${dto.hojas.reduce((n, h) => n + h.filas.length, 0)} filas${borradoresPendientes ? ` · ${borradoresPendientes} sin guardar` : ''}`
 		: `${etiquetaCorte(corte)} · cargando…`}
-	onBack={() => goto('/dashboard/conductores')}
+		onBack={() => goto('/dashboard/personal?tipo=conductor')}
 	backLabel="Conductores"
 	inerte={!!accionEnCurso}
 >

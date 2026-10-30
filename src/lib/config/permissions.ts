@@ -91,6 +91,23 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 		],
 		description: 'Gestión de conductores'
 	},
+	personal: {
+		full: ['administracion', 'operaciones', 'contabilidad', 'facturacion', 'talento_humano', 'hseq', 'mantenimiento'],
+		description: 'Gestión unificada del personal'
+	},
+	capacitaciones: {
+		full: ['administracion', 'operaciones', 'contabilidad', 'facturacion', 'talento_humano', 'hseq', 'mantenimiento'],
+		description: 'Capacitaciones internas del personal'
+	},
+	'capacitaciones-gestion': {
+		full: ['administracion', 'hseq'],
+		description: 'Administración del catálogo y asignaciones de capacitación'
+	},
+	rastreo_servicios: {
+		full: ['administracion'],
+		read: ['operaciones', 'hseq', 'mantenimiento', 'talento_humano'],
+		description: 'Seguimiento GPS consentido de servicios activos'
+	},
 	servicios: {
 		full: ['administracion', 'operaciones'],
 		read: ['hseq', 'talento_humano', 'facturacion'],

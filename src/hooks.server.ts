@@ -1,6 +1,12 @@
 import { redirect } from '@sveltejs/kit';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { env as envPrivado } from '$env/dynamic/private';
+import {
+	checkAccess,
+	getAccessibleModules,
+	type Area,
+	type RutasOverride
+} from '$lib/config/permissions';
 
 /// Rastreo de errores (Sentry), OPCIONAL: solo con `SENTRY_DSN` en el entorno
 /// del servidor (el del navegador va aparte, con `PUBLIC_SENTRY_DSN`, en
@@ -35,17 +41,50 @@ export const handleError: HandleServerError = async ({ error, event, status }) =
 	S?.captureException(error, { tags: { ruta: event.route.id ?? event.url.pathname } });
 };
 
-function decodeJwtPayload(token: string): any | null {
+interface JwtPayload {
+	exp?: number;
+	id?: string;
+	area?: unknown;
+	role?: string;
+	permisos_rutas?: RutasOverride;
+}
+
+function decodeJwtPayload(token: string): JwtPayload | null {
 	try {
 		const parts = token.split('.');
 		if (parts.length !== 3) return null;
-		const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+		const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8')) as JwtPayload;
 		// Check expiry
 		if (payload.exp && payload.exp * 1000 < Date.now()) return null;
 		return payload;
 	} catch {
 		return null;
 	}
+}
+
+/** Extraer el moduleId de una ruta /dashboard/xxx */
+function getModuleFromPath(pathname: string): string | null {
+	if (/^\/dashboard\/conductores\/rastreo(?:\/|$)/.test(pathname)) return 'rastreo_servicios';
+	if (/^\/dashboard\/rastreo-servicios(?:\/|$)/.test(pathname)) return 'rastreo_servicios';
+	const match = pathname.match(/^\/dashboard\/([^/]+)/);
+	return match ? match[1] : null;
+}
+
+/**
+ * Ruta a la que mandar a quien no puede entrar donde pidió.
+ *
+ * Antes era siempre `/dashboard/servicios`, que valía porque servicios lo tenía
+ * casi todo el mundo. Con `permisos_rutas` deja de ser cierto: un usuario de
+ * mantenimiento con lista blanca puede no tenerlo, y aterrizaría en otra pantalla
+ * denegada. `perfil` es el último recurso porque `checkAccess` lo concede siempre.
+ */
+function landingRoute(userArea: Area[], userId: string | undefined, userRutas: RutasOverride | null): string {
+	const accesibles = getAccessibleModules(userArea, userId, userRutas);
+	const prioridad = ['servicios', 'personal', 'capacitaciones', 'rastreo_servicios', 'flota', 'conductores'];
+	const modulo = prioridad.find((id) => accesibles[id]);
+	if (modulo === 'rastreo_servicios') return '/dashboard/conductores/rastreo';
+	if (modulo) return `/dashboard/${modulo}`;
+	return accesibles.dashboard ? '/dashboard' : '/dashboard/perfil';
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -78,10 +117,35 @@ export const handle: Handle = async ({ event, resolve }) => {
 			throw redirect(302, `/login?redirect=${encodeURIComponent(url.pathname + url.search)}`);
 		}
 
-		const userArea = payload.area;
+		const userArea = payload.area as Area[];
 		const userRole = payload.role ?? 'usuario';
-		/// La whitelist no va en el JWT para que sus recortes apliquen sin renovar
-		/// sesión. La API consulta la lista vigente y el layout muestra su 404 visual.
+		// La lista blanca viaja en el token cuando el backend la firma; si no
+		// llega, `undefined` deja mandar a las reglas por área (comportamiento
+		// anterior). La API vuelve a comprobarlo en cada ruta de todas formas.
+		const userRutas = payload.permisos_rutas ?? null;
+
+		const moduleId = getModuleFromPath(url.pathname);
+		if (moduleId && userArea.length === 0 && moduleId !== 'perfil') {
+			throw redirect(302, '/dashboard/perfil?denied=1');
+		}
+		if (moduleId && userArea.length > 0) {
+			const { allowed } = checkAccess(userArea, moduleId, payload.id, userRutas);
+			if (!allowed) {
+				const destino = landingRoute(userArea, payload.id, userRutas);
+				// Sin este corte, un usuario cuya lista blanca no incluye el
+				// destino entraría en un bucle de redirecciones contra sí mismo.
+				if (destino !== url.pathname) {
+					throw redirect(302, `${destino}?denied=1`);
+				}
+			}
+		}
+
+		const rutaGestionCapacitaciones = /^\/dashboard\/capacitaciones\/(gestion|nuevo)(\/|$)/.test(url.pathname);
+		const permisoGestionCapacitaciones = checkAccess(userArea, 'capacitaciones-gestion', payload.id, userRutas);
+		const puedeGestionarCapacitaciones = permisoGestionCapacitaciones.allowed && permisoGestionCapacitaciones.level === 'full';
+		if (rutaGestionCapacitaciones && !puedeGestionarCapacitaciones) {
+			throw redirect(302, '/dashboard/capacitaciones?denied=1');
+		}
 
 		event.locals.token = token;
 		event.locals.userRole = userRole;
@@ -90,5 +154,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.token = token ?? undefined;
 	}
 
-	return await resolve(event);
+	const response = await resolve(event);
+	response.headers.set('Strict-Transport-Security', 'max-age=31536000');
+	response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	response.headers.set(
+		'Permissions-Policy',
+		'camera=(self), geolocation=(self), microphone=(), payment=()'
+	);
+	return response;
 };

@@ -69,7 +69,7 @@
 				'¿Cuántos servicios hay planificados este mes?',
 				'Programa un servicio para mañana a las 6 a. m.'
 			];
-		if (r.startsWith('/dashboard/conductores'))
+		if (r.startsWith('/dashboard/personal'))
 			return ['¿Qué conductores están en vacaciones o incapacidad?', 'Busca al conductor por cédula'];
 		if (r.startsWith('/dashboard/flota'))
 			return ['¿Qué vehículos están en mantenimiento?', '¿Quién tiene asignada la placa…?'];

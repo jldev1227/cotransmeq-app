@@ -20,7 +20,7 @@
 	import { AREA_LABELS, checkAccess, type AccessLevel, type Area } from '$lib/config/permissions';
 	import PermisosRutasPicker from '$lib/components/permisos/PermisosRutasPicker.svelte';
 
-	/// Pantalla huérfana: no está en el menú y `/dashboard/usuarios` (Equipo)
+	/// Pantalla huérfana: no está en el menú y `/dashboard/personal`
 	/// cubre lo mismo —presencia, invitaciones y alta manual—. Se conserva con
 	/// la cáscara actual mientras se decide retirarla; no le añadas funciones.
 

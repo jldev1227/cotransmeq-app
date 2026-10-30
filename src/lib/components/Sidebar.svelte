@@ -46,9 +46,13 @@
 		if (!currentUser) return false;
 		// El enlace directo solo hace falta cuando la personalización deja
 		// Recorridos y oculta Conductores; si no, se llega desde la ficha.
-		if (item.id === 'recorridos' && checkAccess(currentUser.area, 'conductores', currentUser.permisos_rutas, currentUser.id).allowed) return false;
-		const { allowed } = checkAccess(currentUser.area, item.id, currentUser.permisos_rutas, currentUser.id);
-		return allowed;
+		const { allowed, level } = checkAccess(
+			currentUser.area,
+			item.id,
+			currentUser.permisos_rutas,
+			currentUser.id
+		);
+		return allowed && (item.id !== 'capacitaciones-gestion' || level === 'full');
 	});
 
 	function handleMenuClick(item: MenuItem) {

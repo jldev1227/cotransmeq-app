@@ -69,8 +69,8 @@ que es lo que se le quedaba al siguiente conductor.
 
 Todas cuelgan de [public/portal/+layout.svelte](../src/routes/public/portal/+layout.svelte)
 (`ssr = false`): barra superior, menú lateral en escritorio, navegación
-inferior en móvil con el mismo orden que la app (Formularios, Servicios, Días
-laborados, Viáticos, Pagos). El layout arranca la outbox en cuanto hay sesión,
+inferior en móvil con el mismo orden que la app (Formularios, Servicios,
+Capacitaciones, Días laborados, Viáticos, Pagos). El layout arranca la outbox en cuanto hay sesión,
 para todo el portal.
 
 | Ruta | Pantalla | API | Sin red |
@@ -81,6 +81,7 @@ para todo el portal.
 | `/formularios/envios/[id]` | Recibo. `pendiente-<clientSubmissionId>` muestra el recibo local de algo que aún está en la cola; un UUID pide el detalle | `GET /conductor-portal/formularios/submissions/:id` | El recibo pendiente, sí |
 | `/formularios/envios/[id]/documento` | El documento imprimible del envío (`PreviewEnvioPDF`), sin la cáscara del portal. Lo descarga la app móvil | el mismo detalle | No |
 | `/servicios`, `/servicios/[id]` | Servicios asignados, solo lectura | `GET /conductor-portal/servicios`, `/servicios/:id` ([stores/conductor-servicios.ts](../src/lib/stores/conductor-servicios.ts)) | Solo el shell |
+| `/capacitaciones` | Cursos, evaluaciones y certificados del conductor; cada acceso usa un ticket SSO de un solo uso. La carga y los errores se anuncian, y se puede reintentar con teclado. | `POST /conductor-portal/capacitaciones/lanzar` | Requiere conexión |
 | `/dias-laborados` | Registrar y corregir días y tramos | `/conductor-portal/dias-laborados/clientes`, `/vehiculos`, `/registros` (`GET ?mes=`, `POST`, `DELETE /:fecha`) | Solo el shell; ver abajo |
 | `/viaticos` | Consulta de anticipos y saldo (reportar gastos va por la app) | `GET /conductor-portal/viaticos`, `/viaticos/:id` | No: no está en el shell del service worker |
 | `/desprendibles` | Pagos: desprendibles y primas, firma | `/conductor-portal/desprendibles`, `/primas`, `/desprendibles/:id/datos`, `/primas/:id/enriquecida`, `POST …/:id/firmar` | Solo el shell |

@@ -9,12 +9,14 @@
 	import { fade } from 'svelte/transition';
 	import mapboxgl from 'mapbox-gl';
 	import 'mapbox-gl/dist/mapbox-gl.css';
+	import { MAPBOX_WARM_STYLE } from '$lib/mapbox';
 	import { servicioDetalleStore } from '$lib/stores/servicio-detalle';
 	import { serviciosStore } from '$lib/stores/servicios';
 	import { labelPropositoServicio } from '$lib/config/proposito-servicio';
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import distracomLocations from '$lib/data/distracomlocations';
 	import EjecucionConductor from '$lib/components/servicios/EjecucionConductor.svelte';
+	import RastreoServicio from '$lib/components/servicios/RastreoServicio.svelte';
 	import ModalTicket from '$lib/components/servicios/ModalTicket.svelte';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import { fetchConSesion } from '$lib/api/fetchConSesion';
@@ -1298,7 +1300,7 @@
 			mapboxgl.accessToken = MAPBOX_TOKEN;
 			map = new mapboxgl.Map({
 				container: 'map',
-				style: 'mapbox://styles/mapbox/outdoors-v12',
+				style: MAPBOX_WARM_STYLE,
 				center: [oLng, oLat],
 				zoom: 11,
 				projection: 'mercator',
@@ -1936,6 +1938,7 @@
 
 						<!-- Ejecución del conductor (inicio/liberación desde la app) -->
 						<EjecucionConductor servicioId={servicio.id} estado={servicio.estado} />
+		<RastreoServicio servicioId={servicio.id} />
 					</div>
 
 					<div class="detalle-columna">

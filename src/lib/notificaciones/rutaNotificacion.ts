@@ -70,7 +70,10 @@ export function rutaDeNotificacion(n: NotificacionNavegable): RutaNotificacion |
 	if (ref.startsWith('docveh:')) return { url: `/dashboard/flota?vehiculo=${id}&tab=documentos` };
 	/// Lo mismo para el conductor (`doccond:<categoría>:<vence>:<umbral>`): la
 	/// referencia es el conductor; abre su ficha en la pestaña Documentos.
-	if (ref.startsWith('doccond:')) return { url: `/dashboard/conductores/${id}?tab=documentos` };
+	if (ref.startsWith('doccond:')) return { url: `/dashboard/personal/${id}?tipo=conductor&tab=documentos` };
+	/// Hallazgos SIMIT: la referencia es la ficha de la placa o del conductor.
+	if (ref.startsWith('simit:veh:')) return { url: `/dashboard/flota/${id}` };
+	if (ref.startsWith('simit:con:')) return { url: `/dashboard/personal/${id}?tipo=conductor` };
 	/// Factura creada o anulada (`factura:<número>`, desde el 11-oct-2026): la
 	/// pestaña Facturas filtrada por ese número. La referencia es la factura,
 	/// pero la lista busca por número, no por id.

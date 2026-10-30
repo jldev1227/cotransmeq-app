@@ -9,6 +9,7 @@
 	import SelectorAreas from './SelectorAreas.svelte';
 	import { usuariosAPI, type Usuario } from '$lib/api/usuarios';
 	import type { AccessLevel } from '$lib/config/permissions';
+	import { OPCIONES_VINCULACION } from '$lib/config/personal';
 
 	/**
 	 * Editar un miembro del equipo: datos, áreas y permisos por ruta.
@@ -32,6 +33,7 @@
 	let nombre = $state('');
 	let correo = $state('');
 	let telefono = $state('');
+	let tipoVinculacion = $state('por_definir');
 	let areas = $state<string[]>([]);
 	/// Lista blanca por ruta del usuario editado. `null` = manda el área.
 	let permisosRutas = $state<Record<string, AccessLevel> | null>(null);
@@ -55,6 +57,7 @@
 			nombre = u.nombre;
 			correo = u.correo;
 			telefono = u.telefono || '';
+			tipoVinculacion = u.tipo_vinculacion ?? 'por_definir';
 			areas = Array.isArray(u.area) ? [...u.area] : u.area ? [u.area as string] : [];
 			permisosRutas = u.permisos_rutas ?? null;
 			password = '';
@@ -71,6 +74,7 @@
 				nombre,
 				correo,
 				telefono,
+				tipo_vinculacion: tipoVinculacion,
 				area: areas,
 				permisos_rutas: permisosRutas
 			});
@@ -143,6 +147,11 @@
 				/>
 			</Campo>
 		</div>
+		<Campo id="{idForm}-vinculacion" label="Tipo de vinculación">
+			<select id="{idForm}-vinculacion" class="uf-input" bind:value={tipoVinculacion}>
+				{#each OPCIONES_VINCULACION as opcion (opcion.value)}<option value={opcion.value}>{opcion.label}</option>{/each}
+			</select>
+		</Campo>
 		<SelectorAreas seleccion={areas} onCambiar={(a) => (areas = a)} />
 		<div class="uf-bloque">
 			<span class="uf-etiqueta">Permisos por ruta</span>
