@@ -29,8 +29,8 @@
 	// mientras el estado del socket se anunciaba con un toast centrado que
 	// tapaba contenido. En el header se ve siempre, sin robar sitio.
 	//
-	// En móvil también vive en el header: el estado se compacta para no tapar
-	// contenido ni depender de una capa flotante.
+	// En tablet y móvil el estado normal se reduce a un punto; el texto y la acción
+	// de reintento aparecen solo cuando hay un problema de conexión.
 	$: socketEstado = $socketStore.estado;
 	$: socketIntentos = $socketStore.intentos;
 	$: socketProblema =
@@ -194,13 +194,14 @@
 				{/if}
 			</button>
 
-			<!-- Estado compacto en la barra para móvil, con reintento accesible. -->
+			<!-- Estado en línea, sin chip: punto y texto. El detalle completo queda
+			     disponible en el title y el reintento aparece si falla la conexión. -->
 			{#if socketEstado !== 'inactivo'}
-				<div
-					class="ml-2 inline-flex min-w-0 shrink items-center gap-1.5 rounded-full px-1.5 py-1 lg:hidden"
-					style="background:rgba(255,255,255,0.08);"
+				<span
+					class="ml-3 inline-flex shrink-0 items-center gap-2 lg:hidden"
 					role="status"
 					aria-live="polite"
+					aria-label={socketTexto}
 					title={socketDetalle}
 				>
 					<span class="relative flex h-2 w-2 shrink-0" aria-hidden="true">
@@ -213,7 +214,7 @@
 						></span>
 					</span>
 					<span
-						class="min-w-0 max-w-16 truncate text-[10px] font-medium"
+						class="text-xs font-medium"
 						style="color:{socketProblema ? socketColor : 'rgba(255,255,255,0.78)'}"
 					>
 						{socketEstado === 'reconectando' ? 'Reintentando' : socketTexto}
@@ -221,7 +222,7 @@
 					{#if socketProblema}
 						<button
 							type="button"
-							class="apple-transition flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:opacity-70"
+							class="apple-transition flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:opacity-70"
 							style="color:{socketColor}"
 							title="Reintentar conexión"
 							aria-label="Reintentar conexión en tiempo real"
@@ -242,7 +243,7 @@
 							</svg>
 						</button>
 					{/if}
-				</div>
+				</span>
 			{/if}
 		</div>
 

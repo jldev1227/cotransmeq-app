@@ -389,4 +389,5 @@ Tampoco se importan en `src/` las dependencias `svelte-calendar`, `adm-zip` ni
   `.lt-row-new` de liquidaciones de terceros recién creadas.
 - Los tres componentes sin uso de la lista anterior (`UsuarioBadge`,
   `CellSelect`, `SelectionStatsFooter`) y `modals/ModalImportarTransmeralda`
-  no existen allí.
+  no existen allí. Transmeralda tiene el modal inverso
+  `modals/ModalImportarCotransmeq`.

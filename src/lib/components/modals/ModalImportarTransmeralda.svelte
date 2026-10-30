@@ -52,6 +52,7 @@
 		importables: number;
 		ya_importadas: number;
 		no_importables: number;
+		excluidas_por_origen: number;
 		filtradas_por_conductor_inactivo: number;
 		vehiculos_a_crear: number;
 		empresas_a_crear: number;
@@ -370,6 +371,12 @@
 					</span>
 				</div>
 			</div>
+			{#if preview.excluidas_por_origen > 0}
+				<p class="it-nota it-ciclo-aviso">
+					{preview.excluidas_por_origen} planilla(s) omitidas porque ya llegaron desde Cotransmeq;
+					no se enviarán de regreso.
+				</p>
+			{/if}
 		</section>
 
 		<section class="it-seccion">
@@ -784,6 +791,10 @@
 	.it-empresa-aviso {
 		margin-top: 5px;
 		color: #92400e;
+	}
+	.it-ciclo-aviso {
+		margin-top: 10px;
+		color: var(--text-muted);
 	}
 	.it-num {
 		font-variant-numeric: tabular-nums;

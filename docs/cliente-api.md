@@ -460,6 +460,6 @@ que sí cambia:
 | Backend local | `http://localhost:4000` (coincide con el respaldo del código) | `http://localhost:4100`: allí, si falta la variable, el front acaba hablando con el backend de este repo |
 | Front | `app.cotransmeq.com`, local `5173` (o `5174`) | `app.transmeralda.com`, local `5273` |
 | Variables del build en CI | El workflow no pasa variables; las pone el servidor | El workflow arma los archivos de variables desde `vars` y `secrets` |
-| `recargos.ts` | Sin `subirPlanilla`; añade `importar-desde-transmeralda` (preview, crear entidades, importar) y el filtro `imported_from_transmeralda` | `subirPlanilla` (PDF de la planilla, multipart) |
+| `recargos.ts` | Importa desde Transmeralda y filtra `imported_from_transmeralda` | Importa desde Cotransmeq y filtra `imported_from_cotransmeq`; también incluye `subirPlanilla` (PDF multipart) |
 | `sarlaft.ts`, `sarlaftFields.ts` | Códigos `GC-FR-0X` / `GC-FOR-13` y buzones propios | Códigos `SLFT-PTEE-FR-0X` y buzones propios |
 | `api-tokens.ts` | `NOMBRE_MCP = 'cotransmeq'` | `NOMBRE_MCP = 'transmeralda'` |

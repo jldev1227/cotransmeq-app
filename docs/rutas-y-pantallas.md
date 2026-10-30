@@ -224,8 +224,8 @@ servidor; las demás sí.
 
 - `ingreso-svelte` no tiene el `+page.svelte` muerto de
   `dashboard/formularios/envios`.
-- `/dashboard/recargos`: Transmeralda tiene historial de cambios y subida de
-  planilla en lugar de la importación desde Transmeralda.
+- `/dashboard/recargos`: ambas apps importan planillas de la otra empresa.
+  Transmeralda también tiene historial de cambios y subida de soporte.
 - Varias páginas públicas y del portal (`/asistencia/[token]`,
   `/public/inducciones`, `/public/portal/desprendibles`,
   `/public/portal/dias-laborados`, `/public/dias-laborados`) y algunas del

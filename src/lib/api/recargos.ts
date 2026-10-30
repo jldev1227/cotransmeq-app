@@ -615,6 +615,7 @@ export const recargosApi = {
 		importables: number;
 		ya_importadas: number;
 		no_importables: number;
+		excluidas_por_origen: number;
 		/** Cuántas se quedaron fuera por conductor inactivo en CM */
 		filtradas_por_conductor_inactivo: number;
 		vehiculos_a_crear: number;
