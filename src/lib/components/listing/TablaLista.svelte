@@ -455,10 +455,10 @@
 		background: color-mix(in srgb, var(--accion, #079665) 7%, transparent);
 	}
 
-	/* ── Móvil: cada fila se apila como una tarjeta ──
-	   La celda de identidad va arriba a todo el ancho; el resto lleva su
-	   etiqueta de columna delante; las acciones, a la derecha del título. */
-	@media (max-width: 767.98px) {
+	/* ── Tablet y móvil: cada fila se apila como una tarjeta ──
+	   Evita tablas comprimidas en tablet. La identidad y los datos usan todo
+	   el ancho; las acciones quedan en una fila propia al final de la tarjeta. */
+	@media (max-width: 1023.98px) {
 		.tl-tabla,
 		.tl-tabla tbody,
 		.tl-tr {
@@ -480,8 +480,6 @@
 			font-size: 0.85rem;
 		}
 		.tl-td--primera {
-			/* Deja sitio a las acciones, que van en la esquina superior derecha. */
-			padding-right: 7.5rem;
 			margin-bottom: 0.35rem;
 		}
 		.tl-td:not(.tl-td--primera):not(.tl-td--acciones):not(.tl-td--sel)::before {
@@ -494,10 +492,19 @@
 			color: var(--text-very-muted, #94a3b8);
 		}
 		.tl-td--acciones {
-			position: absolute;
-			top: 0.6rem;
-			right: 0.5rem;
+			position: static;
+			justify-content: flex-start;
+			width: 100%;
+			margin-top: 0.55rem;
 			padding: 0;
+		}
+		.tl-td--acciones :global(.af-grupo) {
+			justify-content: flex-start;
+			width: 100%;
+		}
+		.tl-td--acciones :global(.af-btn) {
+			width: 40px;
+			height: 40px;
 		}
 		/* En tarjeta, la casilla va en la esquina superior izquierda. */
 		.tl-tabla--sel .tl-tr {

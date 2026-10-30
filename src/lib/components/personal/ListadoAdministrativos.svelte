@@ -1077,7 +1077,7 @@
 							{:else if columnaId === 'habilitado'}
 								<!-- El interruptor no abre el detalle: solo cambia el estado. -->
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
-								<div onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+								<div class="user-status-target" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
 									<button
 										type="button"
 										class="user-status-toggle"
@@ -1755,6 +1755,16 @@
 	}
 
 	/* Interruptor de habilitado en la lista del equipo. */
+	@media (max-width: 1023.98px) {
+		.user-status-target {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 44px;
+			height: 44px;
+		}
+	}
+
 	.user-status-toggle {
 		position: relative;
 		flex-shrink: 0;
