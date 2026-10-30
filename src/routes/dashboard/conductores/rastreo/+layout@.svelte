@@ -3,6 +3,6 @@
 	let { children } = $props();
 </script>
 
-<UniverAuthGuard moduleId="rastreo-servicios" redirectTo="/dashboard">
+<UniverAuthGuard moduleId="rastreo_servicios" redirectTo="/dashboard">
 	{@render children()}
 </UniverAuthGuard>
