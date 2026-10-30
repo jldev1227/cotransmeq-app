@@ -233,7 +233,11 @@
 	let actividadMovil = $state<ActividadMovil[]>([]);
 	let loadingMovil = $state(false);
 	let errorMovil = $state<string | null>(null);
-	const soloAdmin = $derived($authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin');
+	function usuarioTieneAreaAdministracion() {
+		const area = $authStore.user?.area;
+		return Array.isArray(area) ? area.includes('administracion') : area === 'administracion';
+	}
+	const soloAdmin = $derived(usuarioTieneAreaAdministracion());
 	const POR_PAGINA_MOVIL = 20;
 	const actividadVisible = $derived(
 		actividadMovil.filter((a) => {
@@ -802,15 +806,7 @@
 	let bonosSeleccionados = $state(new Set<string>());
 	let guardandoBonos = $state(false);
 
-	const isAdminUser = $derived(
-		$authStore.user?.role === 'admin' ||
-			$authStore.user?.rol === 'admin' ||
-			(
-				(Array.isArray($authStore.user?.area)
-					? ($authStore.user!.area as string[])
-					: []) as string[]
-			).includes('administracion')
-	);
+	const isAdminUser = $derived(usuarioTieneAreaAdministracion());
 
 	const usuariosBonos = $derived(
 		usuarios

@@ -6,7 +6,11 @@
 	import { authStore } from '$lib/stores/auth';
 
 	const tipo = $derived(page.url.searchParams.get('tipo'));
-	const esAdmin = $derived($authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin');
+	function tieneAreaAdministracion() {
+		const area = $authStore.user?.area;
+		return Array.isArray(area) ? area.includes('administracion') : area === 'administracion';
+	}
+	const esAdmin = $derived(tieneAreaAdministracion());
 </script>
 
 {#if tipo === 'conductor'}

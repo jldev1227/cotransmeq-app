@@ -130,7 +130,11 @@
 	/// Atajos de lectura, para no cambiar todo el marcado de golpe.
 	const vistaActual = $derived(filtros.vista_lista as VistaActual);
 
-	const isAdmin = $derived($authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin');
+	const isAdmin = $derived(
+		Array.isArray($authStore.user?.area)
+			? $authStore.user.area.includes('administracion')
+			: $authStore.user?.area === 'administracion'
+	);
 	const isOperaciones = $derived($authStore.user?.area?.includes('operaciones'));
 	const isTalentoHumano = $derived($authStore.user?.area?.includes('talento_humano'));
 	const canAccessSpecialViews = $derived(isAdmin || isOperaciones || isTalentoHumano);

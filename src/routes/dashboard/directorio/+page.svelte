@@ -306,6 +306,7 @@
 				telefono: nuevoTelefono.trim() || undefined,
 				cargo: nuevoCargo.trim() || undefined,
 				area: nuevoAreas,
+				role: 'usuario',
 				permisos_rutas: nuevoPermisosRutas
 			});
 			toast.success(`${nuevoNombre.trim()} creado correctamente`);

@@ -8,7 +8,11 @@
 
 	type TipoPersonal = 'conductor' | 'administrativo';
 	let tipoActivo = $state<TipoPersonal>('conductor');
-	const esAdmin = $derived($authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin');
+	function tieneAreaAdministracion() {
+		const area = $authStore.user?.area;
+		return Array.isArray(area) ? area.includes('administracion') : area === 'administracion';
+	}
+	const esAdmin = $derived(tieneAreaAdministracion());
 
 	$effect(() => {
 		const tipo = page.url.searchParams.get('tipo');

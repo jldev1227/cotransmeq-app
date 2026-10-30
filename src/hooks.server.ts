@@ -5,7 +5,7 @@ import {
 	checkAccess,
 	getAccessibleModules,
 	type Area,
-	type RutasOverride
+	type PermisosRutas
 } from '$lib/config/permissions';
 
 /// Rastreo de errores (Sentry), OPCIONAL: solo con `SENTRY_DSN` en el entorno
@@ -46,7 +46,7 @@ interface JwtPayload {
 	id?: string;
 	area?: unknown;
 	role?: string;
-	permisos_rutas?: RutasOverride;
+	permisos_rutas?: PermisosRutas;
 }
 
 function decodeJwtPayload(token: string): JwtPayload | null {
@@ -78,8 +78,8 @@ function getModuleFromPath(pathname: string): string | null {
  * mantenimiento con lista blanca puede no tenerlo, y aterrizaría en otra pantalla
  * denegada. `perfil` es el último recurso porque `checkAccess` lo concede siempre.
  */
-function landingRoute(userArea: Area[], userId: string | undefined, userRutas: RutasOverride | null): string {
-	const accesibles = getAccessibleModules(userArea, userId, userRutas);
+function landingRoute(userArea: Area[], userId: string | undefined, userRutas: PermisosRutas): string {
+	const accesibles = getAccessibleModules(userArea, userRutas, userId);
 	const prioridad = ['servicios', 'personal', 'capacitaciones', 'rastreo_servicios', 'flota', 'conductores'];
 	const modulo = prioridad.find((id) => accesibles[id]);
 	if (modulo === 'rastreo_servicios') return '/dashboard/conductores/rastreo';
@@ -129,7 +129,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			throw redirect(302, '/dashboard/perfil?denied=1');
 		}
 		if (moduleId && userArea.length > 0) {
-			const { allowed } = checkAccess(userArea, moduleId, payload.id, userRutas);
+			const { allowed } = checkAccess(userArea, moduleId, userRutas, payload.id);
 			if (!allowed) {
 				const destino = landingRoute(userArea, payload.id, userRutas);
 				// Sin este corte, un usuario cuya lista blanca no incluye el
@@ -141,7 +141,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 
 		const rutaGestionCapacitaciones = /^\/dashboard\/capacitaciones\/(gestion|nuevo)(\/|$)/.test(url.pathname);
-		const permisoGestionCapacitaciones = checkAccess(userArea, 'capacitaciones-gestion', payload.id, userRutas);
+		const permisoGestionCapacitaciones = checkAccess(userArea, 'capacitaciones-gestion', userRutas, payload.id);
 		const puedeGestionarCapacitaciones = permisoGestionCapacitaciones.allowed && permisoGestionCapacitaciones.level === 'full';
 		if (rutaGestionCapacitaciones && !puedeGestionarCapacitaciones) {
 			throw redirect(302, '/dashboard/capacitaciones?denied=1');
