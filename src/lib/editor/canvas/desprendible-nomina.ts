@@ -128,7 +128,7 @@ export async function cargarDatosDesprendible(
 		recargosData: {
 			...(recargosData ?? {}),
 			planillas: recargosData?.planillas ?? [],
-			control_dias: conductorId ? controlDiasDesdeRecorridos(recorridos, conductorId) : null
+			control_dias: conductorId ? controlDiasDesdeRecorridos(recorridos, conductorId, liquidacion) : null
 		}
 	};
 	cache.set(liquidacionId, datos);

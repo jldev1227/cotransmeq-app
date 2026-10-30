@@ -3,8 +3,8 @@
  *
  * Es la planilla que exporta el canvas de recorridos
  * (`preview/datos/recorridos.doc.ts`), recortada a lo que el desprendible
- * necesita: fecha, día, tipo de día (laboró / descanso…), hora de inicio y fin
- * y cliente. Fuera la placa, la descripción del recorrido, el pernocte y los
+ * necesita: fecha, día, tipo de día (laboró / descanso…), placa, hora de inicio y fin
+ * y cliente. Fuera la descripción del recorrido, el pernocte y los
  * bonos: el desprendible ya paga los bonos en su página 1, y repetirlos aquí
  * daba dos cifras que cuadrar.
  *
@@ -16,11 +16,13 @@
  * formato, con la firma del conductor al pie.
  */
 import type { RecorridosPeriodoDTO } from '$lib/editor/builders/recorridos.builder';
+import type { Liquidacion } from '$lib/types/nomina';
 
 /** Lo mínimo de una fila de recorrido que la página imprime. */
 export interface FilaControlDias {
 	fecha: string;
 	tipo_dia: string;
+	vehiculo_placa: string | null;
 	hora_inicio: string | null;
 	hora_fin: string | null;
 	cliente_nombre: string | null;
@@ -56,6 +58,30 @@ function diaSemana(iso: string): string {
 	return DIAS[new Date(Date.UTC(a, m - 1, d)).getUTCDay()] ?? '';
 }
 
+function fechasDelRango(
+	inicio: unknown,
+	fin: unknown,
+	desde: string,
+	hasta: string
+): string[] {
+	const ini = String(inicio ?? '').slice(0, 10);
+	const end = String(fin ?? '').slice(0, 10);
+	const iso = /^\d{4}-\d{2}-\d{2}$/;
+	if (!iso.test(ini) || !iso.test(end) || end < ini) return [];
+	const primero = ini > desde ? ini : desde;
+	const ultimo = end < hasta ? end : hasta;
+	if (primero > ultimo) return [];
+	const fechas: string[] = [];
+	for (
+		let dia = new Date(`${primero}T00:00:00.000Z`);
+		dia.toISOString().slice(0, 10) <= ultimo;
+		dia.setUTCDate(dia.getUTCDate() + 1)
+	) {
+		fechas.push(dia.toISOString().slice(0, 10));
+	}
+	return fechas;
+}
+
 /**
  * Logo de la marca en PNG, para el encabezado de esta página.
  *
@@ -84,19 +110,56 @@ export async function logoPngDataUrl(url: string): Promise<string | null> {
 /** La hoja de UN conductor del libro de recorridos, ya en la forma de la página. */
 export function controlDiasDesdeRecorridos(
 	dto: RecorridosPeriodoDTO | null | undefined,
-	conductorId: string
+	conductorId: string,
+	liquidacion?: Liquidacion
 ): ControlDias | null {
 	const hoja = dto?.hojas?.find((h) => h.conductor_id === conductorId);
-	if (!dto || !hoja || hoja.filas.length === 0) return null;
+	if (!dto) return null;
+	const filas: FilaControlDias[] = (hoja?.filas ?? []).map((f) => ({
+		fecha: f.fecha,
+		tipo_dia: f.tipo_dia,
+		vehiculo_placa: f.vehiculo_placa,
+		hora_inicio: f.hora_inicio,
+		hora_fin: f.hora_fin,
+		cliente_nombre: f.cliente_nombre
+	}));
+	const agregarRango = (inicio: unknown, fin: unknown, concepto: string) => {
+		for (const fecha of fechasDelRango(inicio, fin, dto.desde, dto.hasta)) {
+			filas.push({
+				fecha,
+				tipo_dia: concepto,
+				vehiculo_placa: null,
+				hora_inicio: null,
+				hora_fin: null,
+				cliente_nombre: null
+			});
+		}
+	};
+	if (liquidacion) {
+		agregarRango(
+			liquidacion.periodo_vacaciones_inicio || liquidacion.periodo_start_vacaciones,
+			liquidacion.periodo_vacaciones_fin || liquidacion.periodo_end_vacaciones,
+			'VACACIONES'
+		);
+		const genero = String((liquidacion.conductor as { genero?: string } | undefined)?.genero ?? '')
+			.trim()
+			.toUpperCase();
+		const licencia = genero.startsWith('F')
+			? 'LICENCIA DE MATERNIDAD'
+			: genero.startsWith('M')
+				? 'LICENCIA DE PATERNIDAD'
+				: 'LICENCIA MAT./PAT.';
+		agregarRango(
+			(liquidacion as any).periodo_start_licencia,
+			(liquidacion as any).periodo_end_licencia,
+			licencia
+		);
+	}
+	if (filas.length === 0) return null;
+	filas.sort((a, b) => a.fecha.localeCompare(b.fecha));
 	return {
 		etiqueta: dto.etiqueta,
-		filas: hoja.filas.map((f) => ({
-			fecha: f.fecha,
-			tipo_dia: f.tipo_dia,
-			hora_inicio: f.hora_inicio,
-			hora_fin: f.hora_fin,
-			cliente_nombre: f.cliente_nombre
-		}))
+		filas
 	};
 }
 
@@ -237,23 +300,24 @@ export function paginaControlDias(o: {
 	const filas: any[][] = control.filas.map((f) => [
 		td(fechaCorta(f.fecha), 'center', true),
 		td(diaSemana(f.fecha)),
-		// Entero: con seis columnas en vertical sobra ancho para «MANTENIMIENTO».
+		// La licencia puede ocupar dos líneas sin comprimir el resto de la tabla.
 		td(f.tipo_dia ?? ''),
+		td(f.vehiculo_placa ?? ''),
 		td(f.hora_inicio ?? ''),
 		td(f.hora_fin ?? ''),
 		td(f.cliente_nombre ?? '', 'left')
 	]);
 	/// Relleno hasta el mínimo del formato, sin dato alguno, para que no se
 	/// confunda con un día registrado y en blanco.
-	while (filas.length < RENGLONES_MINIMOS) filas.push(Array.from({ length: 6 }, () => td(' ')));
+	while (filas.length < RENGLONES_MINIMOS) filas.push(Array.from({ length: 7 }, () => td(' ')));
 
 	const tabla = {
 		table: {
 			headerRows: 1,
 			dontBreakRows: true,
-			widths: [50, 34, 78, 42, 42, '*'],
+			widths: [50, 28, 98, 45, 40, 40, '*'],
 			body: [
-				[th('FECHA'), th('DÍA'), th('TIPO'), th('INICIO'), th('FIN'), th('CLIENTE', 'left')],
+				[th('FECHA'), th('DÍA'), th('TIPO'), th('PLACA'), th('INICIO'), th('FIN'), th('CLIENTE', 'left')],
 				...filas
 			]
 		},
