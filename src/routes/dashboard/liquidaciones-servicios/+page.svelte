@@ -1930,7 +1930,7 @@
 		<div class="dir-cabecera-acciones">
 			<!-- El canvas no es una pestaña: es una pantalla completa con su
 			     propio layout, así que abrirlo es navegar. -->
-			{#if isAdmin || isFacturacion}
+			{#if isAdmin || isFacturacion || (isOperaciones && accessResult.allowed)}
 				<a
 					href="/dashboard/liquidaciones-servicios/canvas"
 					class="btn-secondary"
