@@ -13,6 +13,14 @@
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 
 	const id = $derived(page.params.id ?? '');
+	type VistaResultadosEncuesta = 'graficas' | 'respuestas';
+	const vistaResultados = $derived<VistaResultadosEncuesta>(
+		page.url.searchParams.get('view') === 'respuestas' ? 'respuestas' : 'graficas'
+	);
+	const paginaResultados = $derived.by(() => {
+		const pagina = Number(page.url.searchParams.get('pagina') ?? 1);
+		return Number.isSafeInteger(pagina) && pagina > 0 ? pagina : 1;
+	});
 	const puedeGestionar = $derived.by(() => {
 		const u = $authStore.user;
 		return !!u && checkAccess(u.area, 'encuestas', u.permisos_rutas, u.id).level === 'full';
@@ -26,6 +34,7 @@
 	let error = $state('');
 	let cambios = $state(false);
 	let confirmacion = $state<'cerrar' | 'abrir' | 'archivar' | 'descartar' | null>(null);
+	let tokenCargaResultados = 0;
 
 	function desdeEncuesta(e: Encuesta): EncuestaInput {
 		/// Después del PUT, `e` ya pasó por `$state` y sus preguntas son proxies;
@@ -41,31 +50,64 @@
 	function mensaje(e: any): string {
 		return e?.response?.data?.message || e?.message || 'Ocurrió un error';
 	}
+	async function sincronizarUrlResultados(cambios: {
+		view?: VistaResultadosEncuesta;
+		pagina?: number;
+	}) {
+		const url = new URL(page.url.href);
+		if (cambios.view !== undefined) {
+			if (cambios.view === 'graficas') url.searchParams.delete('view');
+			else url.searchParams.set('view', cambios.view);
+		}
+		if (cambios.pagina !== undefined) {
+			if (cambios.pagina <= 1) url.searchParams.delete('pagina');
+			else url.searchParams.set('pagina', String(cambios.pagina));
+		}
+		const destino = `${url.pathname}${url.search}${url.hash}`;
+		const actual = `${page.url.pathname}${page.url.search}${page.url.hash}`;
+		if (destino === actual) return;
+		await goto(destino, {
+			replaceState: true,
+			noScroll: true,
+			keepFocus: true,
+			invalidateAll: false
+		});
+	}
+	function cambiarVistaResultados(vista: VistaResultadosEncuesta) {
+		void sincronizarUrlResultados({ view: vista });
+	}
+	async function cambiarPaginaResultados(pagina: number) {
+		if (!Number.isSafeInteger(pagina) || pagina < 1 || pagina > (resultados?.paginas ?? 1)) return;
+		await sincronizarUrlResultados({ pagina });
+		await cargarResultados(pagina);
+	}
 	async function cargar() {
 		try {
 			const e = await encuestasAPI.obtener(id);
 			encuesta = e;
 			formulario = desdeEncuesta(e);
 			vista = e.estado === 'BORRADOR' ? 'editor' : 'resultados';
-			if (e.estado !== 'BORRADOR') await cargarResultados();
+			if (e.estado !== 'BORRADOR') await cargarResultados(paginaResultados);
 		} catch (e: any) {
 			error = mensaje(e);
 		} finally {
 			cargando = false;
 		}
 	}
-	async function cargarResultados(pagina = 1) {
+	async function cargarResultados(pagina = paginaResultados) {
 		if (!id) return;
+		const token = ++tokenCargaResultados;
 		try {
-			resultados = await encuestasAPI.resultados(id, pagina);
+			const nuevosResultados = await encuestasAPI.resultados(id, pagina);
+			if (token === tokenCargaResultados) resultados = nuevosResultados;
 		} catch (e: any) {
-			toast.error(mensaje(e));
+			if (token === tokenCargaResultados) toast.error(mensaje(e));
 		}
 	}
 	onMount(() => {
 		void cargar();
 		const baja = socketUtils.on('encuestas:respuesta', (evento: { encuestaId: string }) => {
-			if (evento.encuestaId === id) void cargarResultados(resultados?.pagina ?? 1);
+			if (evento.encuestaId === id) void cargarResultados(paginaResultados);
 		});
 		const bajaActualizacion = socketUtils.on('encuestas:actualizada', (evento: { encuestaId: string }) => {
 			if (evento.encuestaId !== id) return;
@@ -74,16 +116,16 @@
 					const actual = await encuestasAPI.obtener(id);
 					encuesta = actual;
 					if (!cambios) formulario = desdeEncuesta(actual);
-					if (actual.estado !== 'BORRADOR') await cargarResultados(resultados?.pagina ?? 1);
+					if (actual.estado !== 'BORRADOR') await cargarResultados(paginaResultados);
 				} catch (e: any) { toast.error(mensaje(e)); }
 			})();
 		});
 		const reconexion = socketUtils.onReconnect(() => {
-			if (encuesta?.estado !== 'BORRADOR') void cargarResultados(resultados?.pagina ?? 1);
+			if (encuesta?.estado !== 'BORRADOR') void cargarResultados(paginaResultados);
 		});
 		/// Respaldo para una pestaña que estuvo dormida durante el evento.
 		const intervalo = setInterval(() => {
-			if (document.visibilityState === 'visible' && encuesta?.estado !== 'BORRADOR') void cargarResultados(resultados?.pagina ?? 1);
+			if (document.visibilityState === 'visible' && encuesta?.estado !== 'BORRADOR') void cargarResultados(paginaResultados);
 		}, 30_000);
 		return () => { baja(); bajaActualizacion(); reconexion(); clearInterval(intervalo); };
 	});
@@ -240,7 +282,13 @@
 				{#if encuesta.estado === 'BORRADOR'}<button type="button" class="btn-primary" disabled={trabajando} onclick={() => void publicar()}><Send size={16} /> Publicar y compartir</button>{/if}
 			</div></div>
 		{:else if resultados}
-			<ResultadosEncuesta datos={resultados} onPagina={(pagina) => void cargarResultados(pagina)} onDescargar={(formato) => void descargar(formato)} />
+			<ResultadosEncuesta
+				datos={resultados}
+				vista={vistaResultados}
+				onVista={cambiarVistaResultados}
+				onPagina={(pagina) => void cambiarPaginaResultados(pagina)}
+				onDescargar={(formato) => void descargar(formato)}
+			/>
 		{:else}
 			<div class="estado-panel page-card">Preparando resultados…</div>
 		{/if}

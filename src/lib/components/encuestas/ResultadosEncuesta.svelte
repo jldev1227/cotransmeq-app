@@ -4,13 +4,16 @@
 	import TabsVista from '$lib/components/ui/TabsVista.svelte';
 	import type { ResultadoEncuesta, PreguntaEncuesta } from '$lib/api/encuestas';
 
+	type VistaResultados = 'graficas' | 'respuestas';
+
 	interface Props {
 		datos: ResultadoEncuesta;
+		vista: VistaResultados;
+		onVista: (vista: VistaResultados) => void;
 		onPagina: (pagina: number) => void;
 		onDescargar: (formato: 'xlsx' | 'pdf') => void;
 	}
-	let { datos, onPagina, onDescargar }: Props = $props();
-	let vista = $state<'graficas' | 'respuestas'>('graficas');
+	let { datos, vista, onVista, onPagina, onDescargar }: Props = $props();
 
 	const hoy = $derived(datos.por_dia.at(-1)?.total ?? 0);
 	const preguntas = $derived(datos.encuesta.preguntas ?? []);
@@ -55,7 +58,7 @@
 			{ id: 'respuestas', label: 'Respuestas individuales', cuenta: datos.total }
 		]}
 		activa={vista}
-		onCambiar={(id) => (vista = id as typeof vista)}
+		onCambiar={(id) => onVista(id as VistaResultados)}
 		etiqueta="Vistas de resultados"
 	/>
 
@@ -91,20 +94,58 @@
 			{/if}
 		{/if}
 	{:else}
-		<div class="tabla-wrap page-card">
-			{#if datos.respuestas.length === 0}<p class="sin-datos">Todavía no hay respuestas.</p>
+			<div class="tabla-respuestas page-card">
+				<div class="tabla-toolbar">
+					<span class="eyebrow">Modo tabla · Respuestas individuales</span>
+					<span class="tabla-conteo">
+						{datos.respuestas.length} filas · {datos.total} respuestas · {preguntas.length + 3} columnas
+					</span>
+				</div>
+				{#if datos.respuestas.length === 0}
+					<div class="tabla-vacia">
+						{datos.total === 0 ? 'Todavía no hay respuestas.' : 'No hay respuestas en esta página.'}
+					</div>
 			{:else}
-				<table><thead><tr><th>Fecha</th><th>Participante</th><th>Origen</th>{#each preguntas as p}<th>{p.titulo}</th>{/each}</tr></thead>
-					<tbody>{#each datos.respuestas as r (r.id)}<tr>
-						<td>{fecha(r.created_at)}</td><td>{r.nombre || r.correo || 'Anónimo'}</td>
-						<td>{r.coincide_dispositivo ? 'Mismo dispositivo' : r.coincide_ip ? 'Misma IP' : '—'}</td>
-						{#each preguntas as p}<td>{representar(p, r.respuestas[p.id])}</td>{/each}
-					</tr>{/each}</tbody></table>
+					<div class="tabla-scroll" role="region" aria-label="Respuestas individuales">
+						<table>
+							<thead><tr>
+								<th class="columna-fija">Participante</th>
+								<th>Fecha de respuesta</th>
+								<th>Origen</th>
+								{#each preguntas as p (p.id)}<th>{p.titulo}</th>{/each}
+							</tr></thead>
+							<tbody>
+								{#each datos.respuestas as r, idx (r.id)}
+									{@const origen = r.coincide_dispositivo ? 'Mismo dispositivo' : r.coincide_ip ? 'Misma IP' : '—'}
+									<tr class:par={idx % 2 === 1}>
+										<td class="columna-fija participante">
+											<strong>{r.nombre || r.correo || 'Anónimo'}</strong>
+											{#if r.nombre && r.correo}<small>{r.correo}</small>{/if}
+										</td>
+										<td class="fecha-respuesta"><time datetime={r.created_at}>{fecha(r.created_at)}</time></td>
+										<td><span class="origen-chip" class:detectado={origen !== '—'}>{origen}</span></td>
+										{#each preguntas as p (p.id)}
+											<td class="respuesta-celda">{representar(p, r.respuestas[p.id])}</td>
+										{/each}
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
 			{/if}
+				<div class="tabla-footer">
+					<span>{datos.respuestas.length} filas en esta página · {datos.total} respuestas</span>
+					{#if datos.paginas > 1}
+						<div class="paginacion">
+							<button type="button" aria-label="Página anterior" disabled={datos.pagina <= 1} onclick={() => onPagina(datos.pagina - 1)}><ChevronLeft size={15} /> Anterior</button>
+							<span>Página {datos.pagina} de {datos.paginas}</span>
+							<button type="button" aria-label="Página siguiente" disabled={datos.pagina >= datos.paginas} onclick={() => onPagina(datos.pagina + 1)}>Siguiente <ChevronRight size={15} /></button>
+						</div>
+					{:else}
+						<span>Página {datos.pagina} de {datos.paginas}</span>
+					{/if}
+				</div>
 		</div>
-		{#if datos.paginas > 1}
-			<div class="paginacion"><button disabled={datos.pagina <= 1} onclick={() => onPagina(datos.pagina - 1)}><ChevronLeft size={16} /> Anterior</button><span>Página {datos.pagina} de {datos.paginas}</span><button disabled={datos.pagina >= datos.paginas} onclick={() => onPagina(datos.pagina + 1)}>Siguiente <ChevronRight size={16} /></button></div>
-		{/if}
 	{/if}
 </div>
 
@@ -141,14 +182,39 @@
 	.vacio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .5rem; min-height: 14rem; padding: 2rem 1rem; color: var(--text-secondary); text-align: center; }
 	.vacio strong { color: var(--text-primary); }
 	.vacio p { margin: 0; }
-	.tabla-wrap { overflow: auto; padding: 0; }
-	table { border-collapse: collapse; min-width: 100%; white-space: nowrap; font-size: .78rem; }
-	th, td { padding: .8rem; border-bottom: 1px solid var(--border-subtle); text-align: left; }
-	th { color: var(--text-secondary); background: var(--bg-subtle, #f5f7f5); font-weight: 750; }
-	td { max-width: 25rem; white-space: normal; overflow-wrap: anywhere; }
-	.paginacion { display: flex; align-items: center; justify-content: end; gap: .8rem; font-size: .8rem; color: var(--text-secondary); }
-	.paginacion button { display: inline-flex; align-items: center; gap: .4rem; }
+	.tabla-respuestas { overflow: hidden; padding: 0; border: 1px solid var(--border-subtle); }
+	.tabla-toolbar, .tabla-footer { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: .8rem; padding: .7rem 1rem; background: color-mix(in srgb, var(--accion) 4%, var(--bg-surface)); }
+	.tabla-toolbar { flex-wrap: wrap; border-bottom: 1px solid var(--border-subtle); }
+	.tabla-toolbar .eyebrow { font-size: .65rem; }
+	.tabla-conteo, .tabla-footer > span { color: var(--text-muted); font-family: var(--font-mono-meta, ui-monospace, monospace); font-size: .65rem; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+	.tabla-scroll { position: relative; max-height: min(68vh, 52rem); overflow: auto; background: var(--bg-surface); }
+	.tabla-scroll:focus-visible { outline: 2px solid var(--accion); outline-offset: -2px; }
+	table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; color: var(--text-primary); font-size: .75rem; }
+	thead { position: sticky; top: 0; z-index: 10; }
+	th { min-width: 10rem; padding: .65rem .75rem; border-right: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); background: color-mix(in srgb, var(--accion) 4%, var(--bg-surface)); color: var(--text-muted); font-size: .62rem; font-weight: 800; letter-spacing: .07em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+	th:first-child { min-width: 15rem; }
+	td { max-width: 25rem; padding: .6rem .75rem; border-right: 1px solid color-mix(in srgb, var(--border-subtle) 65%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 75%, transparent); text-align: left; vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
+	tbody tr { background: var(--bg-surface); transition: background-color .12s ease; }
+	tbody tr.par { background: color-mix(in srgb, var(--accion) 3%, var(--bg-surface)); }
+	tbody tr:hover { background: color-mix(in srgb, var(--accion) 6%, var(--bg-surface)); }
+	.columna-fija { position: sticky; left: 0; z-index: 2; background: var(--bg-surface); box-shadow: 2px 0 4px rgba(0, 0, 0, .04); }
+	thead .columna-fija { z-index: 20; }
+	tbody tr.par .columna-fija { background: color-mix(in srgb, var(--accion) 3%, var(--bg-surface)); }
+	tbody tr:hover .columna-fija { background: color-mix(in srgb, var(--accion) 6%, var(--bg-surface)); }
+	.participante { min-width: 15rem; }
+	.participante strong, .participante small { display: block; }
+	.participante strong { color: var(--text-primary); font-size: .72rem; font-weight: 750; }
+	.participante small { margin-top: .2rem; color: var(--text-muted); font-size: .65rem; }
+	.fecha-respuesta { min-width: 11rem; color: var(--text-secondary); font-size: .68rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.origen-chip { display: inline-flex; align-items: center; min-height: 1.35rem; padding: .12rem .45rem; border: 1px solid var(--border-subtle); border-radius: .4rem; background: var(--bg-base); color: var(--text-muted); font-size: .63rem; font-weight: 700; white-space: nowrap; }
+	.origen-chip.detectado { border-color: color-mix(in srgb, var(--accion) 28%, var(--border-subtle)); background: color-mix(in srgb, var(--accion) 9%, var(--bg-surface)); color: var(--accion); }
+	.respuesta-celda { min-width: 13rem; line-height: 1.45; }
+	.tabla-vacia { display: grid; min-height: 10rem; place-items: center; padding: 2rem; color: var(--text-muted); text-align: center; }
+	.tabla-footer { min-height: 3.25rem; border-top: 1px solid var(--border-subtle); background: color-mix(in srgb, var(--accion) 4%, var(--bg-surface)); }
+	.paginacion { display: flex; align-items: center; justify-content: end; gap: .65rem; color: var(--text-secondary); font-size: .7rem; font-variant-numeric: tabular-nums; }
+	.paginacion button { display: inline-flex; align-items: center; gap: .3rem; padding: .35rem .55rem; border: 1px solid var(--border-subtle); border-radius: .55rem; background: var(--bg-surface); color: var(--text-secondary); font: inherit; font-weight: 700; transition: border-color .12s ease, color .12s ease, background-color .12s ease; }
+	.paginacion button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accion) 45%, var(--border-subtle)); color: var(--accion); }
 	.paginacion button:disabled { opacity: .45; cursor: default; }
 	@media (max-width: 900px) { .metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-	@media (max-width: 650px) { .resultados-cabecera { align-items: stretch; flex-direction: column; } .exportar { justify-content: stretch; } .exportar .btn-secondary { flex: 1; } .graficas { grid-template-columns: 1fr; } .tendencia { grid-column: auto; } }
+	@media (max-width: 650px) { .resultados-cabecera { align-items: stretch; flex-direction: column; } .exportar { justify-content: stretch; } .exportar .btn-secondary { flex: 1; } .graficas { grid-template-columns: 1fr; } .tendencia { grid-column: auto; } .tabla-footer { align-items: flex-start; flex-direction: column; } .paginacion { width: 100%; justify-content: space-between; } }
 </style>
