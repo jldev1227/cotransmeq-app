@@ -521,6 +521,33 @@
 			width: 100%;
 		}
 	}
+
+	/* Tablet: distribuye los campos en columnas según el ancho disponible. */
+	@media (min-width: 768px) and (max-width: 1023.98px) {
+		.tl-tr {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+			align-items: center;
+			gap: 0.45rem 1rem;
+		}
+		.tl-td {
+			min-width: 0;
+		}
+		.tl-td--primera,
+		.tl-td--acciones {
+			grid-column: 1 / -1;
+		}
+		.tl-td--primera {
+			margin-bottom: 0.15rem;
+		}
+		.tl-td--acciones {
+			justify-content: flex-end;
+			margin-top: 0.2rem;
+		}
+		.tl-td--acciones :global(.af-grupo) {
+			justify-content: flex-end;
+		}
+	}
 	.tl-vacio {
 		padding: 3rem 1rem;
 		text-align: center;
