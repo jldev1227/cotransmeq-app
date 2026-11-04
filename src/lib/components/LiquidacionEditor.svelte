@@ -1320,7 +1320,8 @@
 					cant: t.cant ?? (parseFloat(String(rows[idx]?.cant)) || 1),
 					pct_admin: t.pct_admin ?? 10,
 					ingreso_extra_global: t.ingreso_extra_global ?? 0,
-					ingresos_extra_aval: t.ingresos_extra_aval ?? 0
+					ingresos_extra_aval: t.ingresos_extra_aval ?? 0,
+					observaciones: t.observaciones || ''
 				}));
 			}
 		} else {
@@ -1343,7 +1344,8 @@
 				cant: t.cantidad ?? 1,
 				pct_admin: t.porcentaje_admin ?? 10,
 				ingreso_extra_global: t.ingreso_extra_global ?? 0,
-				ingresos_extra_aval: t.ingresos_extra_aval ?? 0
+				ingresos_extra_aval: t.ingresos_extra_aval ?? 0,
+				observaciones: t.observaciones || ''
 			}));
 		}
 
@@ -1737,6 +1739,7 @@
 		pct_admin: number;
 		ingreso_extra_global: number;
 		ingresos_extra_aval: number;
+		observaciones: string;
 	}
 
 	let terceroRows: TerceroRow[] = [];
@@ -1758,7 +1761,8 @@
 				cant: parseFloat(String(srcRow?.cant)) || 1,
 				pct_admin: 10,
 				ingreso_extra_global: 0,
-				ingresos_extra_aval: 0
+				ingresos_extra_aval: 0,
+				observaciones: ''
 			});
 		}
 		terceroRows = terceroRows;
@@ -1785,7 +1789,8 @@
 			cant: parseFloat(String(r.cant)) || 1,
 			pct_admin: terceroRows[i]?.pct_admin ?? 10,
 			ingreso_extra_global: 0,
-			ingresos_extra_aval: terceroRows[i]?.ingresos_extra_aval ?? 0
+			ingresos_extra_aval: terceroRows[i]?.ingresos_extra_aval ?? 0,
+			observaciones: terceroRows[i]?.observaciones || ''
 		}));
 	}
 
@@ -2081,6 +2086,7 @@
 					ingreso_extra_global: calc?.extraGlobal || 0,
 					ingresos_extra_aval: parseFloat(String(t.ingresos_extra_aval)) || 0,
 					ingreso_empresa: calc?.ingresoCotransmeq || 0,
+					observaciones: t.observaciones || '',
 					src_index: t.src_index ?? i
 				};
 			})
@@ -4038,6 +4044,7 @@
 									<div class="wb-cell wb-th wb-th-num wb-cell-money">Extra Glob.</div>
 									<div class="wb-cell wb-th wb-th-num wb-cell-money">Extra Aval</div>
 									<div class="wb-cell wb-th wb-th-num wb-cell-money">Ing. Cotransmeq</div>
+									<div class="wb-cell wb-th wb-cell-observaciones">Observaciones</div>
 									<div class="wb-cell wb-th wb-th-action wb-cell-action">✕</div>
 								</div>
 
@@ -4228,6 +4235,16 @@
 										<div class="wb-cell wb-cell-money wb-cell-calc-blue">
 											{COP(calc?.ingresoCotransmeq || 0)}
 										</div>
+										<div
+											class="wb-cell wb-cell-observaciones"
+											data-cell-key={`terc-${i}-observaciones`}
+										>
+											<textarea
+												bind:value={terceroRows[i].observaciones}
+												aria-label={`Observaciones fila ${i + 1}`}
+												placeholder="Agregar observación..."
+											></textarea>
+										</div>
 										<div class="wb-cell wb-cell-action">
 											<button
 												class="wb-btn-del"
@@ -4278,6 +4295,7 @@
 									<div class="wb-cell wb-cell-money wb-cell-calc-blue">
 										<b>{COP(tercTotalIngresoTrans)}</b>
 									</div>
+									<div class="wb-cell wb-cell-observaciones"></div>
 									<!-- 14. ✕ Action (placeholder con mismo aspecto que el botón de las filas) -->
 									<div class="wb-cell wb-cell-action">
 										<span class="wb-btn-del wb-btn-del-placeholder" aria-hidden="true">🗑</span>
@@ -4539,7 +4557,7 @@
 									src="/assets/logo_nombre.webp"
 									alt="Logo"
 									on:error={() => (logoError = true)}
-									style="height:46px;width:auto;object-fit:contain"
+									style="height:42px;width:auto;object-fit:contain"
 								/>{/if}
 						</div>
 						<div class="dh-title">
@@ -4704,7 +4722,7 @@
 									src="/assets/logo_nombre.webp"
 									alt="Logo"
 									on:error={() => (logoError = true)}
-									style="height:58px;width:auto;object-fit:contain"
+									style="height:50px;width:auto;object-fit:contain"
 								/>{/if}
 						</div>
 						<div class="dh-title">
@@ -4729,24 +4747,20 @@
 					</div>
 					<div class="liq-salary-bar">
 						<div class="liq-sal-group">
-							<span class="liq-sal-lbl">SALARIO BASICO</span><span class="liq-sal-val"
-								>$ {liqCfg.salario_basico.toLocaleString('es-CO')}</span
-							><span class="liq-sal-lbl"
-								>VALOR HORA TRABAJADOR{liqCfg.valor_hora_override > 0 ? ' (manual)' : ''}</span
-							><span class="liq-sal-val">$ {fmtDec1(valorHora)}</span>
+							<span class="liq-sal-lbl">SALARIO BÁSICO</span>
+							<span class="liq-sal-val">$ {liqCfg.salario_basico.toLocaleString('es-CO')}</span>
 						</div>
 						<div class="liq-sal-group">
-							<span class="liq-sal-lbl">CARGO</span><span class="liq-sal-val">{liqCfg.cargo}</span>
+							<span class="liq-sal-lbl">VALOR HORA TRABAJADOR{liqCfg.valor_hora_override > 0 ? ' (manual)' : ''}</span>
+							<span class="liq-sal-val">$ {fmtDec1(valorHora)}</span>
 						</div>
-					</div>
-					<div class="pb">
-						<div class="pc">
-							<span class="pclabel">PERIDO DE LIQUIDACIÓN MES:</span><span class="pcval"
-								>{hdr.mes}</span
-							>
+						<div class="liq-sal-group">
+							<span class="liq-sal-lbl">CARGO</span>
+							<span class="liq-sal-val">{liqCfg.cargo}</span>
 						</div>
-						<div class="pc">
-							<span class="pclabel">AÑO:</span><span class="pcval">AÑO {hdr.anio}</span>
+						<div class="liq-sal-group">
+							<span class="liq-sal-lbl">PERÍODO DE LIQUIDACIÓN</span>
+							<span class="liq-sal-val">MES: {hdr.mes} · AÑO: {hdr.anio}</span>
 						</div>
 					</div>
 					<table class="liq-tbl">
@@ -4841,7 +4855,7 @@
 		{#if (isPrinting && printSheets.terceros) || (!isPrinting && previewPage === 'terceros')}
 			<div class="pdf-body pdf-body-landscape print-sheet print-sheet-landscape">
 				<div
-					class="page page-landscape"
+					class="page page-landscape page-terceros-preview"
 					style="transform: scale({pdfZoom}); transform-origin: top center;"
 				>
 					<div class="dh">
@@ -4850,7 +4864,7 @@
 									src="/assets/logo_nombre.webp"
 									alt="Logo"
 									on:error={() => (logoError = true)}
-									style="height:58px;width:auto;object-fit:contain"
+									style="height:50px;width:auto;object-fit:contain"
 								/>{/if}
 						</div>
 						<div class="dh-title">
@@ -4889,7 +4903,7 @@
 									>DESCRIPCIÓN SERVICIO</th
 								><th>FECHAS</th><th>VR UNIDAD</th><th>CANT</th><th>TOTAL FACTURADO</th><th
 									>ADMON %</th
-								><th>ADMON $</th><th>V/LIQUIDAR 3°</th></tr
+								><th>ADMON $</th><th>V/LIQUIDAR 3°</th><th class="terc-prev-obs">OBSERVACIONES</th></tr
 							></thead
 						>
 						<tbody
@@ -4908,6 +4922,7 @@
 										>{COP(calc?.admon || 0)}</td
 									><td class="mc" style="font-weight:700;color:#c2410c"
 										>{COP(calc?.vLiquidar || 0)}</td
+									><td class="terc-prev-obs">{t.observaciones || ''}</td
 									></tr
 								>{/each}</tbody
 						>
@@ -4918,6 +4933,7 @@
 								><td></td><td class="mc" style="color:#b91c1c">{COP(tercTotalAdmon)}</td><td
 									class="mc"
 									style="color:#c2410c">{COP(tercTotalVLiquidar)}</td
+								><td class="terc-prev-obs"></td
 								></tr
 							></tfoot
 						>
@@ -4956,52 +4972,39 @@
 							></tfoot
 						>
 					</table>
-					<div class="terc-summary-box">
-						<table class="terc-summary-tbl">
-							<tbody>
-								<tr
-									><td class="ts-lbl">INGRESO TOTAL TERCERO (V/Liquidar)</td><td
-										class="ts-val"
-										style="color:#c2410c">{COP(tercIngresoTotalTercero)}</td
-									></tr
-								>
-								<tr class="ts-sep"
-									><td class="ts-lbl">ADMINISTRACIÓN COTRANSMEQ</td><td
-										class="ts-val"
-										style="color:#b91c1c">{COP(tercAdminCotransmeq)}</td
-									></tr
-								>
-								<tr
-									><td class="ts-lbl">INGRESO EXTRA GLOBAL</td><td
-										class="ts-val"
-										style="color:#c2410c">{COP(tercTotalExtraGlobal)}</td
-									></tr
-								>
-								<tr
-									><td class="ts-lbl">PERNOCTES</td><td class="ts-val" style="color:#c2410c"
-										>{COP(valPern)}</td
-									></tr
-								>
-								<tr
-									><td class="ts-lbl">RECARGOS</td><td class="ts-val" style="color:#c2410c"
-										>{COP(valRec)}</td
-									></tr
-								>
-								<tr class="ts-total"
-									><td class="ts-lbl">INGRESO TOTAL COTRANSMEQ</td><td
-										class="ts-val"
-										style="color:#c2410c">{COP(tercIngresoTotalCotransmeq)}</td
-									></tr
-								>
-								<tr class="ts-grand"
-									><td class="ts-lbl">VALOR TOTAL A FACTURAR</td><td class="ts-val"
-										>{COP(tercValorTotalFacturar)}</td
-									></tr
-								>
-							</tbody>
-						</table>
-					</div>
-					<div class="sigs" style="margin-top:18px">
+					<table class="terc-prev-tbl terc-summary-tbl">
+						<colgroup>
+							<col style="width:22%" /><col style="width:11.33%" />
+							<col style="width:22%" /><col style="width:11.33%" />
+							<col style="width:22%" /><col style="width:11.34%" />
+						</colgroup>
+						<thead><tr><th colspan="6">RESUMEN DE TERCEROS</th></tr></thead>
+						<tbody>
+							<tr>
+								<td class="ts-lbl">INGRESO TOTAL TERCERO (V/Liquidar)</td>
+								<td class="ts-val" style="color:#c2410c">{COP(tercIngresoTotalTercero)}</td>
+								<td class="ts-lbl">ADMINISTRACIÓN COTRANSMEQ</td>
+								<td class="ts-val" style="color:#b91c1c">{COP(tercAdminCotransmeq)}</td>
+								<td class="ts-lbl">INGRESO EXTRA GLOBAL</td>
+								<td class="ts-val" style="color:#c2410c">{COP(tercTotalExtraGlobal)}</td>
+							</tr>
+							<tr>
+								<td class="ts-lbl">PERNOCTES</td>
+								<td class="ts-val" style="color:#c2410c">{COP(valPern)}</td>
+								<td class="ts-lbl">RECARGOS</td>
+								<td class="ts-val" style="color:#c2410c">{COP(valRec)}</td>
+								<td class="ts-lbl ts-total">INGRESO TOTAL COTRANSMEQ</td>
+								<td class="ts-val ts-total" style="color:#c2410c">{COP(tercIngresoTotalCotransmeq)}</td>
+							</tr>
+						</tbody>
+						<tfoot>
+							<tr class="ts-grand">
+								<td class="ts-lbl" colspan="5">VALOR TOTAL A FACTURAR</td>
+								<td class="ts-val">{COP(tercValorTotalFacturar)}</td>
+							</tr>
+						</tfoot>
+					</table>
+					<div class="sigs terc-sigs">
 						<div class="sig">
 							<div class="sig-lbl">LIQUIDADO POR — GERENCIA:</div>
 							<!-- {#if ['APROBADA', 'FACTURADA'].includes(liqEstado) && firmaGerencia?.firma_signed_url}<img
@@ -5824,6 +5827,11 @@
 			0 12px 32px rgba(23, 32, 29, 0.12);
 		border-radius: 2px;
 	}
+	/* Hoja 4 reserva más ancho en la vista previa para tabla y observaciones. */
+	.page-landscape.page-terceros-preview {
+		width: 1650px;
+		max-width: none;
+	}
 	/* legacy alias portrait (alias, igual a .page en transmeralda) */
 	.page-portrait {
 		background: #fff;
@@ -6001,13 +6009,13 @@
 		border-radius: 3px;
 	}
 	.dh-logo img {
-		height: 50px;
+		height: 46px;
 		width: auto;
 		object-fit: contain;
 	}
 	.dh-logo-fallback {
-		width: 80px;
-		height: 50px;
+		width: 74px;
+		height: 46px;
 		background: linear-gradient(135deg, #ea580c, #c2410c);
 		border-radius: 4px;
 		display: flex;
@@ -6356,6 +6364,13 @@
 		flex-direction: column;
 		min-height: 70px;
 	}
+	.terc-sigs {
+		margin-top: 10px;
+	}
+	.terc-sigs .sig {
+		min-height: 50px;
+		padding: 6px 10px 0;
+	}
 	.sig:first-child {
 		border-right: 1px solid #888;
 	}
@@ -6681,31 +6696,42 @@
 	}
 
 	.liq-salary-bar {
-		margin: 4px 0 4px;
-		padding: 5px 14px;
+		margin: 4px 0;
+		padding: 0;
 		background: #f8fafc;
-		border: 1px solid #e2e8f0;
-		border-radius: 6px;
+		border: 1px solid #d1d5db;
+		border-radius: 4px;
 		font-size: 8pt;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
+		display: grid;
+		grid-template-columns: 1fr 1.25fr 0.8fr 1.55fr;
+		align-items: stretch;
+		break-inside: avoid;
+		page-break-inside: avoid;
 	}
 	.liq-sal-group {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		justify-content: space-between;
+		gap: 6px;
+		min-width: 0;
+		padding: 5px 7px;
+		border-right: 1px solid #d1d5db;
+	}
+	.liq-sal-group:last-child {
+		border-right: 0;
 	}
 	.liq-sal-lbl {
 		font-weight: 800;
 		color: #c2410c;
 		text-transform: uppercase;
-		font-size: 7.5pt;
+		font-size: 6.5pt;
+		line-height: 1.15;
 	}
 	.liq-sal-val {
 		font-family: var(--font-sans);
 		font-weight: 700;
-		font-size: 8.5pt;
+		font-size: 8pt;
+		white-space: nowrap;
 	}
 	.liq-tbl {
 		width: 100%;
@@ -6763,49 +6789,58 @@
 		border: 1px solid #dde3eb;
 		vertical-align: middle;
 	}
+	.terc-prev-tbl .terc-prev-obs {
+		width: 135px;
+		max-width: 135px;
+		font-size: 6.5pt;
+		line-height: 1.25;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+		vertical-align: top;
+	}
 	.terc-prev-tbl tbody tr:hover td {
 		background: #fff7ed;
 	}
 
-	.terc-summary-box {
-		margin-top: 14px;
-		padding: 10px 14px;
-		border: 2px solid #c2410c;
-		border-radius: 6px;
-		background: #f8fafc;
-	}
 	.terc-summary-tbl {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 8pt;
+		margin-top: 10px;
+		table-layout: fixed;
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
+	.terc-summary-tbl th {
+		padding: 4px 3px;
+		font-size: 7pt;
 	}
 	.terc-summary-tbl td {
-		padding: 5px 8px;
+		padding: 4px 3px;
 	}
-	.ts-lbl {
+	.terc-summary-tbl .ts-lbl {
+		font-size: 6.8pt;
 		font-weight: 700;
-		text-align: left;
 	}
-	.ts-val {
+	.terc-summary-tbl .ts-val {
+		font-size: 7.2pt;
 		font-weight: 800;
 		text-align: right;
-		font-family: var(--font-sans);
-		font-size: 9pt;
-		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
 	}
-	.ts-sep td {
-		border-top: 1.5px solid #e2e8f0;
-	}
-	.ts-total td {
-		border-top: 2px solid #c2410c;
+	.terc-summary-tbl .ts-total {
+		border-top: 1.5px solid #c2410c;
 		background: #fff7ed;
-		font-size: 9pt;
 	}
-	.ts-grand td {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+	.terc-summary-tbl .ts-grand td {
+		padding: 5px 4px;
+		background: #c2410c;
+		border-color: #9a3412;
 		color: #fff;
-		font-size: 10pt;
-		border-radius: 0 0 4px 4px;
+		font-weight: 900;
+	}
+	.terc-summary-tbl .ts-grand .ts-lbl {
+		text-align: right;
+	}
+	.terc-summary-tbl .ts-grand .ts-val {
+		font-size: 9pt;
 	}
 
 	/* ─ LOADING ─ */
@@ -6941,6 +6976,47 @@
 	/* RESPONSIVE — SMALL MOBILE (≤ 480px)                          */
 
 	@media print {
+		.terc-prev-obs {
+			display: none !important;
+		}
+		.terc-prev-tbl thead {
+			display: table-header-group;
+		}
+		.terc-prev-tbl th {
+			background: #e5e7eb !important;
+			color: #111827 !important;
+			border: 1px solid #111827 !important;
+			font-weight: 800 !important;
+			-webkit-print-color-adjust: exact;
+			print-color-adjust: exact;
+		}
+		.terc-prev-tbl tr {
+			break-inside: avoid;
+			page-break-inside: avoid;
+		}
+		.terc-summary-tbl {
+			break-inside: avoid;
+			page-break-inside: avoid;
+		}
+		.terc-summary-tbl tr {
+			break-inside: avoid;
+			page-break-inside: avoid;
+		}
+		.terc-summary-tbl .ts-grand td {
+			background: #e5e7eb !important;
+			color: #111827 !important;
+			border: 1.5px solid #111827 !important;
+			-webkit-print-color-adjust: exact;
+			print-color-adjust: exact;
+		}
+		.terc-summary-tbl .ts-grand .ts-lbl,
+		.terc-summary-tbl .ts-grand .ts-val {
+			color: #111827 !important;
+		}
+		.terc-summary-tbl .ts-grand .ts-val {
+			font-size: 11pt;
+			font-weight: 900;
+		}
 		/* ── Named pages: HOJA 1 vertical (Letter portrait), HOJA 2-4 horizontal (A4 landscape) ── */
 		@page {
 			size: Letter portrait;
@@ -7114,6 +7190,10 @@
 			width: 100%;
 			padding: 4mm 5mm;
 			transform: none !important;
+		}
+		.page-landscape.page-terceros-preview {
+			width: 100%;
+			max-width: 100%;
 		}
 
 		/* legacy alias */
@@ -8148,6 +8228,7 @@
 		background: #ffffff;
 	}
 	.wb-cell input,
+	.wb-cell textarea,
 	.wb-cell select {
 		width: 100%;
 		border: 1px solid transparent;
@@ -8162,13 +8243,16 @@
 		transition: all 0.15s;
 	}
 	.wb-cell input:hover:not(:disabled):not(:focus),
+	.wb-cell textarea:hover:not(:disabled):not(:focus),
 	.wb-cell select:hover:not(:focus) {
 		background: rgba(234, 88, 12, 0.04);
 		border-color: rgba(234, 88, 12, 0.2);
 	}
 	.wb-cell input:focus,
+	.wb-cell textarea:focus,
 	.wb-cell select:focus,
 	.wb-cell input:focus-visible,
+	.wb-cell textarea:focus-visible,
 	.wb-cell select:focus-visible {
 		background: #fff;
 		border-color: #ea580c;
@@ -8332,6 +8416,24 @@
 	.wb-row-terceros .wb-cell-num {
 		width: 95px;
 		flex: 0 0 95px;
+	}
+	.wb-row-terceros .wb-cell-observaciones {
+		flex: 1 1 220px;
+		min-width: 180px;
+	}
+	.wb-cell-observaciones textarea {
+		box-sizing: border-box;
+		width: 100%;
+		min-height: 50px;
+		resize: vertical;
+		border: 1px solid rgba(0, 0, 0, 0.12);
+		border-radius: 7px;
+		padding: 6px 8px;
+		background: #fff;
+		color: #17201d;
+		font: inherit;
+		font-size: 0.76rem;
+		line-height: 1.35;
 	}
 
 	/* ③ Recargos (Hoja 2) — celdas con inputs editables +20% (días 44→53, money/num 72→86) */
@@ -9168,16 +9270,16 @@
 		padding: 11px 14px;
 	}
 	.liq-v1-logo {
-		width: 86px;
-		height: 64px;
+		width: 76px;
+		height: 56px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
 	}
 	.liq-v1-logo img {
-		max-width: 86px;
-		max-height: 64px;
+		max-width: 76px;
+		max-height: 56px;
 		object-fit: contain;
 	}
 	.liq-v1-company {

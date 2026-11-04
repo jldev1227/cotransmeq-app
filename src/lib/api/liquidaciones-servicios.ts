@@ -190,6 +190,7 @@ export interface LiquidacionServicio {
 		ingreso_extra_global: number;
 		ingresos_extra_aval: number;
 		ingreso_empresa: number;
+		observaciones?: string | null;
 		src_index: number;
 		orden: number;
 		tercero?: {
@@ -358,6 +359,7 @@ export interface CrearLiquidacionInput {
 		ingreso_extra_global?: number;
 		ingresos_extra_aval?: number;
 		ingreso_empresa?: number;
+		observaciones?: string | null;
 		src_index?: number;
 	}[];
 }
