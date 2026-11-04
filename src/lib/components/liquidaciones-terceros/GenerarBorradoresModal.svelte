@@ -19,10 +19,12 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import { liquidacionesServiciosAPI } from '$lib/api/liquidaciones-servicios';
+	import { liquidacionesTercerosDescuentosAPI } from '$lib/api/liquidaciones-terceros-descuentos';
 	import { borradorQueue, borradorQueueStore } from '$lib/stores/borradorQueue';
 	import { confirmar } from '$lib/stores/confirm';
 	import { claseBadgeEstado } from '$lib/editor/builders/cierres-finales-estado';
 	import type { CierreHoja } from '$lib/editor/builders/cierres-finales-identidad';
+	import { toast } from 'svelte-sonner';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	interface Props {
@@ -31,9 +33,10 @@
 		/** Hojas ya presentes en el libro. Alimenta los avisos por placa. */
 		cierresExistentes: CierreHoja[];
 		onClose: () => void;
+		onAgrupadas?: () => void;
 	}
 
-	let { anio, mes, cierresExistentes, onClose }: Props = $props();
+	let { anio, mes, cierresExistentes, onClose, onAgrupadas }: Props = $props();
 
 	interface LiqFila {
 		id: string;
@@ -229,6 +232,10 @@
 	let confirmandoLanzamiento = $state(false);
 	let lanzando = $state(false);
 	let errorLanzar = $state('');
+	let agruparPorTercero = $state(false);
+	let agrupacionAutoJobId = $state('');
+	let agrupandoGenerados = $state(false);
+	let errorAgrupacion = $state('');
 
 	/** Cierres ya existentes, indexados por placa normalizada. */
 	const cierrePorPlaca = $derived.by(() => {
@@ -266,6 +273,69 @@
 				job.status === 'error' ||
 				job.status === 'locked')
 	);
+
+	/** Agrupa por ID del tercero, nunca por una coincidencia de nombres. */
+	async function agruparCierresGenerados(finalizado: NonNullable<typeof job>) {
+		if (!finalizado.jobId || agrupacionAutoJobId === finalizado.jobId) return;
+		agrupacionAutoJobId = finalizado.jobId;
+		const placasElegidas = new Set(placasAIncluir.map(normalizar));
+		const porTercero = new Map<string, Map<string, string>>();
+		for (const cierre of finalizado.guardados ?? []) {
+			if (!cierre.tercero_id || !placasElegidas.has(normalizar(cierre.placa))) continue;
+			const grupo = porTercero.get(cierre.tercero_id) ?? new Map<string, string>();
+			grupo.set(cierre.id, cierre.placa);
+			porTercero.set(cierre.tercero_id, grupo);
+		}
+		const grupos = [...porTercero.values()].filter((grupo) => grupo.size > 1);
+		if (grupos.length === 0) {
+			toast.info('No hay placas del mismo tercero para agrupar', {
+				description: 'Los cierres se conservaron en hojas separadas.'
+			});
+			return;
+		}
+
+		agrupandoGenerados = true;
+		errorAgrupacion = '';
+		let agrupados = 0;
+		const errores: string[] = [];
+		try {
+			for (const grupo of grupos) {
+				try {
+					await liquidacionesTercerosDescuentosAPI.agruparBorradores([...grupo.keys()]);
+					agrupados++;
+				} catch (e: any) {
+					errores.push(
+						e?.response?.data?.error || e?.message || [...grupo.values()].join(', ')
+					);
+				}
+			}
+			if (agrupados > 0) {
+				toast.success(`${agrupados} grupo(s) de placas consolidados en una hoja por tercero.`);
+				onAgrupadas?.();
+			}
+			if (errores.length > 0) {
+				errorAgrupacion = errores.join(' · ');
+				toast.error('Algunos cierres no se pudieron agrupar', {
+					description: errorAgrupacion
+				});
+			}
+		} finally {
+			agrupandoGenerados = false;
+		}
+	}
+
+	$effect(() => {
+		const actual = job;
+		if (
+			!agruparPorTercero ||
+			actual?.status !== 'complete' ||
+			!actual.persistir ||
+			!actual.guardados?.length ||
+			actual.jobId === agrupacionAutoJobId
+		)
+			return;
+		void agruparCierresGenerados(actual);
+	});
 
 	onMount(async () => {
 		try {
@@ -499,6 +569,9 @@
 				message:
 					`Los servicios seleccionados provienen de: ${origenTexto}. ` +
 					`Los borradores se crearán en ${destino}, periodo fijado por el canvas. ` +
+					(agruparPorTercero
+						? 'Las placas seleccionadas del mismo tercero se unirán en una sola hoja. '
+						: '') +
 					'Confirma que esos meses de origen son los que quieres liquidar.',
 				tone: 'warning',
 				confirmText: 'Generar borradores',
@@ -546,7 +619,7 @@
 	subtitle={`Periodo ${String(mes).padStart(2, '0')}/${anio} · fijado por el canvas`}
 	tamano="lg"
 	cerrarAlFondo={false}
-	bloqueado={enCurso || confirmandoLanzamiento || lanzando}
+	bloqueado={enCurso || confirmandoLanzamiento || lanzando || agrupandoGenerados}
 	oncerrar={onClose}
 >
 	{#if job && mostrarProgreso}
@@ -572,6 +645,12 @@
 					<p class="gbm-nota">
 						{job.guardados.length} cierre(s) creados. Sus hojas ya están en el canvas.
 					</p>
+				{/if}
+				{#if agrupandoGenerados}
+					<p class="gbm-nota">Agrupando los cierres seleccionados por propietario…</p>
+				{/if}
+				{#if errorAgrupacion}
+					<div class="gbm-aviso gbm-aviso-rojo">{errorAgrupacion}</div>
 				{/if}
 
 				{#if job.fallidos?.length}
@@ -767,6 +846,16 @@
 							</li>
 						{/each}
 					</ul>
+					<label class="gbm-check-agrupar">
+						<input type="checkbox" bind:checked={agruparPorTercero} />
+						<span>
+							<strong>Agrupar las placas seleccionadas del mismo tercero en una sola hoja</strong>
+							<em>
+								Elige las placas con las casillas de arriba. Cada propietario queda en su propia hoja;
+								se suman los conceptos por vehículo y los impuestos se recalculan sobre el consolidado.
+							</em>
+						</span>
+					</label>
 					{#if sinItems.length > 0}
 						<p class="gbm-nota">
 							{sinItems.length} liquidación(es) elegidas no tienen items de terceros
@@ -812,13 +901,17 @@
 
 	{#snippet pie()}
 		{#if mostrarProgreso}
-			{#if enCurso}
+							{#if enCurso || agrupandoGenerados}
 				<span class="gbm-hint">
-					Al cancelar se detiene tras terminar la placa en curso.
+					{agrupandoGenerados
+						? 'Consolidando las hojas seleccionadas.'
+						: 'Al cancelar se detiene tras terminar la placa en curso.'}
 				</span>
-				<button class="btn-secondary" onclick={() => borradorQueue.cancel()}>
-					Cancelar generación
-				</button>
+				{#if enCurso}
+					<button class="btn-secondary" onclick={() => borradorQueue.cancel()}>
+						Cancelar generación
+					</button>
+				{/if}
 			{:else}
 				<button
 					class="btn-secondary"
@@ -1072,6 +1165,30 @@
 	}
 	.gbm-check-todas input:disabled {
 		cursor: not-allowed;
+	}
+	.gbm-check-agrupar {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+		margin-top: 10px;
+		padding: 12px 14px;
+		border: 1px solid var(--border-default);
+		border-radius: 14px;
+		background: var(--bg-surface);
+		cursor: pointer;
+	}
+	.gbm-check-agrupar span {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		font-size: 13px;
+		color: var(--text-primary);
+	}
+	.gbm-check-agrupar em {
+		font-style: normal;
+		font-size: 11px;
+		line-height: 1.45;
+		color: var(--text-muted);
 	}
 
 	/* ── Avisos (colores de estado) ─────────────────────────────── */

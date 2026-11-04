@@ -500,6 +500,16 @@ export const liquidacionesTercerosDescuentosAPI = {
 		return response.data;
 	},
 
+	/** Consolida varios borradores del mismo tercero en una sola hoja del canvas. */
+	async agruparBorradores(
+		cierreIds: string[]
+	): Promise<{ id: string; placa: string; placas: string[] }> {
+		const response = await apiClient.post('/api/liquidaciones-terceros/agrupar-borradores', {
+			cierre_ids: cierreIds
+		});
+		return response.data?.cierre ?? response.data;
+	},
+
 	/// Detalle completo de un LOTE de cierres del periodo.
 	///
 	/// El servidor limita a 40 ids por petición: el sentido de pedir por

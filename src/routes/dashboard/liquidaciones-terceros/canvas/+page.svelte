@@ -78,6 +78,7 @@
 	import CierreEstadoHeader from '$lib/components/liquidaciones-terceros/CierreEstadoHeader.svelte';
 	import ModalEstadoLote from '$lib/components/liquidaciones-terceros/ModalEstadoLote.svelte';
 	import GenerarBorradoresModal from '$lib/components/liquidaciones-terceros/GenerarBorradoresModal.svelte';
+	import AgruparCierresModal from '$lib/components/liquidaciones-terceros/AgruparCierresModal.svelte';
 	import ConfiguracionTercerosModal from '$lib/components/liquidaciones-terceros/ConfiguracionTercerosModal.svelte';
 	import EliminarCierreModal from '$lib/components/liquidaciones-terceros/EliminarCierreModal.svelte';
 	import ConductoresCierreModal from '$lib/components/liquidaciones-terceros/ConductoresCierreModal.svelte';
@@ -181,6 +182,26 @@
 	let cierreActivo = $state<string | null>($page.url.searchParams.get('cierre'));
 
 	let modalBorradores = $state(false);
+	let modalAgrupar = $state(false);
+	const cantidadAgrupable = $derived.by(() => {
+		const porTercero = new Map<string, { cierres: number; placas: Set<string> }>();
+		for (const h of indice) {
+			if (
+				h.estado !== 'BORRADOR' ||
+				!h.tercero_id ||
+				h.es_multi_propietario
+			)
+				continue;
+			const grupo = porTercero.get(h.tercero_id) ?? { cierres: 0, placas: new Set<string>() };
+			grupo.cierres++;
+			for (const placa of h.placas?.length ? h.placas : [h.placa]) grupo.placas.add(placa);
+			porTercero.set(h.tercero_id, grupo);
+		}
+		return [...porTercero.values()].reduce(
+			(s, grupo) => s + (grupo.cierres > 1 && grupo.placas.size > 1 ? grupo.cierres : 0),
+			0
+		);
+	});
 	/// Cambio de estado de las hojas que el usuario marque (ver ModalEstadoLote).
 	let modalEstadoLote = $state(false);
 	/**
@@ -2165,6 +2186,23 @@
 	</svg>
 {/snippet}
 
+{#snippet icoAgrupar()}
+	<svg
+		width="15"
+		height="15"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.8"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<rect x="3" y="4" width="7" height="6" rx="1.5" />
+		<rect x="14" y="14" width="7" height="6" rx="1.5" />
+		<path d="M10 7h3a3 3 0 013 3v4M14 17h-3a3 3 0 01-3-3v-1" />
+	</svg>
+{/snippet}
+
 {#snippet icoEstado()}
 	<svg
 		width="15"
@@ -2363,6 +2401,16 @@
 				icon: icoBorradores,
 				tone: 'green',
 				onSelect: () => (modalBorradores = true)
+			},
+			{
+				id: 'agrupar',
+				label: 'Agrupar borradores',
+				hint: 'Combinar en una sola hoja los borradores de varias placas que pertenecen al mismo tercero.',
+				icon: icoAgrupar,
+				badge: cantidadAgrupable,
+				disabled: cantidadAgrupable < 2,
+				disabledHint: 'Se necesitan al menos dos borradores separados del mismo tercero.',
+				onSelect: () => (modalAgrupar = true)
 			},
 			{
 				id: 'eliminar',
@@ -2593,7 +2641,17 @@
 		{anio}
 		{mes}
 		cierresExistentes={indice}
+		onAgrupadas={() => void loadInicial()}
 		onClose={() => (modalBorradores = false)}
+	/>
+{/if}
+
+{#if modalAgrupar}
+	<AgruparCierresModal
+		open={modalAgrupar}
+		hojas={indice}
+		oncerrar={() => (modalAgrupar = false)}
+		onagrupado={() => void loadInicial()}
 	/>
 {/if}
 

@@ -126,24 +126,25 @@ const COL = {
 	NUM: 0,
 	CLIENTE: 1,
 	LIQ: 2,
-	TERCERO: 3,
-	RECORRIDO: 4,
-	FECHAS: 5,
-	V_UNIDAD: 6,
-	CANT: 7,
-	ADMON_PCT: 8,
-	ADMON: 9,
-	TOTAL: 10,
-	V_LIQUIDAR: 11,
-	PLANILLA: 12,
-	ING_EXTRA_GLOBAL: 13,
-	ING_EXTRAS_AVAL: 14,
-	ING_TRANSMERALDA: 15,
-	FACTURA: 16,
-	APLICA_IMP: 17
+	PLACA: 3,
+	TERCERO: 4,
+	RECORRIDO: 5,
+	FECHAS: 6,
+	V_UNIDAD: 7,
+	CANT: 8,
+	ADMON_PCT: 9,
+	ADMON: 10,
+	TOTAL: 11,
+	V_LIQUIDAR: 12,
+	PLANILLA: 13,
+	ING_EXTRA_GLOBAL: 14,
+	ING_EXTRAS_AVAL: 15,
+	ING_TRANSMERALDA: 16,
+	FACTURA: 17,
+	APLICA_IMP: 18
 } as const;
 
-export const TOTAL_COLS = 18;
+export const TOTAL_COLS = 19;
 
 /**
  * Columnas de ACCIÓN, para que el engine les cuelgue el checkbox de
@@ -156,8 +157,8 @@ export const COL_APLICA_IMP: number = COL.APLICA_IMP;
 export const FILAS_ANOTABLES = 40;
 
 /**
- * No hay columna PLACA: la hoja ENTERA es una placa, y repetirla en cada
- * fila gastaba 110px para decir lo que ya dice la pestaña.
+ * PLACA viaja por fila: una hoja puede reunir varias placas y el tercero
+ * necesita distinguir a qué vehículo pertenece cada servicio.
  *
  * Tampoco RECARGOS, que no se usaba en este documento.
  *
@@ -172,14 +173,14 @@ export const FILAS_ANOTABLES = 40;
  * lista los quitados y permite devolverlos.
  */
 const COLUMN_HEADERS = [
-	'#', 'CLIENTE', '# LIQ', 'NOMBRE 3°', 'RECORRIDO', 'FECHAS',
+	'#', 'CLIENTE', '# LIQ', 'PLACA', 'NOMBRE 3°', 'RECORRIDO', 'FECHAS',
 	'V/UNIDAD', 'CANT', 'ADMON %', 'ADMON $', 'TOTAL', 'V/LIQUIDAR',
 	'# PLANILLA', 'ING. EXTRA GLOBAL', 'ING. EXTRAS AVAL', 'ING. COTRANSMEQ',
 	'# FACTURA', 'APLICA IMP.'
 ];
 
 const COLUMN_WIDTHS = [
-	28, 250, 100, 230, 250, 150, 91, 82, 82, 91, 98, 98, 140, 150, 150,
+	28, 250, 100, 86, 230, 250, 150, 91, 82, 82, 91, 98, 98, 140, 150, 150,
 	150, 81, 92
 ];
 
@@ -774,6 +775,7 @@ export function buildCierreFinalSheet(
 		set(row, COL.NUM, idx + 1, z ? cantZebra : cant);
 		set(row, COL.CLIENTE, it.cliente_nombre, text);
 		set(row, COL.LIQ, it.liquidacion_servicio_consecutivo, text);
+		set(row, COL.PLACA, it.placa || hoja.placa, text);
 		set(row, COL.TERCERO, it.tercero_nombre, text);
 		set(row, COL.RECORRIDO, it.recorrido, text);
 		set(row, COL.FECHAS, it.fechas, text);
@@ -890,6 +892,7 @@ export function buildCierreFinalSheet(
 			setReadOnly(row, COL.NUM, `E${idx + 1}`, eliminado);
 			setReadOnly(row, COL.CLIENTE, `ELIMINADO · ${it.cliente_nombre}`, eliminado);
 			setReadOnly(row, COL.LIQ, it.liquidacion_servicio_consecutivo, eliminado);
+			setReadOnly(row, COL.PLACA, it.placa || hoja.placa, eliminado);
 			setReadOnly(row, COL.TERCERO, it.tercero_nombre, eliminado);
 			setReadOnly(row, COL.RECORRIDO, it.recorrido, eliminado);
 			setReadOnly(row, COL.FECHAS, it.fechas, eliminado);
@@ -957,6 +960,7 @@ export function buildCierreFinalSheet(
 		// aunque `cliente` sea editable en la base: lo que se tecleara aquí se
 		// guardaría con el distintivo pegado al nombre del cliente.
 		set(row, COL.CLIENTE, `ADICIONAL · ${a.cliente || 'COTRANSMEQ'}`, adicBadge);
+		set(row, COL.PLACA, a.placa || hoja.placa, adicBase);
 		set(row, COL.TERCERO, a.tercero_nombre || '', adicBase);
 		set(row, COL.RECORRIDO, a.recorrido || '', adicBase);
 		set(row, COL.FECHAS, a.fechas || '', adicBase);

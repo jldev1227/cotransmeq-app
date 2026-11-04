@@ -47,6 +47,7 @@ function hojaDeDetalle(d: any): CierreHoja {
 		id: d.id,
 		consecutivo: txt(d.consecutivo),
 		placa: txt(d.placa),
+		placas: Array.isArray(d.placas) && d.placas.length ? d.placas : [txt(d.placa)],
 		tercero_id: d.tercero_id ?? null,
 		tercero_nombre,
 		// El detalle ya trae la ficha del tercero; sin esto la cabecera

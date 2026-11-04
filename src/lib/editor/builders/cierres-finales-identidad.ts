@@ -20,6 +20,8 @@ export interface CierreHoja {
 	id: string;
 	consecutivo: string;
 	placa: string;
+	/** Placas que forman la hoja cuando el cierre consolida varios vehículos. */
+	placas?: string[];
 	tercero_id: string | null;
 	tercero_nombre: string;
 	/**
