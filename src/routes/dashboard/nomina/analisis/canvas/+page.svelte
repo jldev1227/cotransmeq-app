@@ -98,8 +98,8 @@
 	type Tab = 'resumen' | 'bonificaciones' | 'recargos' | 'pernotes' | 'mantenimientos';
 	const TABS: { key: Tab; label: string }[] = [
 		{ key: 'resumen', label: 'Liquidaciones' },
-		{ key: 'bonificaciones', label: 'Bonificaciones' },
-		{ key: 'recargos', label: 'Recargos' },
+		{ key: 'bonificaciones', label: 'Bonificaciones marcadas' },
+		{ key: 'recargos', label: 'Recargos de planillas' },
 		{ key: 'pernotes', label: 'Pernoctes' },
 		{ key: 'mantenimientos', label: 'Mantenimientos' }
 	];
@@ -163,16 +163,15 @@
 	let firmaCargada = '';
 	let solicitudAnalisis = 0;
 
-	/// La pestaña solo activa la lectura adicional de recargos cuando se necesitan;
-	/// así el análisis de jornada no encarece el resumen ni las otras pestañas.
+	/// Bonos y recargos de planillas alimentan también el resumen y la gráfica mensual,
+	/// por eso se cargan aunque la pestaña activa sea otra.
 	const firmaServidor = $derived(
 		JSON.stringify([
 			filtros.anios,
 			filtros.meses,
 			filtros.placas,
 			filtros.conductores,
-			filtros.estados,
-			filtros.analisis === 'recargos'
+			filtros.estados
 		])
 	);
 
@@ -188,8 +187,7 @@
 				meses: filtros.meses.map(Number).filter(Boolean),
 				placas: filtros.placas,
 				conductores: filtros.conductores,
-				estados: filtros.estados,
-				incluirRecargosJornada: filtros.analisis === 'recargos'
+				estados: filtros.estados
 			});
 			if (solicitud !== solicitudAnalisis) return;
 			datos = r;
@@ -330,38 +328,31 @@
 		cantidad: number;
 		valorUnitario: number;
 		total: number;
+		fechas: string[];
 	}
 	const filasBon = $derived.by(() => {
-		const mapa = new Map<string, FilaBon>();
-		for (const l of liqsConBusqueda) {
-			for (const b of l.bonificaciones) {
-				if (!placaPasa(b.placa)) continue;
-				for (const v of b.valores) {
-					const periodo = periodoConcepto(v.mes, l.anio);
-					const { anio, clave: mk } = periodo;
-					if (!periodoReferenciaPasa(v.mes, l.anio) || v.cantidad <= 0) continue;
-					const k = `${b.placa}|${b.nombre}|${b.valor_unitario}|${l.conductor.nombre}|${anio}|${mk}`;
-					const e = mapa.get(k);
-					if (e) {
-						e.cantidad += v.cantidad;
-						e.total += v.cantidad * b.valor_unitario;
-					} else {
-						mapa.set(k, {
-							placa: b.placa ?? '—',
-							conductor: l.conductor.nombre,
-							nombre: b.nombre,
-							mes: mesNombre(mk),
-							mesClave: mk,
-							anio,
-							cantidad: v.cantidad,
-							valorUnitario: b.valor_unitario,
-							total: v.cantidad * b.valor_unitario
-						});
-					}
-				}
-			}
-		}
-		return Array.from(mapa.values());
+		const q = normalizar(filtros.q.trim());
+		return (datos?.bonificaciones_recorridos ?? [])
+			.filter((b) =>
+				!q ||
+				[b.placa, b.conductor, b.nombre].some((v) => normalizar(String(v ?? '')).includes(q))
+			)
+			.map((b): FilaBon => {
+				const anio = Number(b.mes.slice(0, 4));
+				const mk = b.mes.slice(5, 7);
+				return {
+					placa: b.placa ?? '—',
+					conductor: b.conductor,
+					nombre: b.nombre,
+					mes: mesNombre(mk),
+					mesClave: mk,
+					anio,
+					cantidad: b.cantidad,
+					valorUnitario: b.valor_unitario,
+					total: b.total,
+					fechas: b.fechas
+				};
+			});
 	});
 
 	// ── Recargos de planillas agrupados por empresa ──
@@ -375,94 +366,78 @@
 		mes: string;
 		mesClave: string;
 		anio: number;
-		dias: Set<string>;
-		valoresPorDia: Map<string, number>;
+		dias: { fecha: string }[];
 		valor: number;
 	}
 	let paginaJornada = $state(1);
-	function formatearDiasJornada(fechas: Set<string>): string {
-		const dias = Array.from(new Set(Array.from(fechas, (fecha) => Number(fecha.slice(-2)))))
-			.filter((dia) => Number.isInteger(dia) && dia >= 1 && dia <= 31)
-			.sort((a, b) => a - b);
+	function formatearDiasLaborados(dias: FilaJornada['dias']): string {
 		if (!dias.length) return '—';
-
+		const numeros = [...new Set(dias.map((dia) => Number(dia.fecha.slice(8, 10))))]
+			.filter((dia) => dia > 0)
+			.sort((a, b) => a - b);
+		if (!numeros.length) return '—';
 		const rangos: string[] = [];
-		let inicio = dias[0];
-		let fin = inicio;
-		const agregarRango = () => {
-			if (fin - inicio >= 2) {
-				rangos.push(inicio + ' al ' + fin);
-			} else if (fin > inicio) {
-				rangos.push(String(inicio), String(fin));
-			} else {
-				rangos.push(String(inicio));
-			}
-		};
-		for (const dia of dias.slice(1)) {
-			if (dia === fin + 1) {
-				fin = dia;
+		let inicio = numeros[0];
+		let anterior = numeros[0];
+		for (const dia of numeros.slice(1)) {
+			if (dia === anterior + 1) {
+				anterior = dia;
 				continue;
 			}
-			agregarRango();
+			rangos.push(inicio === anterior ? `${inicio}` : `${inicio} al ${anterior}`);
 			inicio = dia;
-			fin = dia;
+			anterior = dia;
 		}
-		agregarRango();
+		if (numeros.length) rangos.push(inicio === anterior ? `${inicio}` : `${inicio} al ${anterior}`);
 		return rangos.join(', ');
 	}
-	function agregarDiasJornada(fila: FilaJornada, detalles: { fecha: string; valor: number }[]) {
-		for (const detalle of detalles) {
-			fila.dias.add(detalle.fecha);
-			if (!fila.valoresPorDia.has(detalle.fecha)) {
-				fila.valoresPorDia.set(detalle.fecha, detalle.valor);
-			}
-		}
-		fila.valor = Array.from(fila.valoresPorDia.values()).reduce((total, valor) => total + valor, 0);
-	}
 	const filasJornada = $derived.by(() => {
-		const mapa = new Map<string, FilaJornada>();
-		for (const l of liqsConBusqueda) {
-			for (const r of l.recargos_jornada ?? []) {
-				if (!placaPasa(r.placa) || !periodoReferenciaPasa(r.mes, l.anio, l.mes)) continue;
-				const periodo = periodoConcepto(r.mes, l.anio, l.mes);
-				const { anio, clave: mk } = periodo;
-				const placa = r.placa ?? '—';
-				const empresa = r.cliente || '—';
-				const claveEmpresa = r.cliente_id ?? empresa;
-				const clave = [r.planilla_id, placa, l.conductor.nombre, claveEmpresa, anio, mk].join('|');
-				const existente = mapa.get(clave);
-				if (existente) {
-					agregarDiasJornada(existente, r.dias ?? []);
-				} else {
-					const fila: FilaJornada = {
-						planillaId: r.planilla_id,
-						planilla: r.numero_planilla || '—',
-						placa,
-						conductor: l.conductor.nombre,
-						empresaId: r.cliente_id,
-						empresa,
-						mes: mesNombre(mk),
-						mesClave: mk,
-						anio,
-						dias: new Set(),
-						valoresPorDia: new Map(),
-						valor: 0
-					};
-					agregarDiasJornada(fila, r.dias ?? []);
-					mapa.set(clave, fila);
-				}
-			}
-		}
-		return Array.from(mapa.values()).sort(
+		const q = normalizar(filtros.q.trim());
+		return (datos?.recargos_planillas ?? [])
+			.filter((r) =>
+				!q ||
+				[
+					r.placa,
+					r.conductor,
+					r.numero_planilla,
+					r.empresa
+				].some((v) => normalizar(String(v ?? '')).includes(q))
+			)
+			.map((r): FilaJornada => {
+				const anio = Number(r.mes.slice(0, 4));
+				const mk = r.mes.slice(5, 7);
+				return {
+					planillaId: r.planilla_id,
+					planilla: r.numero_planilla || '—',
+					placa: r.placa ?? '—',
+					conductor: r.conductor,
+					empresaId: r.empresa_id,
+					empresa: r.empresa,
+					mes: mesNombre(mk),
+					mesClave: mk,
+					anio,
+					dias: r.dias,
+					valor: r.valor_pagar
+				};
+			})
+			.sort(
 			(a, b) =>
 				a.placa.localeCompare(b.placa) ||
 				a.conductor.localeCompare(b.conductor, 'es') ||
 				a.mesClave.localeCompare(b.mesClave) ||
 				a.planilla.localeCompare(b.planilla, 'es') ||
 				a.empresa.localeCompare(b.empresa, 'es')
-		);
+			);
 	});
-	const totalValorJornada = $derived(filasJornada.reduce((total, fila) => total + fila.valor, 0));
+	const totalValorJornada = $derived(
+		filasJornada.reduce((total, fila) => total + (fila.valor ?? 0), 0)
+	);
+	const cantidadMarcasBonificacion = $derived(
+		filasBon.reduce((total, fila) => total + fila.cantidad, 0)
+	);
+	const cantidadDiasPlanilla = $derived(
+		filasJornada.reduce((total, fila) => total + fila.dias.length, 0)
+	);
 	const filasJornadaPagina = $derived(
 		filasJornada.slice((paginaJornada - 1) * POR_PAGINA, paginaJornada * POR_PAGINA)
 	);
@@ -594,14 +569,12 @@
 		for (const l of liqs) {
 			t.devengado += l.salario_devengado;
 			t.neto += l.sueldo_total;
-			t.bonificaciones += l.total_bonificaciones;
 			t.pernotes += l.total_pernotes;
 			t.deducciones += l.salud + l.pension + l.total_anticipos;
 			t.dias += l.dias_laborados;
 			if (l.estado_flujo === 'FIRMADA') t.firmadas++;
 		}
-		/// Las tarjetas de conceptos acompañan sus pestañas: un bono puede pagarse
-		/// en septiembre y referirse a agosto, así que no debe heredar el total del corte.
+			/// Las tarjetas de conceptos acompañan sus pestañas y sus fuentes de origen.
 		t.bonificaciones = t.bonFilas;
 		t.pernotes = t.perFilas;
 		return t;
@@ -614,6 +587,36 @@
 		fuerte?: boolean;
 	}
 	const tarjetasCifras = $derived.by(() => {
+		if (filtros.analisis === 'bonificaciones') {
+			return [
+				{
+					etiqueta: 'Bonos marcados en Recorridos',
+					valor: num.format(cantidadMarcasBonificacion),
+					detalle: `${filasBon.length} tipos de bono · días con marca`
+				},
+				{
+					etiqueta: 'Valor de las marcas',
+					valor: fmt(totales.bonificaciones),
+					detalle: 'cantidad marcada × valor vigente del bono',
+					fuerte: true
+				}
+			];
+		}
+		if (filtros.analisis === 'recargos') {
+			return [
+				{
+					etiqueta: 'Planillas con recargos',
+					valor: num.format(filasJornada.length),
+					detalle: `${num.format(cantidadDiasPlanilla)} días laborados · fuente Recargos Planillas`
+				},
+				{
+					etiqueta: 'Total a pagar',
+					valor: fmt(totalValorJornada),
+					detalle: 'Suma de los valores calculados en Recargos Planillas',
+					fuerte: true
+				}
+			];
+		}
 		const tarjetas: TarjetaCifra[] = [
 			{
 				etiqueta: 'Liquidaciones',
@@ -628,18 +631,11 @@
 			},
 			{ etiqueta: 'Devengado', valor: fmt(totales.devengado), detalle: 'salario del periodo' },
 			{
-				etiqueta: 'Bonificaciones',
+				etiqueta: 'Bonificaciones marcadas',
 				valor: fmt(totales.bonificaciones),
-				detalle: `${filasBon.length} filas · mes de referencia`
+				detalle: `${filasBon.length} grupos · marcas de Recorridos`
 			}
 		];
-		if (filtros.analisis === 'recargos') {
-			tarjetas.push({
-				etiqueta: 'Recargos de planillas',
-				valor: fmt(totalValorJornada),
-				detalle: `${filasJornada.length} grupos · Recargos por empresa`
-			});
-		}
 		tarjetas.push(
 			{
 				etiqueta: 'Pernoctes',
@@ -662,18 +658,24 @@
 		return ESTADOS.filter((e) => m.has(e)).map((e) => ({ estado: e, n: m.get(e) ?? 0 }));
 	});
 
-	/// Serie mensual sobre las liquidaciones: lo que el desprendible imprime,
-	/// que es lo que se pagó, no lo que las pestañas de detalle reparten.
+	/// Bonos y recargos usan las mismas fuentes que sus pestañas; neto y pernoctes
+	/// siguen describiendo lo pagado en cada corte.
 	const porMes = $derived.by(() => {
 		const m = new Map<string, { bon: number; rec: number; per: number; neto: number }>();
+		const obtenerMes = (clave: string) => {
+			const fila = m.get(clave) ?? { bon: 0, rec: 0, per: 0, neto: 0 };
+			m.set(clave, fila);
+			return fila;
+		};
 		for (const l of liqs) {
 			const k = `${l.anio}-${String(l.mes).padStart(2, '0')}`;
-			const e = m.get(k) ?? { bon: 0, rec: 0, per: 0, neto: 0 };
-			e.bon += l.total_bonificaciones;
-			e.rec += l.total_recargos;
+			const e = obtenerMes(k);
 			e.per += l.total_pernotes;
 			e.neto += l.sueldo_total;
-			m.set(k, e);
+		}
+		for (const fila of filasBon) obtenerMes(`${fila.anio}-${fila.mesClave}`).bon += fila.total;
+		for (const fila of filasJornada) {
+			obtenerMes(`${fila.anio}-${fila.mesClave}`).rec += fila.valor ?? 0;
 		}
 		return Array.from(m.entries())
 			.sort(([a], [b]) => a.localeCompare(b))
@@ -870,8 +872,8 @@
 			{ key: 'estado_flujo', label: 'Estado', fmt: (v) => ETIQUETA_ESTADO[v] ?? v },
 			{ key: 'dias_laborados', label: 'Días', num: true, fmt: (v) => num.format(v) },
 			{ key: 'salario_devengado', label: 'Devengado', num: true, fmt: fmt },
-			{ key: 'total_bonificaciones', label: 'Bonos', num: true, fmt: fmt },
-			{ key: 'total_recargos', label: 'Recargos', num: true, fmt: fmt },
+			{ key: 'total_bonificaciones', label: 'Bonos marcados', num: true, fmt: fmt },
+			{ key: 'total_recargos', label: 'Recargos cobrados', num: true, fmt: fmt },
 			{ key: 'total_pernotes', label: 'Pernoctes', num: true, fmt: fmt },
 			{
 				key: 'salud',
@@ -886,6 +888,7 @@
 			{ key: 'conductor', label: 'Conductor' },
 			{ key: 'nombre', label: 'Bonificación' },
 			{ key: 'mesClave', label: 'Mes', fmt: (_v, f) => `${f.mes} ${f.anio}` },
+			{ key: 'fechas', label: 'Días marcados', fmt: (v) => fechasAgrupadas(v) },
 			{ key: 'cantidad', label: 'Cantidad', num: true, fmt: (v) => num.format(v) },
 			{ key: 'valorUnitario', label: 'V. unitario', num: true, fmt: fmt },
 			{ key: 'total', label: 'Total', num: true, fmt: fmt }
@@ -894,10 +897,15 @@
 			{ key: 'placa', label: 'Placa' },
 			{ key: 'conductor', label: 'Conductor' },
 			{ key: 'planilla', label: 'Planilla' },
-			{ key: 'empresa', label: 'Empresa' },
+			{ key: 'empresa', label: 'Empresa en planilla' },
 			{ key: 'mesClave', label: 'Mes', fmt: (_v, f) => f.mes + ' ' + f.anio },
-			{ key: 'dias', label: 'Días manejados', fmt: (v) => formatearDiasJornada(v) },
-			{ key: 'valor', label: 'Valor', num: true, fmt: fmt }
+			{ key: 'dias', label: 'Días laborados', fmt: (v) => formatearDiasLaborados(v) },
+			{
+				key: 'valor',
+				label: 'Valor a pagar',
+				num: true,
+				fmt: (v) => fmt(v ?? 0)
+			}
 		],
 		pernotes: [
 			{ key: 'placa', label: 'Placa' },
@@ -981,11 +989,16 @@
 		for (const a of filtros.anios) s.add(a);
 		return Array.from(s).sort((a, b) => Number(b) - Number(a));
 	});
-	const subtitulo = $derived(
-		datos
-			? `${totales.liquidaciones} liquidación(es) · ${totales.conductores} conductor(es) · ${totales.placas} placa(s) · Σ neto ${fmt(totales.neto)}`
-			: 'cargando…'
-	);
+	const subtitulo = $derived.by(() => {
+		if (!datos) return 'cargando…';
+		if (filtros.analisis === 'bonificaciones') {
+			return `${cantidadMarcasBonificacion} marca(s) en Recorridos · ${fmt(totales.bonificaciones)} por valor de configuración`;
+		}
+		if (filtros.analisis === 'recargos') {
+			return `${filasJornada.length} planilla(s) · ${cantidadDiasPlanilla} día(s) laborados · origen Recargos Planillas`;
+		}
+		return `${totales.liquidaciones} liquidación(es) · ${totales.conductores} conductor(es) · ${totales.placas} placa(s) · Σ neto ${fmt(totales.neto)}`;
+	});
 </script>
 
 <svelte:head><title>Análisis de Nómina · Cotransmeq</title></svelte:head>
@@ -1125,7 +1138,7 @@
 			<p>{errorCarga}</p>
 			<button type="button" class="btn-secondary" onclick={() => cargar(true)}>Reintentar</button>
 		</div>
-	{:else if datos && !liqsConBusqueda.length}
+	{:else if datos && !liqsConBusqueda.length && filtros.analisis === 'resumen'}
 		<div class="an-estado">
 			<img src={mascota('vacio').src} alt="" class="an-estado-mascota" aria-hidden="true" />
 			<p>Ninguna liquidación cumple los filtros.</p>
@@ -1151,7 +1164,7 @@
 				<div class="an-card an-grafica an-grafica--ancha">
 					<header class="an-card-cabecera">
 						<h2>Por mes</h2>
-						<span>Bonificaciones, recargos y pernoctes pagados en cada corte</span>
+						<span>Bonos marcados, recargos calculados en planillas y pernoctes por mes</span>
 					</header>
 					<div class="an-lienzo">
 						{#if porMes.length}
@@ -1209,7 +1222,7 @@
 								: t.key === 'bonificaciones'
 									? filasBon.length
 									: t.key === 'recargos'
-										? (datos?.meta?.recargos_jornada_grupos ?? filasJornada.length)
+										? filasJornada.length
 										: t.key === 'pernotes'
 											? filasPer.length
 											: filasMnt.length}
@@ -1221,10 +1234,9 @@
 			{#if filtros.analisis === 'recargos' && filasJornada.length}
 				<div class="an-recargos-jornada">
 					<header class="an-card-cabecera">
-						<h2>Recargos en planillas</h2>
+						<h2>Días laborados en planillas</h2>
 						<span>
-							Días y valores agrupados por empresa ·
-							{num.format(filasJornada.length)} grupos · {fmt(totalValorJornada)}
+							Empresa, días laborados y valor salen de Recargos Planillas.
 						</span>
 					</header>
 					<div class="an-scroll">
@@ -1234,10 +1246,10 @@
 									<th><span class="an-th-btn">Placa</span></th>
 									<th><span class="an-th-btn">Conductor</span></th>
 									<th><span class="an-th-btn">Planilla</span></th>
-									<th><span class="an-th-btn">Empresa</span></th>
+									<th><span class="an-th-btn">Empresa en planilla</span></th>
 									<th><span class="an-th-btn">Mes</span></th>
-									<th><span class="an-th-btn">Días manejados</span></th>
-									<th class="an-th--num"><span class="an-th-btn">Valor</span></th>
+									<th><span class="an-th-btn">Días laborados</span></th>
+									<th class="an-th--num"><span class="an-th-btn">Valor a pagar</span></th>
 								</tr>
 							</thead>
 							<tbody>
@@ -1246,10 +1258,10 @@
 										<td data-etiqueta="Placa">{f.placa}</td>
 										<td data-etiqueta="Conductor">{f.conductor}</td>
 										<td data-etiqueta="Planilla">{f.planilla}</td>
-										<td data-etiqueta="Empresa">{f.empresa}</td>
+										<td data-etiqueta="Empresa en planilla">{f.empresa}</td>
 										<td data-etiqueta="Mes">{f.mes} {f.anio}</td>
-										<td data-etiqueta="Días manejados">{formatearDiasJornada(f.dias)}</td>
-										<td class="an-td--num" data-etiqueta="Valor">
+										<td data-etiqueta="Días laborados">{formatearDiasLaborados(f.dias)}</td>
+										<td class="an-td--num" data-etiqueta="Valor a pagar">
 											<strong>{fmt(f.valor)}</strong>
 										</td>
 									</tr>
@@ -1261,7 +1273,7 @@
 						pagina={paginaJornada}
 						total={filasJornada.length}
 						porPagina={POR_PAGINA}
-						nombreItems="grupos de recargos por empresa"
+						nombreItems="planillas con recargos"
 						onCambiar={(p) => (paginaJornada = p)}
 					/>
 				</div>

@@ -102,16 +102,6 @@ export interface LiquidacionAnalisis {
 		valor_unitario: number;
 		valores: { mes: string; cantidad: number }[];
 	}[];
-	recargos: {
-		vehiculo_id: string | null;
-		placa: string | null;
-		valor: number;
-		paga_cliente: boolean;
-		cliente_id: string | null;
-		cliente: string;
-		mes: string;
-		porcentaje_propietario: number;
-	}[];
 	recargos_jornada: {
 		planilla_id: string;
 		numero_planilla: string | null;
@@ -120,7 +110,7 @@ export interface LiquidacionAnalisis {
 		cliente_id: string | null;
 		cliente: string;
 		mes: string;
-		dias: { fecha: string; valor: number }[];
+		dias: { fecha: string }[];
 		valor: number;
 	}[];
 	pernotes: {
@@ -138,8 +128,37 @@ export interface LiquidacionAnalisis {
 	}[];
 }
 
+export interface BonificacionRecorridoAnalisis {
+	conductor_id: string;
+	conductor: string;
+	placa: string | null;
+	nombre: string;
+	mes: string;
+	cantidad: number;
+	valor_unitario: number;
+	total: number;
+	fechas: string[];
+}
+
+export interface RecargoPlanillaAnalisis {
+	planilla_id: string;
+	numero_planilla: string | null;
+	estado: string;
+	conductor_id: string;
+	conductor: string;
+	vehiculo_id: string | null;
+	placa: string | null;
+	empresa_id: string;
+	empresa: string;
+	mes: string;
+	dias: { fecha: string }[];
+	valor_pagar: number;
+}
+
 export interface AnalisisNominaDTO {
 	liquidaciones: LiquidacionAnalisis[];
+	bonificaciones_recorridos: BonificacionRecorridoAnalisis[];
+	recargos_planillas: RecargoPlanillaAnalisis[];
 	catalogos: {
 		anios: number[];
 		placas: string[];
@@ -174,7 +193,6 @@ export const nominaCanvasAPI = {
 		placas?: string[];
 		conductores?: string[];
 		estados?: string[];
-		incluirRecargosJornada?: boolean;
 	}): Promise<AnalisisNominaDTO> {
 		const params: Record<string, string | boolean> = {};
 		for (const [k, v] of Object.entries(filtros)) {
