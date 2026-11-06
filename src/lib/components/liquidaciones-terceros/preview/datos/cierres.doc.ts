@@ -342,6 +342,8 @@ export interface PropietarioReparto {
 	retenciones: number;
 	/** Cuota de los anticipos que se descuentan por igual. */
 	anticiposIguales: number;
+	/** Cuota por anticipo, con el concepto original para identificar el descuento. */
+	anticiposIgualesDetalle: Array<{ concepto: string; valor: number }>;
 	/** Valor liquidable menos retenciones. NO se recorta a cero. */
 	neto: number;
 }
@@ -383,6 +385,10 @@ function repartoCore(
 	const anticiposIguales = anticipos.filter((a) => a.dividir_igual_propietarios === true);
 	const anticiposIgualesTotal = anticiposIguales.reduce((s, a) => s + n(a.valor_total), 0);
 	const anticiposPorPropietario = new Map<string, number>();
+	const anticiposDetallePorPropietario = new Map<
+		string,
+		Array<{ concepto: string; valor: number }>
+	>();
 	for (const anticipo of anticiposIguales) {
 		const partes = repartirAnticipoIgual(
 			n(anticipo.valor_total),
@@ -390,6 +396,9 @@ function repartoCore(
 		);
 		for (const [id, valor] of partes) {
 			anticiposPorPropietario.set(id, (anticiposPorPropietario.get(id) ?? 0) + valor);
+			const detalle = anticiposDetallePorPropietario.get(id) ?? [];
+			detalle.push({ concepto: anticipo.concepto, valor });
+			anticiposDetallePorPropietario.set(id, detalle);
 		}
 	}
 	const descuentosAntesDeRepartir = descuentosGlobales - anticiposIgualesTotal;
@@ -436,6 +445,7 @@ function repartoCore(
 				valorNetoBase,
 				retenciones,
 				anticiposIguales: anticiposPorPropietario.get(p.id) ?? 0,
+				anticiposIgualesDetalle: anticiposDetallePorPropietario.get(p.id) ?? [],
 				neto: valorNetoBase - retenciones - (anticiposPorPropietario.get(p.id) ?? 0)
 			};
 		})
@@ -583,15 +593,6 @@ function bloquesCopropietarios(
 					valor: restado(totalDescuentos - reparto.anticiposIguales)
 				}
 			},
-			...(reparto.anticiposIguales !== 0
-				? [{
-						celdas: {
-							concepto: 'ANTICIPOS IGUALES DESPUÉS DE IMPUESTOS',
-							porcentaje: '',
-							valor: restado(reparto.anticiposIguales)
-						}
-					}]
-				: []),
 			{
 				celdas: {
 					concepto: 'TOTAL A PAGAR',
@@ -639,14 +640,16 @@ function bloquesCopropietarios(
 				});
 			}
 			if (p.anticiposIguales !== 0) {
-				filas.push({
-					variante: 'categoria',
-					celdas: {
-						concepto: '(−) Anticipos divididos por igual',
-						porcentaje: '',
-						valor: restado(p.anticiposIguales)
-					}
-				});
+				filas.push(
+					...p.anticiposIgualesDetalle.filter((a) => a.valor !== 0).map((anticipo) => ({
+						variante: 'categoria' as const,
+						celdas: {
+							concepto: `(−) ${anticipo.concepto}`,
+							porcentaje: '',
+							valor: restado(anticipo.valor)
+						}
+					}))
+				);
 			}
 
 			const subtitulo = [
@@ -715,14 +718,14 @@ function bloquesCopropietarios(
 						];
 						if (p.anticiposIguales !== 0) {
 							filas.push(
-								{
-									variante: 'categoria',
+								...p.anticiposIgualesDetalle.filter((a) => a.valor !== 0).map((anticipo) => ({
+									variante: 'categoria' as const,
 									celdas: {
-										concepto: '(−) Anticipos divididos por igual',
+										concepto: `(−) ${anticipo.concepto}`,
 										porcentaje: '',
-										valor: restado(p.anticiposIguales)
+										valor: restado(anticipo.valor)
 									}
-								},
+								})),
 								{
 									destacada: true,
 									celdas: {

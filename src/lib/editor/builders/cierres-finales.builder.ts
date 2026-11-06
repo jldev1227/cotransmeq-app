@@ -1679,16 +1679,19 @@ export function buildCierreFinalSheet(
 			(s, a) => s + n(a.valor_total),
 			0
 		);
+		const anticiposRepartidos = anticiposEnPartesIguales.map((anticipo) => ({
+			anticipo,
+			partes: repartirAnticipoIgual(
+				n(anticipo.valor_total),
+				coproOrdenados.map((p) => ({ id: p.id, orden: p.orden }))
+			)
+		}));
 		const descuentosGenerales =
 			totalCostosLaborales + totalGastos + totalAnticipos - totalAnticiposIguales;
 		const valorServicioReparto = totalServicio - descuentosGenerales;
 		const facturarMap = repartirValor(valorServicioReparto, propsEfectivos);
 		const anticiposPorPropietario = new Map<string, number>();
-		for (const anticipo of anticiposEnPartesIguales) {
-			const partes = repartirAnticipoIgual(
-				n(anticipo.valor_total),
-				coproOrdenados.map((p) => ({ id: p.id, orden: p.orden }))
-			);
+		for (const { partes } of anticiposRepartidos) {
 			for (const [id, valor] of partes) {
 				anticiposPorPropietario.set(id, (anticiposPorPropietario.get(id) ?? 0) + valor);
 			}
@@ -1865,15 +1868,18 @@ export function buildCierreFinalSheet(
 			});
 			row++;
 			if (totalAnticiposIguales !== 0) {
-				etiquetaMatriz(row, '(−) ANTICIPOS DIVIDIDOS POR IGUAL', {
-					...secTfStyle, cl: { rgb: RED }
-				} as any);
-				conRetenciones.forEach((p, i) => {
-					set(row, COL_PRIMER_COPRO + i, anticiposPorPropietario.get(p.id) ?? 0, {
-						...nominaCellBase, ...moneda
+				for (const { anticipo, partes } of anticiposRepartidos) {
+					if (n(anticipo.valor_total) === 0) continue;
+					etiquetaMatriz(row, `(−) ${anticipo.concepto}`, {
+						...secTfStyle, cl: { rgb: RED }
 					} as any);
-				});
-				row++;
+					conRetenciones.forEach((p, i) => {
+						set(row, COL_PRIMER_COPRO + i, partes.get(p.id) ?? 0, {
+							...nominaCellBase, ...moneda
+						} as any);
+					});
+					row++;
+				}
 			}
 
 			etiquetaMatriz(row, '(=) VALOR A PAGAR', { ...secTfStyle, cl: { rgb: TEXTO_MARCA } } as any);
@@ -1946,15 +1952,21 @@ export function buildCierreFinalSheet(
 				row++;
 				const anticipoIgual = anticiposPorPropietario.get(p.id) ?? 0;
 				if (anticipoIgual !== 0) {
-					set(row, 0, '(−) ANTICIPOS DIVIDIDOS POR IGUAL', conceptoFila);
-					merge(row, 0, 3);
-					soloEstilo(row, 1, 3, conceptoFila);
-					cellData[row][0] = {
-						v: '(−) ANTICIPOS DIVIDIDOS POR IGUAL',
-						t: CellValueType.STRING, s: conceptoFila
-					};
-					set(row, 4, anticipoIgual, { ...conceptoFila, ...moneda } as any);
-					row++;
+					for (const { anticipo, partes } of anticiposRepartidos) {
+						const valorAnticipo = partes.get(p.id) ?? 0;
+						if (valorAnticipo === 0) continue;
+						const etiqueta = `(−) ${anticipo.concepto}`;
+						set(row, 0, etiqueta, conceptoFila);
+						merge(row, 0, 3);
+						soloEstilo(row, 1, 3, conceptoFila);
+						cellData[row][0] = {
+							v: etiqueta,
+							t: CellValueType.STRING,
+							s: conceptoFila
+						};
+						set(row, 4, valorAnticipo, { ...conceptoFila, ...moneda } as any);
+						row++;
+					}
 					set(row, 0, '(=) NETO TRAS ANTICIPOS', conceptoFilaFuerte);
 					merge(row, 0, 3);
 					soloEstilo(row, 1, 3, conceptoFilaFuerte);
