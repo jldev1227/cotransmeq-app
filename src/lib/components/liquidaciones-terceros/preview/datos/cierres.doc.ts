@@ -9,7 +9,7 @@
  *   3. Gastos de vehículo
  *   4. Anticipos del vehículo
  *   5. Impuestos y retenciones (o el reparto por copropietario)
- *   6. VALOR A LIQUIDAR, TOTAL DESCUENTOS y TOTAL A PAGAR
+ *   6. VALOR A FACTURAR, TOTAL DESCUENTOS (anticipos) y TOTAL A PAGAR
  *
  * ── De dónde salen los números ──
  * De `detalles[cierreId]`, es decir de lo que el canvas tiene EN MEMORIA,
@@ -351,7 +351,7 @@ export interface RepartoCierre {
 	descuentosGlobales: number;
 	/** `totalServicio − descuentosGlobales`, base del pago por propietario. */
 	valorServicio: number;
-	/** Anticipos, único concepto del resumen DESCUENTOS ANTICIPO. */
+	/** Anticipos, único concepto del resumen TOTAL DESCUENTOS. */
 	totalAnticipos: number;
 	/** Servicios menos costos de nómina y gastos del vehículo. */
 	totalFacturable: number;
@@ -494,18 +494,9 @@ function basesDelReparto(
 			.filter((it) => !it.excluido)
 			.reduce((s, it) => s + n(it.valor_liquidar), 0) +
 		adicionalesConValorALiquidar.reduce((s, a) => s + n(a.valor_liquidar), 0);
-	const totalServicios =
-		itemsConValorALiquidar
-			.filter((it) => !it.excluido)
-			.reduce((s, it) => s + n(it.total_facturado), 0) +
-		adicionalesConValorALiquidar.reduce(
-			(s, a) => s + n(a.valor_unitario) * (n(a.cantidad) || 1),
-			0
-		);
-
 	return {
 		totalServicio,
-		totalFacturable: totalServicios - gastos.total - totalCostosLaborales,
+		totalFacturable: totalServicio - gastos.total - totalCostosLaborales,
 		totalAnticipos: anticipos.total,
 		descuentosGlobales: totalCostosLaborales + gastos.total + anticipos.total,
 		impuestos: conceptos
@@ -552,9 +543,9 @@ function bloquesCopropietarios(
 			{
 				destacada: true,
 				celdas: {
-					concepto: 'VALOR A LIQUIDAR',
+					concepto: 'VALOR A FACTURAR',
 					porcentaje: '',
-					valor: reparto.totalServicio
+					valor: reparto.totalFacturable
 				}
 			},
 			{
@@ -568,7 +559,7 @@ function bloquesCopropietarios(
 				celdas: {
 					concepto: 'TOTAL A PAGAR',
 					porcentaje: '',
-					valor: reparto.totalServicio - totalDescuentos
+					valor: reparto.totalFacturable - totalDescuentos
 				}
 			}
 		]
@@ -829,18 +820,16 @@ export function documentoCierre(o: {
 		.reduce((s, c) => s + n(c.valor_total), 0);
 
 	const totalServicio = Number(totalesItems.valor_liquidar);
-	// El valor bruto facturado sigue en la tabla de items. El total pagable
-	// parte de V/LIQUIDAR, igual que el canvas y el total persistido del cierre.
-	// Los costos, gastos, impuestos y anticipos son los descuentos del cierre.
-	const valorAFacturar = Number(totalesItems.total) - gastos.total - totalCostosLaborales;
-	const totalDescuentos =
-		totalCostosLaborales + gastos.total + impuestosBloque.total + anticipos.total;
-	const totalPagar = totalServicio - totalDescuentos;
+	// Facturar parte de la suma V/LIQUIDAR, después de costos laborales y gastos
+	// del vehículo. El resumen de descuentos contiene únicamente los anticipos.
+	const valorAFacturar = totalServicio - gastos.total - totalCostosLaborales;
+	const totalDescuentos = anticipos.total;
+	const totalPagar = valorAFacturar - totalDescuentos;
 
 	// ── Copropietarios ──
 	const esMulti = !!hoja.es_multi_propietario && copropietarios.length > 0;
 	// El reparto interno conserva la liquidación por propietario; el resumen
-	// del documento muestra por separado facturación neta de gastos y anticipos.
+	// del documento muestra facturación neta de nómina/gastos y resta anticipos.
 	const descuentosGlobales = totalCostosLaborales + gastos.total + anticipos.total;
 	const sumaPct = copropietarios.reduce((s, p) => s + n(p.porcentaje), 0);
 
@@ -950,13 +939,13 @@ export function documentoCierre(o: {
 	// card, y lo que va a conceptos ni siquiera se paga. Un TOTAL A PAGAR
 	// único al pie se leía como el cheque de la placa cuando en realidad era
 	// la suma de pagos a personas distintas más un abono interno; además
-	// repetía, con otra cifra, los «Descuentos anticipo» que ya salen arriba en el
+	// repetía, con otra cifra, el total de anticipos que ya sale arriba en el
 	// resumen del reparto (ese excluye las retenciones, que van por
 	// propietario). El documento cierra en el reparto.
 	const resumen: LineaResumen[] | undefined = esMulti
 		? undefined
 		: [
-				{ label: 'VALOR A LIQUIDAR', valor: totalServicio },
+				{ label: 'VALOR A FACTURAR', valor: valorAFacturar },
 				{ label: 'TOTAL DESCUENTOS', valor: totalDescuentos, descuento: true },
 				{ label: 'TOTAL A PAGAR', valor: totalPagar, fuerte: true }
 			];

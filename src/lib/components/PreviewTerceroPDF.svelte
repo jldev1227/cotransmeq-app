@@ -526,6 +526,11 @@
 				(s: number, it: any) => s + (it.liquidacion_tercero?.total_facturado || 0),
 				0
 			) + adicionalesBruto;
+		const totalLiquidar =
+			items.reduce(
+				(s: number, it: any) => s + (it.liquidacion_tercero?.valor_liquidar || 0),
+				0
+			) + adicionalesNeto;
 		return {
 			totalVUnidad:
 				items.reduce((s: number, it: any) => s + (it.liquidacion_tercero?.valor_unitario || 0), 0) +
@@ -542,10 +547,8 @@
 			totalGastosVehiculo,
 			totalCostosLaborales,
 			totalAnticipos,
-			valorAFacturar: totalFacturado - totalGastosVehiculo - totalCostosLaborales,
-			totalLiquidar:
-				items.reduce((s: number, it: any) => s + (it.liquidacion_tercero?.valor_liquidar || 0), 0) +
-				adicionalesNeto,
+			valorAFacturar: totalLiquidar - totalGastosVehiculo - totalCostosLaborales,
+			totalLiquidar,
 			totalIngresoExtraGlobal: items.reduce(
 				(s: number, it: any) => s + (it.liquidacion_tercero?.ingreso_extra_global || 0),
 				0
@@ -1287,7 +1290,7 @@
 			font-weight:700;
 		"
 					>
-						<span>DESCUENTOS ANTICIPO:</span>
+						<span>TOTAL DESCUENTOS:</span>
 						<span style="color:#dc2626;">
 							{COP(pdfTotales.totalAnticipos)}
 						</span>

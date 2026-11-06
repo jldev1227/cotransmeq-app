@@ -10,7 +10,7 @@
 //   6. GASTOS DE VEHICULO — COMBUSTIBLE, EXAMENES MEDICOS Y DOTACION.
 //   7. ANTICIPOS DEL VEHICULO.
 //   8. IMPUESTOS Y RETENCIONES.
-//   9. RESUMEN (TOTAL DESCUENTOS / TOTAL A PAGAR).
+//   9. RESUMEN (VALOR A FACTURAR / anticipos / TOTAL A PAGAR).
 //  10. Firmas (LIQUIDADO POR / ACEPTADO POR).
 //
 // Se carga `exceljs` con `import()` dinámico para code-splitting (la librería pesa ~1MB).
@@ -661,7 +661,7 @@ async function buildLiquidacionSheet(
 	row = writeImpuestosSection(ws, row, item);
 	row++;
 
-	// ── 9. RESUMEN: TOTAL DESCUENTOS / TOTAL A PAGAR ───────
+	// ── 9. RESUMEN: VALOR A FACTURAR / DESCUENTOS / TOTAL A PAGAR ─
 	row = writeResumen(ws, row, item, totales);
 }
 
@@ -1573,44 +1573,66 @@ function writeSubtotalRow(
 	label: string,
 	total: number,
 	accent: string,
-	bgSoft: string
+	bgSoft: string,
+	size = 10
 ): number {
 	// Layout 6 cols: label A:E merged, value F
 	ws.mergeCells(`A${row}:E${row}`);
 	const labelCell = setCell(ws, `A${row}`, label, {
-		size: 10,
+		size,
 		bold: true,
 		align: 'right',
 		fill: bgSoft
 	});
-	labelCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: accent } };
+	labelCell.font = { name: 'Calibri', size, bold: true, color: { argb: accent } };
 	for (let c = 2; c <= 5; c++) {
 		const cell = ws.getCell(row, c);
 		cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgSoft } };
 		cell.border = border();
 	}
 	const valCell = setCell(ws, `F${row}`, total, {
-		size: 11,
+		size: size + 1,
 		bold: true,
 		align: 'right',
 		fill: bgSoft,
 		numFmt: COP_FMT
 	});
-	valCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: accent } };
-	ws.getRow(row).height = 20;
+	valCell.font = { name: 'Calibri', size: size + 1, bold: true, color: { argb: accent } };
+	ws.getRow(row).height = size >= 12 ? 26 : 20;
 	return row + 1;
 }
 
 function writeResumen(ws: any, startRow: number, item: any, totales: any): number {
 	let row = startRow;
-	const totalPagar = (totales.totalLiquidar || 0) - (Number(item.total_descuentos) || 0);
+	const conceptos = Array.isArray(item?.conceptos) ? item.conceptos : [];
+	const sumarConcepto = (tipo: string) =>
+		conceptos
+			.filter((c: any) => c?.tipo === tipo && !c?.deleted_at)
+			.reduce((s: number, c: any) => s + (Number(c?.valor_total) || 0), 0);
+	const totalCostosLaborales = sumarConcepto('COSTO_LABORAL');
+	const totalGastosVehiculo = sumarConcepto('GASTO_OPERATIVO');
+	const totalAnticipos = sumarConcepto('ANTICIPO');
+	const valorAFacturar =
+		(Number(totales.totalLiquidar) || 0) - totalCostosLaborales - totalGastosVehiculo;
+	const totalPagar = valorAFacturar - totalAnticipos;
 
 	// Layout alineado con IMPUESTOS / ANTICIPOS:
 	//   Label: A:E (5 cols merged, right-align)
 	//   F:    valor (con fill+border y formato monetario)
 	// Sin auto-fill de columnas 7+ (evita franjas de celdas vacías).
 
-	// ── TOTAL DESCUENTOS ─────────────────────────────────
+	// ── VALOR A FACTURAR ──────────────────────────────────
+	row = writeSubtotalRow(
+		ws,
+		row,
+		'VALOR A FACTURAR',
+		valorAFacturar,
+		AMBER,
+		AMBER_SOFT,
+		12
+	);
+
+	// ── TOTAL DESCUENTOS: anticipos únicamente ────────────
 	ws.mergeCells(`A${row}:E${row}`);
 	setCell(ws, `A${row}`, 'TOTAL DESCUENTOS', {
 		size: 12,
@@ -1626,7 +1648,7 @@ function writeResumen(ws: any, startRow: number, item: any, totales: any): numbe
 		cell.border = border();
 	}
 	// F: valor
-	setCell(ws, `F${row}`, Number(item.total_descuentos) || 0, {
+	setCell(ws, `F${row}`, totalAnticipos, {
 		size: 13,
 		bold: true,
 		color: RED,
