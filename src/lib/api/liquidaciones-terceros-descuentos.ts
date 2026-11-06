@@ -115,7 +115,9 @@ export interface ConceptoDescuento {
 	base_calculo?: number | null;
 	calculado: boolean;
 	observaciones?: string | null;
+	dividir_igual_propietarios?: boolean;
 	orden: number;
+	version?: number;
 	/// FK opcional al copropietario (modo multi-propietario). Solo aplica a
 	/// filas de tipo IMPUESTO; NULL cuando el cierre es de un solo propietario.
 	propietario_id?: string | null;
@@ -213,6 +215,8 @@ export interface LiquidacionTerceroFinalPropietario {
 	/// Si se le calculan retenciones sobre su valor a facturar. FALSE para
 	/// pagos internos por concepto (abono): no generan egreso real ni tributan.
 	aplica_retenciones?: boolean;
+	/// Exento de impuestos, sin convertirlo en pago interno ni cambiar el destino del dinero.
+	exento_impuestos?: boolean;
 	orden?: number;
 	created_at?: string;
 	updated_at?: string;
@@ -837,6 +841,19 @@ export const liquidacionesTercerosDescuentosAPI = {
 	}> {
 		const response = await apiClient.delete(
 			`/api/liquidaciones-terceros/conceptos-fila/${conceptoId}`
+		);
+		return response.data;
+	},
+
+	/** Define si un anticipo se resta por igual a todos los propietarios después de impuestos. */
+	async actualizarDivisionIgualAnticipo(
+		conceptoId: string,
+		dividirIgual: boolean,
+		baseVersion: number
+	) {
+		const response = await apiClient.patch(
+			`/api/liquidaciones-terceros/conceptos-fila/${conceptoId}/reparto-igual`,
+			{ dividir_igual_propietarios: dividirIgual, base_version: baseVersion }
 		);
 		return response.data;
 	},

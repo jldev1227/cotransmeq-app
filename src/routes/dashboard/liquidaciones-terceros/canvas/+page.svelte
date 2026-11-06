@@ -2556,6 +2556,7 @@
 		{anio}
 		{mes}
 		valorLiquidar={Number(detalleActivo.hoja.valor_liquidar) || 0}
+		propietariosCount={detalleActivo.copropietarios.length}
 		onClose={async () => {
 			modalConceptos = false;
 			// El remonte se hace UNA vez, al cerrar: las altas de dentro solo

@@ -61,6 +61,8 @@ ordena el DTO antes de montar el libro, sin cambiar la persistencia.
 
 El color manual de las hojas de cierres finales se guarda en la base y se
 difunde a todas las sesiones activas del periodo, incluso si comparten usuario.
+En cierres multi-propietario, las filas de anticipos repartidos por igual llevan
+el concepto registrado y la cuota de cada propietario.
 El orden arrastrado de las pestañas sí se guarda localmente por corte. En las
 filas del bloque de descuentos, el salario es editable; VALOR y TOTAL de
 prestaciones y seguridad social se calculan con sus fórmulas y no aceptan

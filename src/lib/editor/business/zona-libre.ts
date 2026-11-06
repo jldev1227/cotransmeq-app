@@ -76,6 +76,8 @@ interface HojaEditable {
 	filasBloqueadas: Set<number>;
 	/// Celdas de fórmula: no se anotan ni se editan desde el canvas.
 	celdasBloqueadas: Set<string>;
+	/// Campos con binding: las anotaciones antiguas no deben taparlos.
+	celdasConBinding: Set<string>;
 	/// Nombre → celda que el builder declara editable-y-persistente por clave.
 	celdaPorClave: Map<string, { fila: number; columna: number }>;
 	/// `${fila}:${columna}` → nombre. El índice inverso, para no recorrer el
@@ -98,6 +100,7 @@ export function registrarHojaEditable(
 		itemPorFila?: Map<number, string>;
 		filasBloqueadas?: Iterable<number>;
 		celdasBloqueadas?: Iterable<{ fila: number; columna: number }>;
+		celdasConBinding?: Iterable<{ fila: number; columna: number }>;
 		soloDebajo?: boolean;
 		celdasClave?: Record<string, { fila: number; columna: number }>;
 	}
@@ -114,6 +117,9 @@ export function registrarHojaEditable(
 		filasBloqueadas: new Set(datos.filasBloqueadas ?? []),
 		celdasBloqueadas: new Set(
 			Array.from(datos.celdasBloqueadas ?? [], ({ fila, columna }) => `${fila}:${columna}`)
+		),
+		celdasConBinding: new Set(
+			Array.from(datos.celdasConBinding ?? [], ({ fila, columna }) => `${fila}:${columna}`)
 		),
 		soloDebajo: datos.soloDebajo ?? false,
 		celdaPorClave,
@@ -137,6 +143,7 @@ export function anclaDe(
 	const h = hojas.get(clave(unitId, sheetId));
 	if (!h) return null;
 	if (h.celdasBloqueadas.has(`${fila}:${columna}`)) return null;
+	if (h.celdasConBinding.has(`${fila}:${columna}`)) return null;
 	// Las filas marcadas por el builder son parte del bloque estructurado,
 	// aunque no tengan binding editable. Nunca deben caer como anotaciones.
 	if (h.filasBloqueadas.has(fila)) return null;
@@ -190,30 +197,34 @@ export function esCeldaBloqueada(
 export function filaDeAncla(
 	unitId: string,
 	sheetId: string,
-	a: { ancla_tipo?: string; ancla_ref?: string; offset_fila: number }
+	a: { ancla_tipo?: string; ancla_ref?: string; offset_fila: number; columna?: number }
 ): number | null {
 	const h = hojas.get(clave(unitId, sheetId));
 	if (!h) return null;
 	const tipo = a.ancla_tipo ?? 'fila';
+	const validar = (fila: number | null): number | null => {
+		if (fila == null || h.filasBloqueadas.has(fila)) return null;
+		if (a.columna != null && h.celdasConBinding.has(`${fila}:${a.columna}`)) return null;
+		return fila;
+	};
 	// La cabecera se guarda por fila absoluta: no hay nada que recalcular.
 	if (tipo === 'top') {
-		const fila = a.offset_fila;
-		return h.filasBloqueadas.has(fila) ? null : fila;
+		return validar(a.offset_fila);
 	}
 	if (tipo === 'clave') {
 		// Si el builder ya no declara esa clave, el parámetro dejó de existir:
 		// se ignora en vez de caer sobre una celda cualquiera.
 		const fila = h.celdaPorClave.get(String(a.ancla_ref ?? ''))?.fila ?? null;
-		return fila == null || h.filasBloqueadas.has(fila) ? null : fila;
+		return validar(fila);
 	}
 	if (tipo === 'item') {
 		for (const [fila, id] of h.itemPorFila) {
-			if (id === a.ancla_ref) return h.filasBloqueadas.has(fila) ? null : fila;
+			if (id === a.ancla_ref) return validar(fila);
 		}
 		return null;
 	}
 	const fila = h.finItems + a.offset_fila;
-	return h.filasBloqueadas.has(fila) ? null : fila;
+	return validar(fila);
 }
 
 export function limpiarHojasEditables(unitId: string): void {

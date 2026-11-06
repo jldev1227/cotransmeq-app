@@ -73,7 +73,7 @@ import {
 	type CierreHoja
 } from './cierres-finales-identidad';
 import { colorDeHoja } from './cierres-finales-estado';
-import { repartirValor } from '../business/reparto-propietarios';
+import { repartirAnticipoIgual, repartirValor } from '../business/reparto-propietarios';
 import { IDENTIDAD } from './identidad-empresa';
 import { contraste } from './colores-canvas';
 
@@ -291,6 +291,8 @@ export interface CopropietarioCierre {
 	 * pagos internos por concepto (abono): no generan egreso real ni tributan.
 	 */
 	aplica_retenciones: boolean;
+	/** Exento de impuestos y retenciones, pero con pago normal al propietario. */
+	exento_impuestos: boolean;
 	/** Posición en la cascada (menor = primero). */
 	orden: number;
 }
@@ -485,6 +487,16 @@ export function buildCierreFinalSheet(
 		binding: Omit<CierreBinding, 'cierreId'>
 	) => {
 		if (!editable) return;
+		bindings.push({ r, c, binding: { ...binding, cierreId: hoja.id } });
+	};
+
+	/** En LIQUIDADA solo se permite ajustar la tarifa del impuesto del cierre. */
+	const bindTarifaImpuesto = (
+		r: number,
+		c: number,
+		binding: Omit<CierreBinding, 'cierreId'>
+	) => {
+		if (!editable && hoja.estado !== 'LIQUIDADA') return;
 		bindings.push({ r, c, binding: { ...binding, cierreId: hoja.id } });
 	};
 
@@ -1538,7 +1550,11 @@ export function buildCierreFinalSheet(
 	// prorratean por copropietario y se ven en la matriz de abajo. Es la
 	// misma regla del editor tabular.
 	const impuestos = conceptos
-		.filter((c) => c.tipo === 'IMPUESTO')
+		.filter((c) => {
+			if (c.tipo !== 'IMPUESTO') return false;
+			const propietario = copropietarios.find((p) => p.id === (c as any).propietario_id);
+			return propietario?.exento_impuestos !== true;
+		})
 		.sort((a, b) => (ORDEN_IMPUESTOS[a.concepto] ?? 999) - (ORDEN_IMPUESTOS[b.concepto] ?? 999));
 	const totalImpuestos = impuestos.reduce((s, c) => s + n(c.valor_total), 0);
 	const anclaImpuestos = row;
@@ -1569,18 +1585,21 @@ export function buildCierreFinalSheet(
 			merge(row, 0, 1);
 			if (!cellData[row]) cellData[row] = {};
 			cellData[row][1] = { s: nominaCellBase };
-			set(row, 2, i.porcentaje != null ? `${n(i.porcentaje).toFixed(2)}%` : '—',
-				{ ...nominaCellBase, ht: HorizontalAlign.RIGHT });
+			setPorcentaje(row, 2, n(i.porcentaje), {
+				...nominaCellBase, ht: HorizontalAlign.RIGHT
+			});
+			bindTarifaImpuesto(row, 2, {
+				entityType: 'concepto', entityId: i.id!, field: 'porcentaje', section: 'impuestos'
+			});
 			set(row, 3, n(i.base_calculo), {
 				...nominaCellBase, ht: HorizontalAlign.RIGHT, n: { pattern: '"$"#,##0' }
 			} as any);
 			set(row, 4, n(i.valor_total), {
 				...nominaCellBase, ht: HorizontalAlign.RIGHT, n: { pattern: '"$"#,##0' }
 			} as any);
-			// Los impuestos los calcula ÍNTEGRAMENTE el servidor
-			// (`calcularImpuestos`), incluida la regla de que AVISOS y
-			// SOBRETASA gravan sobre el VALOR de RETENCION_ICA. Ninguna celda
-			// es editable; se marcan derivadas para poder repintarlas.
+			// El porcentaje permite un override específico de este cierre; base
+			// y valor siguen siendo derivados del servidor. AVISOS y SOBRETASA
+			// gravan sobre el valor efectivo de RETENCION_ICA.
 			bindDerivada(row, 3, {
 				entityType: 'concepto', entityId: i.id!, field: 'base_calculo', section: 'impuestos'
 			});
@@ -1653,9 +1672,30 @@ export function buildCierreFinalSheet(
 			efectivo: n(p.porcentaje_efectivo),
 			orden: p.orden
 		}));
-		const descuentosGenerales = totalCostosLaborales + totalGastos + totalAnticipos;
+		const anticiposEnPartesIguales = anticipos.filter(
+			(a) => a.dividir_igual_propietarios === true
+		);
+		const totalAnticiposIguales = anticiposEnPartesIguales.reduce(
+			(s, a) => s + n(a.valor_total),
+			0
+		);
+		const anticiposRepartidos = anticiposEnPartesIguales.map((anticipo) => ({
+			anticipo,
+			partes: repartirAnticipoIgual(
+				n(anticipo.valor_total),
+				coproOrdenados.map((p) => ({ id: p.id, orden: p.orden }))
+			)
+		}));
+		const descuentosGenerales =
+			totalCostosLaborales + totalGastos + totalAnticipos - totalAnticiposIguales;
 		const valorServicioReparto = totalServicio - descuentosGenerales;
 		const facturarMap = repartirValor(valorServicioReparto, propsEfectivos);
+		const anticiposPorPropietario = new Map<string, number>();
+		for (const { partes } of anticiposRepartidos) {
+			for (const [id, valor] of partes) {
+				anticiposPorPropietario.set(id, (anticiposPorPropietario.get(id) ?? 0) + valor);
+			}
+		}
 		const impuestosDe = (pid: string) =>
 			impuestos
 				.filter((x) => (x as any).propietario_id === pid)
@@ -1686,6 +1726,10 @@ export function buildCierreFinalSheet(
 		};
 		filaKv('TOTAL DESCUENTOS', descuentosGenerales,
 			{ ...secTfStyle, cl: { rgb: RED }, bg: { rgb: RED_SOFT } } as any);
+		if (totalAnticiposIguales !== 0) {
+			filaKv('ANTICIPOS A DESCONTAR POR IGUAL DESPUÉS DE IMPUESTOS', totalAnticiposIguales,
+				{ ...secTfStyle, cl: { rgb: RED }, bg: { rgb: RED_SOFT } } as any);
+		}
 		filaKv('VALOR SERVICIO (LISTO PARA REPARTIR)', valorServicioReparto,
 			{ ...secTfStyle, bl: 1 } as any);
 
@@ -1823,10 +1867,27 @@ export function buildCierreFinalSheet(
 				} as any);
 			});
 			row++;
+			if (totalAnticiposIguales !== 0) {
+				for (const { anticipo, partes } of anticiposRepartidos) {
+					if (n(anticipo.valor_total) === 0) continue;
+					etiquetaMatriz(row, `(−) ${anticipo.concepto}`, {
+						...secTfStyle, cl: { rgb: RED }
+					} as any);
+					conRetenciones.forEach((p, i) => {
+						set(row, COL_PRIMER_COPRO + i, partes.get(p.id) ?? 0, {
+							...nominaCellBase, ...moneda
+						} as any);
+					});
+					row++;
+				}
+			}
 
 			etiquetaMatriz(row, '(=) VALOR A PAGAR', { ...secTfStyle, cl: { rgb: TEXTO_MARCA } } as any);
 			conRetenciones.forEach((p, i) => {
-				const pagar = (facturarMap.get(p.id) ?? 0) - impuestosDe(p.id);
+				const pagar =
+					(facturarMap.get(p.id) ?? 0) -
+					impuestosDe(p.id) -
+					(anticiposPorPropietario.get(p.id) ?? 0);
 				set(row, COL_PRIMER_COPRO + i, pagar, {
 					...secTfStyle, cl: { rgb: TEXTO_MARCA }, bl: 1, ...moneda
 				} as any);
@@ -1889,6 +1950,35 @@ export function buildCierreFinalSheet(
 				set(row, 4, valor,
 					{ ...conceptoFilaFuerte, ...moneda } as any);
 				row++;
+				const anticipoIgual = anticiposPorPropietario.get(p.id) ?? 0;
+				if (anticipoIgual !== 0) {
+					for (const { anticipo, partes } of anticiposRepartidos) {
+						const valorAnticipo = partes.get(p.id) ?? 0;
+						if (valorAnticipo === 0) continue;
+						const etiqueta = `(−) ${anticipo.concepto}`;
+						set(row, 0, etiqueta, conceptoFila);
+						merge(row, 0, 3);
+						soloEstilo(row, 1, 3, conceptoFila);
+						cellData[row][0] = {
+							v: etiqueta,
+							t: CellValueType.STRING,
+							s: conceptoFila
+						};
+						set(row, 4, valorAnticipo, { ...conceptoFila, ...moneda } as any);
+						row++;
+					}
+					set(row, 0, '(=) NETO TRAS ANTICIPOS', conceptoFilaFuerte);
+					merge(row, 0, 3);
+					soloEstilo(row, 1, 3, conceptoFilaFuerte);
+					cellData[row][0] = {
+						v: '(=) NETO TRAS ANTICIPOS',
+						t: CellValueType.STRING, s: conceptoFilaFuerte
+					};
+					set(row, 4, valor - anticipoIgual, {
+						...conceptoFilaFuerte, ...moneda
+					} as any);
+					row++;
+				}
 
 				const difiereConcepto =
 					Math.abs(n(p.porcentaje_efectivo) - n(p.porcentaje)) > 0.005;
@@ -1993,7 +2083,8 @@ export function buildCierreFinalSheet(
 		inicioItems: firstItemRow,
 		itemPorFila,
 		filasBloqueadas: filasSoloConsulta,
-		celdasBloqueadas: celdasFormula
+		celdasBloqueadas: celdasFormula,
+		celdasConBinding: bindings.map(({ r, c }) => ({ fila: r, columna: c }))
 	});
 	aplicarCapa(cellData, unitId, sheetId, anotaciones);
 

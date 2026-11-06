@@ -34,7 +34,7 @@ import type {
 import { claveConductor } from '$lib/editor/builders/cierres-finales.builder';
 import { getConductorGrupos } from '$lib/editor/business/conductor-grupos.service';
 import { totalDiasNoPropietarios } from '$lib/editor/business/conceptos.service';
-import { repartirValor } from '$lib/editor/business/reparto-propietarios';
+import { repartirAnticipoIgual, repartirValor } from '$lib/editor/business/reparto-propietarios';
 import { COP, enRojo, fmtPct, fmtPlaca, nombreMes, restado } from '../formato';
 import { TITULO_SCOPE } from '../columnas';
 import type {
@@ -333,12 +333,17 @@ export interface PropietarioReparto {
 	porcentaje_efectivo: number;
 	/** `false` = pago interno por concepto: no tributa ni genera egreso. */
 	aplica_retenciones: boolean;
+	exento_impuestos: boolean;
 	/** Su parte del valor a facturar (servicios menos nómina y gastos de vehículo). */
 	facturar: number;
 	/** Su parte liquidable después de los descuentos generales. */
 	valorNetoBase: number;
 	/** Suma de SUS retenciones. 0 en los pagos internos. */
 	retenciones: number;
+	/** Cuota de los anticipos que se descuentan por igual. */
+	anticiposIguales: number;
+	/** Cuota por anticipo, con el concepto original para identificar el descuento. */
+	anticiposIgualesDetalle: Array<{ concepto: string; valor: number }>;
 	/** Valor liquidable menos retenciones. NO se recorta a cero. */
 	neto: number;
 }
@@ -349,6 +354,8 @@ export interface RepartoCierre {
 	totalServicio: number;
 	/** Nómina + gastos + anticipos: se descuentan ANTES de repartir. */
 	descuentosGlobales: number;
+	/** Anticipos iguales que se descuentan después de calcular los impuestos. */
+	anticiposIguales: number;
 	/** `totalServicio − descuentosGlobales`, base del pago por propietario. */
 	valorServicio: number;
 	/** Anticipos, único concepto del resumen DESCUENTOS ANTICIPOS. */
@@ -371,10 +378,31 @@ function repartoCore(
 	totalServicio: number,
 	descuentosGlobales: number,
 	totalFacturable: number,
-	totalAnticipos: number
+	totalAnticipos: number,
+	anticipos: ConceptoDescuento[] = []
 ): RepartoCierre {
 	const ordenados = [...copropietarios].sort((a, b) => a.orden - b.orden);
-	const valorServicio = totalServicio - descuentosGlobales;
+	const anticiposIguales = anticipos.filter((a) => a.dividir_igual_propietarios === true);
+	const anticiposIgualesTotal = anticiposIguales.reduce((s, a) => s + n(a.valor_total), 0);
+	const anticiposPorPropietario = new Map<string, number>();
+	const anticiposDetallePorPropietario = new Map<
+		string,
+		Array<{ concepto: string; valor: number }>
+	>();
+	for (const anticipo of anticiposIguales) {
+		const partes = repartirAnticipoIgual(
+			n(anticipo.valor_total),
+			ordenados.map((p) => ({ id: p.id, orden: p.orden }))
+		);
+		for (const [id, valor] of partes) {
+			anticiposPorPropietario.set(id, (anticiposPorPropietario.get(id) ?? 0) + valor);
+			const detalle = anticiposDetallePorPropietario.get(id) ?? [];
+			detalle.push({ concepto: anticipo.concepto, valor });
+			anticiposDetallePorPropietario.set(id, detalle);
+		}
+	}
+	const descuentosAntesDeRepartir = descuentosGlobales - anticiposIgualesTotal;
+	const valorServicio = totalServicio - descuentosAntesDeRepartir;
 	const facturarMap = repartirValor(
 		totalFacturable,
 		ordenados.map((p) => ({ id: p.id, efectivo: n(p.porcentaje_efectivo), orden: p.orden }))
@@ -387,7 +415,8 @@ function repartoCore(
 	return {
 		esMulti: ordenados.length > 0,
 		totalServicio,
-		descuentosGlobales,
+		descuentosGlobales: descuentosAntesDeRepartir,
+		anticiposIguales: anticiposIgualesTotal,
 		valorServicio,
 		totalAnticipos,
 		totalFacturable,
@@ -396,7 +425,7 @@ function repartoCore(
 			const valorNetoBase = valorNetoBaseMap.get(p.id) ?? 0;
 			// Un pago interno no tributa: aunque el servidor le hubiera dejado
 			// una fila de impuesto colgada, aquí no cuenta.
-			const retenciones = p.aplica_retenciones
+			const retenciones = p.aplica_retenciones && !p.exento_impuestos
 				? impuestos
 						.filter((i) => (i as any).propietario_id === p.id)
 						.reduce((s, i) => s + n(i.valor_total), 0)
@@ -411,10 +440,13 @@ function repartoCore(
 				porcentaje: n(p.porcentaje),
 				porcentaje_efectivo: n(p.porcentaje_efectivo),
 				aplica_retenciones: p.aplica_retenciones,
+				exento_impuestos: p.exento_impuestos,
 				facturar,
 				valorNetoBase,
 				retenciones,
-				neto: valorNetoBase - retenciones
+				anticiposIguales: anticiposPorPropietario.get(p.id) ?? 0,
+				anticiposIgualesDetalle: anticiposDetallePorPropietario.get(p.id) ?? [],
+				neto: valorNetoBase - retenciones - (anticiposPorPropietario.get(p.id) ?? 0)
 			};
 		})
 	};
@@ -438,6 +470,7 @@ export function repartoDeCierre(cierre: CierreFinalCompleto): RepartoCierre {
 			valorServicio: 0,
 			totalAnticipos: 0,
 			totalFacturable: 0,
+			anticiposIguales: 0,
 			propietarios: []
 		};
 	}
@@ -451,7 +484,8 @@ export function repartoDeCierre(cierre: CierreFinalCompleto): RepartoCierre {
 		bases.totalServicio,
 		bases.descuentosGlobales,
 		bases.totalFacturable,
-		bases.totalAnticipos
+		bases.totalAnticipos,
+		bases.anticipos
 	);
 }
 
@@ -475,6 +509,7 @@ function basesDelReparto(
 	descuentosGlobales: number;
 	totalFacturable: number;
 	totalAnticipos: number;
+	anticipos: ConceptoDescuento[];
 	impuestos: ConceptoDescuento[];
 } {
 	// Normaliza los conceptos de nómina, igual que hace el documento al
@@ -498,6 +533,7 @@ function basesDelReparto(
 		totalServicio,
 		totalFacturable: totalServicio - gastos.total - totalCostosLaborales,
 		totalAnticipos: anticipos.total,
+		anticipos: conceptos.filter((c) => c.tipo === 'ANTICIPO'),
 		descuentosGlobales: totalCostosLaborales + gastos.total + anticipos.total,
 		impuestos: conceptos
 			.filter((c) => c.tipo === 'IMPUESTO')
@@ -550,9 +586,11 @@ function bloquesCopropietarios(
 			},
 			{
 				celdas: {
-					concepto: 'DESCUENTOS ANTICIPOS',
+					concepto: reparto.anticiposIguales !== 0
+						? 'ANTICIPOS DESCONTADOS PROPORCIONALMENTE'
+						: 'DESCUENTOS ANTICIPOS',
 					porcentaje: '',
-					valor: restado(totalDescuentos)
+					valor: restado(totalDescuentos - reparto.anticiposIguales)
 				}
 			},
 			{
@@ -601,10 +639,23 @@ function bloquesCopropietarios(
 					}
 				});
 			}
+			if (p.anticiposIguales !== 0) {
+				filas.push(
+					...p.anticiposIgualesDetalle.filter((a) => a.valor !== 0).map((anticipo) => ({
+						variante: 'categoria' as const,
+						celdas: {
+							concepto: `(−) ${anticipo.concepto}`,
+							porcentaje: '',
+							valor: restado(anticipo.valor)
+						}
+					}))
+				);
+			}
 
 			const subtitulo = [
 				p.identificacion ? `CC/NIT ${p.identificacion}` : null,
-				p.nota || null
+				p.nota || null,
+				p.exento_impuestos ? 'Exento de impuestos' : null
 			]
 				.filter(Boolean)
 				.join('  ·  ');
@@ -651,13 +702,13 @@ function bloquesCopropietarios(
 						]
 							.filter(Boolean)
 							.join('  ·  ');
-						return [
+						const filas: FilaPreview[] = [
 							{
 								destacada: true,
 								celdas: {
 									concepto: (p.nota || p.nombre).toUpperCase(),
 									porcentaje: fmtPct(n(p.porcentaje)),
-								valor: p.valorNetoBase
+									valor: p.valorNetoBase
 								}
 							},
 							{
@@ -665,6 +716,27 @@ function bloquesCopropietarios(
 								celdas: { concepto: titular, porcentaje: '', valor: '' }
 							}
 						];
+						if (p.anticiposIguales !== 0) {
+							filas.push(
+								...p.anticiposIgualesDetalle.filter((a) => a.valor !== 0).map((anticipo) => ({
+									variante: 'categoria' as const,
+									celdas: {
+										concepto: `(−) ${anticipo.concepto}`,
+										porcentaje: '',
+										valor: restado(anticipo.valor)
+									}
+								})),
+								{
+									destacada: true,
+									celdas: {
+										concepto: '(=) Neto tras anticipo',
+										porcentaje: '',
+										valor: p.neto
+									}
+								}
+							);
+						}
+						return filas;
 					})
 				}
 			]
@@ -888,14 +960,15 @@ export function documentoCierre(o: {
 		// El MISMO cálculo que consulta el modal de envíos para decirle a cada
 		// copropietario cuánto se le factura: una sola aritmética, o el correo
 		// y el PDF adjunto acabarían diciendo cifras distintas.
-		const { reparto, conceptos } = bloquesCopropietarios(
+		const { reparto, conceptos: conceptosInternos } = bloquesCopropietarios(
 			repartoCore(
 				copropietarios,
 				impuestos,
 				totalServicio,
 				descuentosGlobales,
 				valorAFacturar,
-				totalDescuentos
+				totalDescuentos,
+				conceptos.filter((c) => c.tipo === 'ANTICIPO')
 			),
 			impuestos,
 			totalDescuentos
@@ -919,14 +992,14 @@ export function documentoCierre(o: {
 		// Sección aparte, y no un bloque más de la anterior: lo que va a un
 		// concepto no se le paga a nadie, y sumado con los netos daría una
 		// cifra que no existe.
-		if (conceptos.length) {
+		if (conceptosInternos.length) {
 			secciones.push({
 				id: 'conceptos-internos',
 				titulo: 'Destinado a concepto',
 				nota: `${pagosInternos} pago(s) interno(s)`,
 				columnas: [],
 				filas: [],
-				bloques: conceptos,
+				bloques: conceptosInternos,
 				bloquesPorFila: 1
 			});
 		}

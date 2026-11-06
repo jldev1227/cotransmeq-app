@@ -103,6 +103,12 @@ activos y los adicionales, y le resta costos laborales y gastos del vehículo.
 el valor a facturar menos esos anticipos. La misma composición alimenta el
 preview, el Excel, la exportación PDF y el PDF adjunto del envío por correo.
 
+En cierres multi-propietario, cada anticipo marcado para reparto igual aparece
+con su concepto registrado y la cuota asignada a cada propietario. El resumen
+de retenciones no repite el total de esos anticipos en una fila genérica; la
+misma composición se usa en la preview, el canvas, la exportación PDF y el
+adjunto del correo.
+
 ### Liquidaciones por `/api/pdf/from-html`
 
 Dos documentos usan una variante del mismo camino, sin módulo de CSS propio: el

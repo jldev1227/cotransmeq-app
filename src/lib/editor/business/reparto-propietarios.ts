@@ -92,3 +92,27 @@ export function repartirValor(
 	out.set(ultimo.id, (out.get(ultimo.id) ?? 0) + (totalRedondeado - suma));
 	return out;
 }
+
+/**
+ * Reparte un anticipo en partes iguales al peso, como el resto del canvas.
+ * Si la división deja un residuo, lo recibe el último según el orden del
+ * cierre; la suma coincide siempre con el anticipo que muestra la hoja.
+ */
+export function repartirAnticipoIgual(
+	total: number,
+	props: Array<{ id: string; orden: number }>
+): Map<string, number> {
+	const ordenados = [...props].sort((a, b) => a.orden - b.orden);
+	const out = new Map<string, number>();
+	if (ordenados.length === 0) return out;
+
+	const pesos = Math.round(Number(total) || 0);
+	const parteBase = Math.trunc(pesos / ordenados.length);
+	let asignados = 0;
+	ordenados.forEach((p, i) => {
+		const parte = i === ordenados.length - 1 ? pesos - asignados : parteBase;
+		out.set(p.id, parte);
+		asignados += parte;
+	});
+	return out;
+}
