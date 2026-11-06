@@ -160,6 +160,7 @@ function copropietariosDeDetalle(d: any): CopropietarioCierre[] {
 				p.porcentaje_efectivo != null ? num(p.porcentaje_efectivo) : (efectivos.get(p.id) ?? 0),
 			nota: p.nota ?? null,
 			aplica_retenciones: p.aplica_retenciones !== false,
+			exento_impuestos: p.exento_impuestos === true,
 			orden: Number.isFinite(Number(p.orden)) ? Number(p.orden) : idx
 		})
 	);

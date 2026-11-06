@@ -61,6 +61,8 @@
 		nota: string;
 		/// FALSE = pago interno por concepto: no se le calculan retenciones.
 		aplicaRetenciones: boolean;
+		/// Exención independiente: conserva el egreso al propietario y solo quita sus impuestos.
+		exentoImpuestos: boolean;
 	}
 
 	let cargando = $state(true);
@@ -88,7 +90,8 @@
 			identificacion: terceroTitular.identificacion,
 			porcentaje: 100,
 			nota: '',
-			aplicaRetenciones: true
+			aplicaRetenciones: true,
+			exentoImpuestos: false
 		};
 	}
 
@@ -104,6 +107,7 @@
 			porcentaje: f.porcentaje,
 			nota: f.nota.trim() || null,
 			aplica_retenciones: f.aplicaRetenciones,
+			exento_impuestos: f.exentoImpuestos,
 			orden: idx
 		}));
 	}
@@ -116,7 +120,8 @@
 				p.nombre,
 				p.porcentaje,
 				p.nota,
-				p.aplica_retenciones
+				p.aplica_retenciones,
+				p.exento_impuestos
 			])
 		);
 
@@ -146,7 +151,8 @@
 						identificacion: p.identificacion ?? null,
 						porcentaje: Number(p.porcentaje) || 0,
 						nota: p.nota ?? '',
-						aplicaRetenciones: p.aplica_retenciones !== false
+						aplicaRetenciones: p.aplica_retenciones !== false,
+						exentoImpuestos: p.exento_impuestos === true
 					})
 				);
 			lista = filas.length > 0 ? filas : [filaTitular()];
@@ -193,7 +199,8 @@
 				identificacion: t.identificacion,
 				porcentaje: 0,
 				nota: '',
-				aplicaRetenciones: true
+				aplicaRetenciones: true,
+				exentoImpuestos: false
 			}
 		];
 	}
@@ -216,6 +223,10 @@
 
 	function fijarRetenciones(key: string, valor: boolean) {
 		lista = lista.map((f) => (f.key === key ? { ...f, aplicaRetenciones: valor } : f));
+	}
+
+	function fijarExencion(key: string, valor: boolean) {
+		lista = lista.map((f) => (f.key === key ? { ...f, exentoImpuestos: valor } : f));
 	}
 
 	function mover(key: string, delta: -1 | 1) {
@@ -399,6 +410,21 @@
 									{#if !f.aplicaRetenciones}
 										<small>pago interno por concepto — no genera egreso real ni tributa</small>
 									{/if}
+								</span>
+							</label>
+
+							<label class="pcm-ret" class:pcm-ret-off={f.exentoImpuestos}>
+								<input
+									type="checkbox"
+									checked={f.exentoImpuestos}
+									onchange={(e) => fijarExencion(f.key, e.currentTarget.checked)}
+									disabled={guardando}
+								/>
+								<span>
+									Exento de impuestos y retenciones
+									<small>
+										Conserva su pago normal; no se calculan impuestos sobre su valor a facturar.
+									</small>
 								</span>
 							</label>
 						</li>

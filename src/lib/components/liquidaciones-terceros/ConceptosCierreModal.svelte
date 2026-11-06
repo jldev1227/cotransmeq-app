@@ -65,12 +65,14 @@
 		 * resolvió de una vez en el servidor.
 		 */
 		valorLiquidar: number;
+		/// Número de propietarios del cierre, para habilitar el reparto igualitario.
+		propietariosCount?: number;
 		onClose: () => void;
 		/// Tras un cambio: la page recarga el cierre y remonta la hoja. `mensaje`
 		/// sustituye al toast genérico de alta/baja cuando la operación es otra
 		/// cosa (un traslado dice a dónde fue el item).
 		onCambiado: (r: {
-			accion: 'add' | 'remove';
+			accion: 'add' | 'remove' | 'update';
 			concepto: string;
 			mensaje?: string;
 		}) => void | Promise<void>;
@@ -87,6 +89,7 @@
 		anio,
 		mes,
 		valorLiquidar,
+		propietariosCount = 1,
 		onClose,
 		onCambiado
 	}: Props = $props();
@@ -509,6 +512,35 @@
 			trabajando = false;
 		}
 	}
+
+	async function cambiarRepartoIgual(
+		c: ConceptoDescuento,
+		dividirIgual: boolean,
+		control: HTMLInputElement
+	) {
+		if (trabajando || !c.id || !Number.isInteger(c.version)) return;
+		trabajando = true;
+		error = '';
+		try {
+			await liquidacionesTercerosDescuentosAPI.actualizarDivisionIgualAnticipo(
+				c.id,
+				dividirIgual,
+				c.version!
+			);
+			await onCambiado({
+				accion: 'update',
+				concepto: c.concepto,
+				mensaje: dividirIgual
+					? `El anticipo ${etiqueta(c.concepto)} se descontará por partes iguales después de impuestos.`
+					: `El anticipo ${etiqueta(c.concepto)} volvió al reparto proporcional antes de impuestos.`
+			});
+		} catch (e: any) {
+			control.checked = !dividirIgual;
+			error = e?.response?.data?.error || e?.message || 'Error desconocido';
+		} finally {
+			trabajando = false;
+		}
+	}
 </script>
 
 <ModalBase
@@ -740,6 +772,7 @@
 						<th class="cxm-num">{seccion === 'ANTICIPO' ? 'Fecha' : 'Cantidad'}</th>
 						<th class="cxm-num">Valor</th>
 						<th class="cxm-num">Total</th>
+						{#if seccion === 'ANTICIPO'}<th>Reparto</th>{/if}
 						<th></th>
 					</tr>
 				</thead>
@@ -756,6 +789,23 @@
 							</td>
 							<td class="cxm-num">${formatCOP(Number(c.valor_unitario))}</td>
 							<td class="cxm-num cxm-total">${formatCOP(Number(c.valor_total))}</td>
+							{#if seccion === 'ANTICIPO'}
+								<td>
+									<label class="cxm-reparto">
+										<input
+											type="checkbox"
+											checked={c.dividir_igual_propietarios === true}
+										onchange={(e) => cambiarRepartoIgual(c, e.currentTarget.checked, e.currentTarget)}
+											disabled={trabajando || propietariosCount < 2 || !c.id || !Number.isInteger(c.version)}
+											aria-label="Dividir anticipo por igual entre propietarios"
+										/>
+										<span>Igual</span>
+									</label>
+									{#if propietariosCount < 2}
+										<small class="cxm-reparto-nota">Requiere varios propietarios</small>
+									{/if}
+								</td>
+							{/if}
 							<td class="cxm-num">
 								<button
 									class="cxm-quitar"
@@ -772,7 +822,7 @@
 				</tbody>
 				<tfoot>
 					<tr>
-						<td colspan="3">Total</td>
+						<td colspan={seccion === 'ANTICIPO' ? 4 : 3}>Total</td>
 						<td class="cxm-num cxm-total">${formatCOP(total)}</td>
 						<td></td>
 					</tr>
@@ -925,6 +975,24 @@
 	}
 	.cxm-total {
 		font-weight: 700;
+	}
+	.cxm-reparto {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 11px;
+		font-weight: 650;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.cxm-reparto input {
+		accent-color: var(--color-primary, #14856e);
+	}
+	.cxm-reparto-nota {
+		display: block;
+		margin-top: 3px;
+		color: var(--text-muted);
+		font-size: 9px;
 	}
 	.cxm-tabla tfoot td {
 		border-bottom: none;
