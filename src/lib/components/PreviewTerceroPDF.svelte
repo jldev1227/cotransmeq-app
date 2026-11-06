@@ -363,12 +363,12 @@
 							.sig::before { content: "" !important; display: block !important; height: 80px !important; visibility: hidden !important; }
 							.sig-lbl { margin-top: 2px !important; margin-bottom: 0 !important; align-self: center !important; text-align: center !important; order: 3 !important; font-size: 13px !important; }
 							.sig-line { padding-top: 10px !important; text-align: center !important; }
-							/* Resumen (TOTAL DESCUENTOS / TOTAL A PAGAR): texto plano inline, alineado a la derecha, 600px, sin estilos. */
+							/* Resumen (DESCUENTOS ANTICIPOS / TOTAL A PAGAR): texto plano inline, alineado a la derecha, 600px, sin estilos. */
 							.desc-resumen { display: flex !important; flex-direction: row !important; justify-content: flex-end !important; gap: 30px !important; width: 600px !important; max-width: 600px !important; margin-top: 14px !important; margin-left: auto !important; margin-right: 0 !important; padding: 0 !important; background: transparent !important; border: none !important; border-radius: 0 !important; }
 							.desc-resumen .resumen-line { display: flex !important; flex-direction: row !important; align-items: baseline !important; gap: 6px !important; padding: 0 !important; background: transparent !important; border: none !important; border-top: none !important; min-height: 0 !important; }
 							.desc-resumen .resumen-line > span:first-child { font-weight: 800 !important; font-size: 13px !important; text-transform: uppercase !important; letter-spacing: 0.03em !important; background: transparent !important; border: none !important; padding: 0 !important; margin: 0 !important; }
 							.desc-resumen .resumen-val { font-weight: 800 !important; font-size: 14px !important; font-family: 'Geist', sans-serif !important; background: transparent !important; border: none !important; padding: 0 !important; margin: 0 !important; }
-							/* Diferenciar por color: TOTAL DESCUENTOS en rojo, TOTAL A PAGAR en verde */
+							/* Diferenciar por color: DESCUENTOS ANTICIPOS en rojo, TOTAL A PAGAR en verde */
 							.desc-resumen .resumen-line:first-child > span:first-child { color: #991b1b !important; }
 							.desc-resumen .resumen-line:first-child .resumen-val { color: #dc2626 !important; }
 							.desc-resumen .resumen-line.resumen-pagar > span:first-child { color: #ea580c !important; }
@@ -1290,7 +1290,7 @@
 			font-weight:700;
 		"
 					>
-						<span>TOTAL DESCUENTOS:</span>
+						<span>DESCUENTOS ANTICIPOS:</span>
 						<span style="color:#dc2626;">
 							{COP(pdfTotales.totalAnticipos)}
 						</span>

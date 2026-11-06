@@ -1632,9 +1632,9 @@ function writeResumen(ws: any, startRow: number, item: any, totales: any): numbe
 		12
 	);
 
-	// ── TOTAL DESCUENTOS: anticipos únicamente ────────────
+	// ── DESCUENTOS ANTICIPOS ──────────────────────────────
 	ws.mergeCells(`A${row}:E${row}`);
-	setCell(ws, `A${row}`, 'TOTAL DESCUENTOS', {
+	setCell(ws, `A${row}`, 'DESCUENTOS ANTICIPOS', {
 		size: 12,
 		bold: true,
 		color: RED,

@@ -97,12 +97,11 @@ el mismo código que usa el envío por correo, y las manda al servidor de una ve
 Por eso el consolidado de un periodo no monta los cuarenta conductores en
 pantalla: `exportarPdfCompuesto` los compone fuera y los manda como un cuerpo.
 
-En el resumen de cierres, **VALOR A LIQUIDAR** suma V/LIQUIDAR de los ítems
-activos y los adicionales. **TOTAL A PAGAR** resta los conceptos vivos del
-cierre (costos laborales, gastos, impuestos y anticipos); el TOTAL facturado
-sigue disponible en la tabla de ítems y no se usa como base de pago. La misma
-composición alimenta el preview, el Excel, la exportación PDF y el PDF adjunto
-del envío por correo.
+En el resumen de cierres, **VALOR A FACTURAR** suma el V/LIQUIDAR de los ítems
+activos y los adicionales, y le resta costos laborales y gastos del vehículo.
+**DESCUENTOS ANTICIPOS** muestra únicamente los anticipos; **TOTAL A PAGAR** es
+el valor a facturar menos esos anticipos. La misma composición alimenta el
+preview, el Excel, la exportación PDF y el PDF adjunto del envío por correo.
 
 ### Liquidaciones por `/api/pdf/from-html`
 

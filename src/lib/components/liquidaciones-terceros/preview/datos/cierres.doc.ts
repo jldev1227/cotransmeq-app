@@ -9,7 +9,7 @@
  *   3. Gastos de vehículo
  *   4. Anticipos del vehículo
  *   5. Impuestos y retenciones (o el reparto por copropietario)
- *   6. VALOR A FACTURAR, TOTAL DESCUENTOS (anticipos) y TOTAL A PAGAR
+ *   6. VALOR A FACTURAR, DESCUENTOS ANTICIPOS y TOTAL A PAGAR
  *
  * ── De dónde salen los números ──
  * De `detalles[cierreId]`, es decir de lo que el canvas tiene EN MEMORIA,
@@ -351,7 +351,7 @@ export interface RepartoCierre {
 	descuentosGlobales: number;
 	/** `totalServicio − descuentosGlobales`, base del pago por propietario. */
 	valorServicio: number;
-	/** Anticipos, único concepto del resumen TOTAL DESCUENTOS. */
+	/** Anticipos, único concepto del resumen DESCUENTOS ANTICIPOS. */
 	totalAnticipos: number;
 	/** Servicios menos costos de nómina y gastos del vehículo. */
 	totalFacturable: number;
@@ -550,7 +550,7 @@ function bloquesCopropietarios(
 			},
 			{
 				celdas: {
-					concepto: 'TOTAL DESCUENTOS',
+					concepto: 'DESCUENTOS ANTICIPOS',
 					porcentaje: '',
 					valor: restado(totalDescuentos)
 				}
@@ -946,7 +946,7 @@ export function documentoCierre(o: {
 		? undefined
 		: [
 				{ label: 'VALOR A FACTURAR', valor: valorAFacturar },
-				{ label: 'TOTAL DESCUENTOS', valor: totalDescuentos, descuento: true },
+				{ label: 'DESCUENTOS ANTICIPOS', valor: totalDescuentos, descuento: true },
 				{ label: 'TOTAL A PAGAR', valor: totalPagar, fuerte: true }
 			];
 
