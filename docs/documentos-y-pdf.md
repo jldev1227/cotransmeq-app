@@ -97,10 +97,12 @@ el mismo código que usa el envío por correo, y las manda al servidor de una ve
 Por eso el consolidado de un periodo no monta los cuarenta conductores en
 pantalla: `exportarPdfCompuesto` los compone fuera y los manda como un cuerpo.
 
-En el resumen de cierres, **VALOR A FACTURAR** usa el total facturado de los
-ítems más el bruto de los adicionales. Los descuentos y gastos se muestran por
-separado y no modifican ese total. La misma composición alimenta el preview, la
-exportación PDF y el PDF adjunto del envío por correo.
+En el resumen de cierres, **VALOR A LIQUIDAR** suma V/LIQUIDAR de los ítems
+activos y los adicionales. **TOTAL A PAGAR** resta los conceptos vivos del
+cierre (costos laborales, gastos, impuestos y anticipos); el TOTAL facturado
+sigue disponible en la tabla de ítems y no se usa como base de pago. La misma
+composición alimenta el preview, el Excel, la exportación PDF y el PDF adjunto
+del envío por correo.
 
 ### Liquidaciones por `/api/pdf/from-html`
 

@@ -9,7 +9,7 @@
  *   3. Gastos de vehículo
  *   4. Anticipos del vehículo
  *   5. Impuestos y retenciones (o el reparto por copropietario)
- *   6. DESCUENTOS ANTICIPO y TOTAL A PAGAR
+ *   6. VALOR A LIQUIDAR, TOTAL DESCUENTOS y TOTAL A PAGAR
  *
  * ── De dónde salen los números ──
  * De `detalles[cierreId]`, es decir de lo que el canvas tiene EN MEMORIA,
@@ -539,10 +539,9 @@ function basesDelReparto(
 function bloquesCopropietarios(
 	reparto: RepartoCierre,
 	impuestos: ConceptoDescuento[],
-	valorAFacturar: number
+	totalDescuentos: number
 ): { reparto: BloquePreview[]; conceptos: BloquePreview[] } {
 	const ordenados = reparto.propietarios;
-	const { totalAnticipos } = reparto;
 
 	const resumen: BloquePreview = {
 		id: 'copro-resumen',
@@ -553,23 +552,23 @@ function bloquesCopropietarios(
 			{
 				destacada: true,
 				celdas: {
-					concepto: 'VALOR A FACTURAR',
+					concepto: 'VALOR A LIQUIDAR',
 					porcentaje: '',
-					valor: valorAFacturar
+					valor: reparto.totalServicio
 				}
 			},
 			{
 				celdas: {
-					concepto: 'Descuentos anticipo',
+					concepto: 'TOTAL DESCUENTOS',
 					porcentaje: '',
-					valor: restado(totalAnticipos)
+					valor: restado(totalDescuentos)
 				}
 			},
 			{
 				celdas: {
 					concepto: 'TOTAL A PAGAR',
 					porcentaje: '',
-					valor: valorAFacturar - totalAnticipos
+					valor: reparto.totalServicio - totalDescuentos
 				}
 			}
 		]
@@ -830,11 +829,13 @@ export function documentoCierre(o: {
 		.reduce((s, c) => s + n(c.valor_total), 0);
 
 	const totalServicio = Number(totalesItems.valor_liquidar);
-	// VALOR A FACTURAR = total de servicios menos nómina de conductores y gastos del vehículo.
-	// En el resumen, DESCUENTOS ANTICIPO contiene únicamente anticipos.
+	// El valor bruto facturado sigue en la tabla de items. El total pagable
+	// parte de V/LIQUIDAR, igual que el canvas y el total persistido del cierre.
+	// Los costos, gastos, impuestos y anticipos son los descuentos del cierre.
 	const valorAFacturar = Number(totalesItems.total) - gastos.total - totalCostosLaborales;
-	const totalDescuentos = anticipos.total;
-	const totalPagar = valorAFacturar - totalDescuentos;
+	const totalDescuentos =
+		totalCostosLaborales + gastos.total + impuestosBloque.total + anticipos.total;
+	const totalPagar = totalServicio - totalDescuentos;
 
 	// ── Copropietarios ──
 	const esMulti = !!hoja.es_multi_propietario && copropietarios.length > 0;
@@ -908,7 +909,7 @@ export function documentoCierre(o: {
 				totalDescuentos
 			),
 			impuestos,
-			valorAFacturar
+			totalDescuentos
 		);
 		secciones.push({
 			id: 'copropietarios',
@@ -955,9 +956,9 @@ export function documentoCierre(o: {
 	const resumen: LineaResumen[] | undefined = esMulti
 		? undefined
 		: [
-				{ label: 'VALOR A FACTURAR', valor: valorAFacturar },
-				{ label: 'Descuentos anticipo', valor: totalDescuentos, descuento: true },
-				{ label: 'Total a pagar', valor: totalPagar, fuerte: true }
+				{ label: 'VALOR A LIQUIDAR', valor: totalServicio },
+				{ label: 'TOTAL DESCUENTOS', valor: totalDescuentos, descuento: true },
+				{ label: 'TOTAL A PAGAR', valor: totalPagar, fuerte: true }
 			];
 
 	const nombre = `${hoja.consecutivo || hoja.id}_${fmtPlaca(hoja.placa)}`;
