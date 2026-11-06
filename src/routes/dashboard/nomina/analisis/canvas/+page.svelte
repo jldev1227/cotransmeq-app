@@ -18,7 +18,6 @@
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
-	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import { Bar, Doughnut } from 'svelte-chartjs';
 	import {
 		Chart as ChartJS,
@@ -30,14 +29,7 @@
 		LinearScale,
 		ArcElement
 	} from 'chart.js';
-	import {
-		ArrowUpDown,
-		Download,
-		ExternalLink,
-		RefreshCw,
-		Search,
-		X
-	} from 'lucide-svelte';
+	import { ArrowUpDown, Download, ExternalLink, RefreshCw, Search, X } from 'lucide-svelte';
 	import { lista, opcion, texto, firma } from '$lib/listing/filtros';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import {
@@ -50,6 +42,7 @@
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
 	import SelectorCanvasNomina from '$lib/components/univer/SelectorCanvasNomina.svelte';
 	import SelectorMultiple from '$lib/components/listing/SelectorMultiple.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 
 	ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement);
 
@@ -98,8 +91,8 @@
 	type Tab = 'resumen' | 'bonificaciones' | 'recargos' | 'pernotes' | 'mantenimientos';
 	const TABS: { key: Tab; label: string }[] = [
 		{ key: 'resumen', label: 'Liquidaciones' },
-		{ key: 'bonificaciones', label: 'Bonificaciones marcadas' },
-		{ key: 'recargos', label: 'Recargos de planillas' },
+		{ key: 'bonificaciones', label: 'Bonificaciones pagadas' },
+		{ key: 'recargos', label: 'Recargos pagados' },
 		{ key: 'pernotes', label: 'Pernoctes' },
 		{ key: 'mantenimientos', label: 'Mantenimientos' }
 	];
@@ -146,7 +139,10 @@
 		/// listas, y copiarlos de vuelta dejaba `mes=09` tras soltar el chip.
 		const base = new URL(untrack(() => page.url));
 		for (const k of ['anio', 'mes', 'placa']) base.searchParams.delete(k);
-		estadoUrl.escribir(base, untrack(() => filtros));
+		estadoUrl.escribir(
+			base,
+			untrack(() => filtros)
+		);
 	});
 
 	/// El periodo que viaja al siguiente canvas: el primer año y mes elegidos,
@@ -163,7 +159,7 @@
 	let firmaCargada = '';
 	let solicitudAnalisis = 0;
 
-	/// Bonos y recargos de planillas alimentan también el resumen y la gráfica mensual,
+	/// Bonificaciones y recargos de nómina alimentan también el resumen y la gráfica mensual,
 	/// por eso se cargan aunque la pestaña activa sea otra.
 	const firmaServidor = $derived(
 		JSON.stringify([
@@ -316,8 +312,33 @@
 			(!filtros.meses.length || filtros.meses.includes(periodo.clave))
 		);
 	};
+	const totalBonificacionesDeLiquidacion = (liquidacion: LiquidacionAnalisis) => {
+		if (!filtros.placas.length) return liquidacion.total_bonificaciones;
+		const bonos = liquidacion.bonificaciones.filter((bono) => placaPasa(bono.placa));
+		if (!bonos.length && liquidacion.vehiculos.length === 1 && placaPasa(liquidacion.vehiculos[0].placa)) {
+			return liquidacion.total_bonificaciones;
+		}
+		return bonos.reduce(
+			(total, bono) =>
+				total + bono.valor_unitario * bono.valores
+					.filter((valor) => periodoReferenciaPasa(valor.mes, liquidacion.anio, liquidacion.mes))
+					.reduce((cantidad, valor) => cantidad + valor.cantidad, 0),
+			0
+		);
+	};
+	const totalRecargosDeLiquidacion = (liquidacion: LiquidacionAnalisis) => {
+		if (!filtros.placas.length) return liquidacion.total_recargos;
+		const recargos = liquidacion.recargos_nomina.filter(
+			(recargo) =>
+				placaPasa(recargo.placa) && periodoReferenciaPasa(recargo.mes, liquidacion.anio, liquidacion.mes)
+		);
+		if (recargos.length) return recargos.reduce((total, recargo) => total + recargo.valor, 0);
+		return liquidacion.vehiculos.length === 1 && placaPasa(liquidacion.vehiculos[0].placa)
+			? liquidacion.total_recargos
+			: 0;
+	};
 
-	// ── Bonificaciones ──
+	// ── Bonificaciones guardadas en nómina ──
 	interface FilaBon {
 		placa: string;
 		conductor: string;
@@ -325,121 +346,132 @@
 		mes: string;
 		mesClave: string;
 		anio: number;
-		cantidad: number;
-		valorUnitario: number;
+		cantidad: number | null;
+		valorUnitario: number | null;
 		total: number;
-		fechas: string[];
 	}
 	const filasBon = $derived.by(() => {
 		const q = normalizar(filtros.q.trim());
-		return (datos?.bonificaciones_recorridos ?? [])
-			.filter((b) =>
-				!q ||
-				[b.placa, b.conductor, b.nombre].some((v) => normalizar(String(v ?? '')).includes(q))
-			)
-			.map((b): FilaBon => {
-				const anio = Number(b.mes.slice(0, 4));
-				const mk = b.mes.slice(5, 7);
-				return {
-					placa: b.placa ?? '—',
-					conductor: b.conductor,
-					nombre: b.nombre,
-					mes: mesNombre(mk),
-					mesClave: mk,
-					anio,
-					cantidad: b.cantidad,
-					valorUnitario: b.valor_unitario,
-					total: b.total,
-					fechas: b.fechas
-				};
-			});
+		const filas: FilaBon[] = [];
+		for (const l of liqsConBusqueda) {
+			for (const b of l.bonificaciones ?? []) {
+				if (!placaPasa(b.placa)) continue;
+				for (const valor of b.valores ?? []) {
+					const periodo = periodoConcepto(valor.mes, l.anio, l.mes);
+					if (valor.cantidad <= 0 || !periodoReferenciaPasa(valor.mes, l.anio, l.mes)) continue;
+					const placa = b.placa ?? '—';
+					if (q && ![placa, l.conductor.nombre, b.nombre].some((v) => normalizar(String(v ?? '')).includes(q))) continue;
+					filas.push({
+						placa,
+						conductor: l.conductor.nombre,
+						nombre: b.nombre,
+						mes: mesNombre(periodo.clave),
+						mesClave: periodo.clave,
+						anio: periodo.anio,
+						cantidad: valor.cantidad,
+						valorUnitario: b.valor_unitario,
+						total: valor.cantidad * b.valor_unitario
+					});
+				}
+			}
+			const tieneDetallePagado = (l.bonificaciones ?? []).some((bono) =>
+				bono.valores.some((valor) => valor.cantidad > 0)
+			);
+			if (!tieneDetallePagado && l.total_bonificaciones > 0 && periodoReferenciaPasa('', l.anio, l.mes)) {
+				const placaUnica = l.vehiculos.length === 1 ? l.vehiculos[0].placa : null;
+				if (!filtros.placas.length || placaPasa(placaUnica)) {
+					const placa = placaUnica ?? '—';
+					if (!q || [placa, l.conductor.nombre, 'Total de nómina'].some((v) => normalizar(v).includes(q))) {
+						filas.push({
+							placa,
+							conductor: l.conductor.nombre,
+							nombre: 'Total de nómina',
+							mes: mesNombre(String(l.mes).padStart(2, '0')),
+							mesClave: String(l.mes).padStart(2, '0'),
+							anio: l.anio,
+							cantidad: null,
+							valorUnitario: null,
+							total: l.total_bonificaciones
+						});
+					}
+				}
+			}
+		}
+		return filas.sort((a, b) =>
+			a.placa.localeCompare(b.placa) ||
+			a.conductor.localeCompare(b.conductor, 'es') ||
+			a.mesClave.localeCompare(b.mesClave) ||
+			a.nombre.localeCompare(b.nombre, 'es')
+		);
 	});
 
-	// ── Recargos de planillas agrupados por empresa ──
-	interface FilaJornada {
-		planillaId: string;
-		planilla: string;
+	// ── Recargos guardados en nómina ──
+	interface FilaRecargo {
+		id: string;
 		placa: string;
 		conductor: string;
-		empresaId: string | null;
 		empresa: string;
 		mes: string;
 		mesClave: string;
 		anio: number;
-		dias: { fecha: string }[];
 		valor: number;
 	}
-	let paginaJornada = $state(1);
-	function formatearDiasLaborados(dias: FilaJornada['dias']): string {
-		if (!dias.length) return '—';
-		const numeros = [...new Set(dias.map((dia) => Number(dia.fecha.slice(8, 10))))]
-			.filter((dia) => dia > 0)
-			.sort((a, b) => a - b);
-		if (!numeros.length) return '—';
-		const rangos: string[] = [];
-		let inicio = numeros[0];
-		let anterior = numeros[0];
-		for (const dia of numeros.slice(1)) {
-			if (dia === anterior + 1) {
-				anterior = dia;
-				continue;
-			}
-			rangos.push(inicio === anterior ? `${inicio}` : `${inicio} al ${anterior}`);
-			inicio = dia;
-			anterior = dia;
-		}
-		if (numeros.length) rangos.push(inicio === anterior ? `${inicio}` : `${inicio} al ${anterior}`);
-		return rangos.join(', ');
-	}
-	const filasJornada = $derived.by(() => {
+	let paginaRecargo = $state(1);
+	const filasRecargo = $derived.by(() => {
 		const q = normalizar(filtros.q.trim());
-		return (datos?.recargos_planillas ?? [])
-			.filter((r) =>
-				!q ||
-				[
-					r.placa,
-					r.conductor,
-					r.numero_planilla,
-					r.empresa
-				].some((v) => normalizar(String(v ?? '')).includes(q))
-			)
-			.map((r): FilaJornada => {
-				const anio = Number(r.mes.slice(0, 4));
-				const mk = r.mes.slice(5, 7);
-				return {
-					planillaId: r.planilla_id,
-					planilla: r.numero_planilla || '—',
-					placa: r.placa ?? '—',
-					conductor: r.conductor,
-					empresaId: r.empresa_id,
+		const filas: FilaRecargo[] = [];
+		for (const l of liqsConBusqueda) {
+			const registros = l.recargos_nomina ?? [];
+			for (const r of registros) {
+				if (!placaPasa(r.placa) || r.valor === 0 || !periodoReferenciaPasa(r.mes, l.anio, l.mes)) continue;
+				const periodo = periodoConcepto(r.mes, l.anio, l.mes);
+				const placa = r.placa ?? '—';
+				if (q && ![placa, l.conductor.nombre, r.empresa].some((v) => normalizar(String(v ?? '')).includes(q))) continue;
+				filas.push({
+					id: r.id,
+					placa,
+					conductor: l.conductor.nombre,
 					empresa: r.empresa,
-					mes: mesNombre(mk),
-					mesClave: mk,
-					anio,
-					dias: r.dias,
-					valor: r.valor_pagar
-				};
-			})
-			.sort(
-			(a, b) =>
-				a.placa.localeCompare(b.placa) ||
-				a.conductor.localeCompare(b.conductor, 'es') ||
-				a.mesClave.localeCompare(b.mesClave) ||
-				a.planilla.localeCompare(b.planilla, 'es') ||
-				a.empresa.localeCompare(b.empresa, 'es')
-			);
+					mes: mesNombre(periodo.clave),
+					mesClave: periodo.clave,
+					anio: periodo.anio,
+					valor: r.valor
+				});
+			}
+			if (!registros.length && l.total_recargos > 0 && periodoReferenciaPasa('', l.anio, l.mes)) {
+				const placaUnica = l.vehiculos.length === 1 ? l.vehiculos[0].placa : null;
+				if (!filtros.placas.length || placaPasa(placaUnica)) {
+					const placa = placaUnica ?? '—';
+					if (!q || [placa, l.conductor.nombre, 'Total registrado en nómina'].some((v) => normalizar(v).includes(q))) {
+						filas.push({
+							id: `${l.id}:total-recargos`,
+							placa,
+							conductor: l.conductor.nombre,
+							empresa: 'Total registrado en nómina',
+							mes: mesNombre(String(l.mes).padStart(2, '0')),
+							mesClave: String(l.mes).padStart(2, '0'),
+							anio: l.anio,
+							valor: l.total_recargos
+						});
+					}
+				}
+			}
+		}
+		return filas.sort((a, b) =>
+			a.placa.localeCompare(b.placa) ||
+			a.conductor.localeCompare(b.conductor, 'es') ||
+			a.mesClave.localeCompare(b.mesClave) ||
+			a.empresa.localeCompare(b.empresa, 'es')
+		);
 	});
-	const totalValorJornada = $derived(
-		filasJornada.reduce((total, fila) => total + (fila.valor ?? 0), 0)
+	const totalValorRecargos = $derived(
+		filasRecargo.reduce((total, fila) => total + fila.valor, 0)
 	);
-	const cantidadMarcasBonificacion = $derived(
-		filasBon.reduce((total, fila) => total + fila.cantidad, 0)
+	const cantidadBonificacion = $derived(
+		filasBon.reduce((total, fila) => total + (fila.cantidad ?? 0), 0)
 	);
-	const cantidadDiasPlanilla = $derived(
-		filasJornada.reduce((total, fila) => total + fila.dias.length, 0)
-	);
-	const filasJornadaPagina = $derived(
-		filasJornada.slice((paginaJornada - 1) * POR_PAGINA, paginaJornada * POR_PAGINA)
+	const filasRecargoPagina = $derived(
+		filasRecargo.slice((paginaRecargo - 1) * POR_PAGINA, paginaRecargo * POR_PAGINA)
 	);
 
 	// ── Pernoctes ──
@@ -574,7 +606,7 @@
 			t.dias += l.dias_laborados;
 			if (l.estado_flujo === 'FIRMADA') t.firmadas++;
 		}
-			/// Las tarjetas de conceptos acompañan sus pestañas y sus fuentes de origen.
+		/// Las tarjetas de conceptos acompañan sus pestañas y sus fuentes de origen.
 		t.bonificaciones = t.bonFilas;
 		t.pernotes = t.perFilas;
 		return t;
@@ -590,14 +622,14 @@
 		if (filtros.analisis === 'bonificaciones') {
 			return [
 				{
-					etiqueta: 'Bonos marcados en Recorridos',
-					valor: num.format(cantidadMarcasBonificacion),
-					detalle: `${filasBon.length} tipos de bono · días con marca`
+					etiqueta: 'Bonificaciones en nómina',
+					valor: num.format(cantidadBonificacion),
+					detalle: `${filasBon.length} conceptos · cantidades guardadas en nómina`
 				},
 				{
-					etiqueta: 'Valor de las marcas',
+					etiqueta: 'Total pagado en bonificaciones',
 					valor: fmt(totales.bonificaciones),
-					detalle: 'cantidad marcada × valor vigente del bono',
+					detalle: 'cantidad × valor unitario guardados en nómina',
 					fuerte: true
 				}
 			];
@@ -605,14 +637,14 @@
 		if (filtros.analisis === 'recargos') {
 			return [
 				{
-					etiqueta: 'Planillas con recargos',
-					valor: num.format(filasJornada.length),
-					detalle: `${num.format(cantidadDiasPlanilla)} días laborados · fuente Recargos Planillas`
+					etiqueta: 'Líneas de recargo en nómina',
+					valor: num.format(filasRecargo.length),
+					detalle: `${num.format(filasRecargo.length)} líneas guardadas en la liquidación`
 				},
 				{
-					etiqueta: 'Total a pagar',
-					valor: fmt(totalValorJornada),
-					detalle: 'Suma de los valores calculados en Recargos Planillas',
+					etiqueta: 'Total registrado en nómina',
+					valor: fmt(totalValorRecargos),
+					detalle: 'Suma de los valores incluidos en nómina',
 					fuerte: true
 				}
 			];
@@ -631,9 +663,9 @@
 			},
 			{ etiqueta: 'Devengado', valor: fmt(totales.devengado), detalle: 'salario del periodo' },
 			{
-				etiqueta: 'Bonificaciones marcadas',
+				etiqueta: 'Bonificaciones pagadas',
 				valor: fmt(totales.bonificaciones),
-				detalle: `${filasBon.length} grupos · marcas de Recorridos`
+				detalle: `${filasBon.length} conceptos · valores registrados en nómina`
 			}
 		];
 		tarjetas.push(
@@ -658,7 +690,7 @@
 		return ESTADOS.filter((e) => m.has(e)).map((e) => ({ estado: e, n: m.get(e) ?? 0 }));
 	});
 
-	/// Bonos y recargos usan las mismas fuentes que sus pestañas; neto y pernoctes
+	/// Bonificaciones y recargos usan lo guardado en nómina; neto y pernoctes
 	/// siguen describiendo lo pagado en cada corte.
 	const porMes = $derived.by(() => {
 		const m = new Map<string, { bon: number; rec: number; per: number; neto: number }>();
@@ -674,7 +706,7 @@
 			e.neto += l.sueldo_total;
 		}
 		for (const fila of filasBon) obtenerMes(`${fila.anio}-${fila.mesClave}`).bon += fila.total;
-		for (const fila of filasJornada) {
+		for (const fila of filasRecargo) {
 			obtenerMes(`${fila.anio}-${fila.mesClave}`).rec += fila.valor ?? 0;
 		}
 		return Array.from(m.entries())
@@ -831,7 +863,7 @@
 			case 'bonificaciones':
 				return ordenar(filasBon);
 			case 'recargos':
-				return ordenar(filasJornada);
+				return ordenar(filasRecargo);
 			case 'pernotes':
 				return ordenar(filasPer);
 			case 'mantenimientos':
@@ -847,7 +879,7 @@
 		void filtros.q;
 		void firmaServidor;
 		pagina = 1;
-		paginaJornada = 1;
+		paginaRecargo = 1;
 	});
 	$effect(() => {
 		void filtros.analisis;
@@ -872,8 +904,18 @@
 			{ key: 'estado_flujo', label: 'Estado', fmt: (v) => ETIQUETA_ESTADO[v] ?? v },
 			{ key: 'dias_laborados', label: 'Días', num: true, fmt: (v) => num.format(v) },
 			{ key: 'salario_devengado', label: 'Devengado', num: true, fmt: fmt },
-			{ key: 'total_bonificaciones', label: 'Bonos marcados', num: true, fmt: fmt },
-			{ key: 'total_recargos', label: 'Recargos cobrados', num: true, fmt: fmt },
+			{
+				key: 'total_bonificaciones',
+				label: 'Bonificaciones pagadas',
+				num: true,
+				fmt: (_v, fila) => fmt(totalBonificacionesDeLiquidacion(fila))
+			},
+			{
+				key: 'total_recargos',
+				label: 'Recargos pagados',
+				num: true,
+				fmt: (_v, fila) => fmt(totalRecargosDeLiquidacion(fila))
+			},
 			{ key: 'total_pernotes', label: 'Pernoctes', num: true, fmt: fmt },
 			{
 				key: 'salud',
@@ -888,21 +930,18 @@
 			{ key: 'conductor', label: 'Conductor' },
 			{ key: 'nombre', label: 'Bonificación' },
 			{ key: 'mesClave', label: 'Mes', fmt: (_v, f) => `${f.mes} ${f.anio}` },
-			{ key: 'fechas', label: 'Días marcados', fmt: (v) => fechasAgrupadas(v) },
-			{ key: 'cantidad', label: 'Cantidad', num: true, fmt: (v) => num.format(v) },
-			{ key: 'valorUnitario', label: 'V. unitario', num: true, fmt: fmt },
-			{ key: 'total', label: 'Total', num: true, fmt: fmt }
+			{ key: 'cantidad', label: 'Cantidad pagada', num: true, fmt: (v) => v == null ? '—' : num.format(v) },
+			{ key: 'valorUnitario', label: 'V. unitario', num: true, fmt: (v) => v == null ? '—' : fmt(v) },
+			{ key: 'total', label: 'Total pagado', num: true, fmt: fmt }
 		],
 		recargos: [
 			{ key: 'placa', label: 'Placa' },
 			{ key: 'conductor', label: 'Conductor' },
-			{ key: 'planilla', label: 'Planilla' },
-			{ key: 'empresa', label: 'Empresa en planilla' },
+			{ key: 'empresa', label: 'Empresa' },
 			{ key: 'mesClave', label: 'Mes', fmt: (_v, f) => f.mes + ' ' + f.anio },
-			{ key: 'dias', label: 'Días laborados', fmt: (v) => formatearDiasLaborados(v) },
 			{
 				key: 'valor',
-				label: 'Valor a pagar',
+				label: 'Valor pagado',
 				num: true,
 				fmt: (v) => fmt(v ?? 0)
 			}
@@ -992,10 +1031,10 @@
 	const subtitulo = $derived.by(() => {
 		if (!datos) return 'cargando…';
 		if (filtros.analisis === 'bonificaciones') {
-			return `${cantidadMarcasBonificacion} marca(s) en Recorridos · ${fmt(totales.bonificaciones)} por valor de configuración`;
+			return `${cantidadBonificacion} unidad(es) de bonificación guardadas en nómina · ${fmt(totales.bonificaciones)}`;
 		}
 		if (filtros.analisis === 'recargos') {
-			return `${filasJornada.length} planilla(s) · ${cantidadDiasPlanilla} día(s) laborados · origen Recargos Planillas`;
+			return `${filasRecargo.length} línea(s) de recargo guardadas en nómina · ${fmt(totalValorRecargos)}`;
 		}
 		return `${totales.liquidaciones} liquidación(es) · ${totales.conductores} conductor(es) · ${totales.placas} placa(s) · Σ neto ${fmt(totales.neto)}`;
 	});
@@ -1164,7 +1203,7 @@
 				<div class="an-card an-grafica an-grafica--ancha">
 					<header class="an-card-cabecera">
 						<h2>Por mes</h2>
-						<span>Bonos marcados, recargos calculados en planillas y pernoctes por mes</span>
+						<span>Bonificaciones y recargos registrados en nómina, y pernoctes por mes</span>
 					</header>
 					<div class="an-lienzo">
 						{#if porMes.length}
@@ -1221,8 +1260,8 @@
 								? liqs.length
 								: t.key === 'bonificaciones'
 									? filasBon.length
-									: t.key === 'recargos'
-										? filasJornada.length
+										: t.key === 'recargos'
+											? filasRecargo.length
 										: t.key === 'pernotes'
 											? filasPer.length
 											: filasMnt.length}
@@ -1231,12 +1270,12 @@
 				{/each}
 			</div>
 
-			{#if filtros.analisis === 'recargos' && filasJornada.length}
+			{#if filtros.analisis === 'recargos' && filasRecargo.length}
 				<div class="an-recargos-jornada">
 					<header class="an-card-cabecera">
-						<h2>Días laborados en planillas</h2>
+						<h2>Recargos registrados en nómina</h2>
 						<span>
-							Empresa, días laborados y valor salen de Recargos Planillas.
+							Empresa, mes e importe salen de los recargos guardados en la liquidación del conductor.
 						</span>
 					</header>
 					<div class="an-scroll">
@@ -1245,23 +1284,19 @@
 								<tr>
 									<th><span class="an-th-btn">Placa</span></th>
 									<th><span class="an-th-btn">Conductor</span></th>
-									<th><span class="an-th-btn">Planilla</span></th>
-									<th><span class="an-th-btn">Empresa en planilla</span></th>
+									<th><span class="an-th-btn">Empresa</span></th>
 									<th><span class="an-th-btn">Mes</span></th>
-									<th><span class="an-th-btn">Días laborados</span></th>
-									<th class="an-th--num"><span class="an-th-btn">Valor a pagar</span></th>
+									<th class="an-th--num"><span class="an-th-btn">Valor pagado</span></th>
 								</tr>
 							</thead>
 							<tbody>
-								{#each filasJornadaPagina as f, i (f.planillaId + '-' + (f.empresaId ?? f.empresa) + '-' + f.mesClave + '-' + i)}
+								{#each filasRecargoPagina as f (f.id)}
 									<tr>
 										<td data-etiqueta="Placa">{f.placa}</td>
 										<td data-etiqueta="Conductor">{f.conductor}</td>
-										<td data-etiqueta="Planilla">{f.planilla}</td>
-										<td data-etiqueta="Empresa en planilla">{f.empresa}</td>
+										<td data-etiqueta="Empresa">{f.empresa}</td>
 										<td data-etiqueta="Mes">{f.mes} {f.anio}</td>
-										<td data-etiqueta="Días laborados">{formatearDiasLaborados(f.dias)}</td>
-										<td class="an-td--num" data-etiqueta="Valor a pagar">
+										<td class="an-td--num" data-etiqueta="Valor pagado">
 											<strong>{fmt(f.valor)}</strong>
 										</td>
 									</tr>
@@ -1270,11 +1305,11 @@
 						</table>
 					</div>
 					<PaginadorLista
-						pagina={paginaJornada}
-						total={filasJornada.length}
+						pagina={paginaRecargo}
+						total={filasRecargo.length}
 						porPagina={POR_PAGINA}
-						nombreItems="planillas con recargos"
-						onCambiar={(p) => (paginaJornada = p)}
+						nombreItems="recargos de nómina"
+						onCambiar={(p) => (paginaRecargo = p)}
 					/>
 				</div>
 			{/if}
@@ -1867,7 +1902,6 @@
 		border-color: var(--emerald-500);
 		color: var(--emerald-800);
 	}
-
 	/* ── Móvil: la tabla se apila en tarjetas ── */
 	@media (max-width: 767.98px) {
 		.an-tabla thead {

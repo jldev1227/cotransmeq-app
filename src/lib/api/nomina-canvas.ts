@@ -102,15 +102,13 @@ export interface LiquidacionAnalisis {
 		valor_unitario: number;
 		valores: { mes: string; cantidad: number }[];
 	}[];
-	recargos_jornada: {
-		planilla_id: string;
-		numero_planilla: string | null;
+	recargos_nomina: {
+		id: string;
 		vehiculo_id: string | null;
 		placa: string | null;
-		cliente_id: string | null;
-		cliente: string;
+		empresa_id: string;
+		empresa: string;
 		mes: string;
-		dias: { fecha: string }[];
 		valor: number;
 	}[];
 	pernotes: {
@@ -128,37 +126,18 @@ export interface LiquidacionAnalisis {
 	}[];
 }
 
-export interface BonificacionRecorridoAnalisis {
-	conductor_id: string;
-	conductor: string;
-	placa: string | null;
-	nombre: string;
-	mes: string;
-	cantidad: number;
-	valor_unitario: number;
-	total: number;
-	fechas: string[];
-}
-
-export interface RecargoPlanillaAnalisis {
-	planilla_id: string;
-	numero_planilla: string | null;
-	estado: string;
-	conductor_id: string;
-	conductor: string;
+export interface RecargoNominaAnalisis {
+	id: string;
 	vehiculo_id: string | null;
 	placa: string | null;
 	empresa_id: string;
 	empresa: string;
 	mes: string;
-	dias: { fecha: string }[];
-	valor_pagar: number;
+	valor: number;
 }
 
 export interface AnalisisNominaDTO {
 	liquidaciones: LiquidacionAnalisis[];
-	bonificaciones_recorridos: BonificacionRecorridoAnalisis[];
-	recargos_planillas: RecargoPlanillaAnalisis[];
 	catalogos: {
 		anios: number[];
 		placas: string[];
@@ -166,7 +145,7 @@ export interface AnalisisNominaDTO {
 		estados: string[];
 	};
 	total: number;
-	meta: { recargos_jornada_grupos: number };
+	meta: { recargos_nomina_items: number };
 }
 
 export const nominaCanvasAPI = {
