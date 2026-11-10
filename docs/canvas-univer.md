@@ -1,5 +1,14 @@
 # Canvas Univer
 
+El historial del cierre final se abre desde la placa activa. Permite recorrer
+versiones, revisar actor y hora de captura, comparar cambios y ver los valores
+guardados antes de restaurar. En nómina y recorridos el panel enfoca al
+conductor activo y permite restaurar solo esa hoja. Ingresos, adicionales y
+ocasional permiten elegir una placa. El periodo completo se restaura solo al
+seleccionarlo expresamente.
+Una captura automática identifica al sistema que guardó la versión, no al
+autor de cada edición anterior.
+
 Las hojas tipo Excel del dashboard: qué canvas hay, cómo se monta una página de
 canvas, cómo se reparten el trabajo el engine, los builders, los bindings, los
 adapters y los permisos de celda, y las trampas que ya costaron horas (el eco
@@ -30,11 +39,15 @@ permisos por módulo en [autenticacion-y-permisos.md](./autenticacion-y-permisos
 | Primas                      | `/dashboard/nomina/primas/canvas`                      | `nomina`                             | —                                                                        | **No monta Univer**: usa la cáscara de canvas (pantalla completa y «Ir a…») con un listado normal | REST                                                                                                                                                                                                                        |
 | Análisis                    | `/dashboard/nomina/analisis/canvas`                    | `nomina`                             | —                                                                        | **No monta Univer**: filtros, cifras y gráficas de `chart.js` sobre `GET /api/nomina/analisis`    | Solo lectura                                                                                                                                                                                                                |
 | Recorridos                  | `/dashboard/conductores/recorridos`                    | `recorridos`                         | Un corte (`?desde=&hasta=`); una hoja por conductor y una fila por tramo | `recorridos-engine.ts`, `recorridos.builder.ts`                                                   | Patches por `sheet-session` (scope `recorridos`); las filas nuevas son borradores locales hasta tener lo mínimo y se dan de alta por REST. Historial de versiones                                                           |
-| Cierres finales de terceros | `/dashboard/liquidaciones-terceros/canvas`             | `liquidaciones-terceros`             | Un periodo; una hoja por par placa-propietario                           | `cierres-finales-engine.ts`, `cierres-finales.builder.ts`                                         | Patches por `sheet-session` (scope `cierres-finales`); el servidor recalcula y devuelve todas las filas afectadas, el cliente solo pinta. El color de pestaña se guarda en `color_hoja` y se difunde por `sheet:hoja-color` |
+| Cierres finales de terceros | `/dashboard/liquidaciones-terceros/canvas`             | `liquidaciones-terceros`             | Un periodo; una hoja por propietario y una o varias placas               | `cierres-finales-engine.ts`, `cierres-finales.builder.ts`                                         | Patches por `sheet-session` (scope `cierres-finales`); el servidor recalcula y devuelve todas las filas afectadas, el cliente solo pinta. El color de pestaña se guarda en `color_hoja` y se difunde por `sheet:hoja-color` |
 | Adicionales                 | `/dashboard/liquidaciones-terceros/adicionales/canvas` | `liquidaciones-terceros-adicionales` | Un año; doce hojas                                                       | `adicionales-engine.ts`, `adicionales.builder.ts`                                                 | Patches por celda por `sheet-session` (scope `adicionales`, room por año). Historial de versiones                                                                                                                           |
 | Ocasional                   | `/dashboard/liquidaciones-terceros/ocasional/canvas`   | `liquidaciones-terceros`             | Un año; doce hojas, una cabecera por mes                                 | `ocasional-engine.ts`, `ocasional.builder.ts`                                                     | Documento del mes por REST (`guardarBorrador`); anotaciones por `sheet-session`. Historial de versiones. Las filas extra de gastos de vehículo se dan de alta desde `ModalGastosVehiculo`                                   |
 | Ingresos                    | `/dashboard/liquidaciones-terceros/ingresos/canvas`    | `liquidaciones-terceros`             | Un mes; hojas INGRESOS y ADICIONALES                                     | `ingresos-terceros-engine.ts`, `ingresos-terceros.builder.ts`                                     | La tabla es derivada; la capa editable (INCLUIR, cantidades, conceptos del pie) por REST (`guardar`); anotaciones por `sheet-session`                                                                                       |
 | Liquidaciones de servicios  | `/dashboard/liquidaciones-servicios/canvas`            | `liquidaciones-servicios`            | Todo el histórico; hojas Liquidaciones, Facturas y Terceros              | `servicios-historial-engine.ts` y sus tres builders                                               | La hoja es de solo lectura. Editar abre `ModalLiquidacion` con el `LiquidacionEditor` completo; presencia y eventos de dominio por `historial-servicios-session` (room global)                                              |
+
+En la nómina, la rejilla de días se compacta por conductor. Cada hoja agrega
+columnas solo para sus servicios adicionales; un turno partido de otra persona
+no deja huecos ni desplaza las fechas de esta hoja.
 
 En el análisis de nómina, el resumen agrupa por el mes en que termina cada
 liquidación. Las pestañas de conceptos filtran por el mes de referencia del
@@ -63,6 +76,16 @@ El color manual de las hojas de cierres finales se guarda en la base y se
 difunde a todas las sesiones activas del periodo, incluso si comparten usuario.
 En cierres multi-propietario, las filas de anticipos repartidos por igual llevan
 el concepto registrado y la cuota de cada propietario.
+El modal «Cierre · conceptos» permite editar gastos de vehículo y anticipos
+(concepto, cantidad o fecha e importe), además de recorrido, fechas, importes,
+cantidad y porcentaje administrativo de los adicionales. Los importes
+derivados y los totales se vuelven a calcular en el servidor al guardar.
+El modal de generación abre filtrado al periodo del canvas y permite consolidar
+automáticamente los borradores del mismo propietario; el toolbar también
+permite seleccionar y agrupar borradores ya existentes del mismo periodo. La
+hoja resultante identifica cada fila de ingresos con su placa y conserva el
+detalle de las placas fuente. Cada placa muestra los cierres finales en que
+apareció durante los seis meses anteriores, para orientar qué placas incluir.
 El orden arrastrado de las pestañas sí se guarda localmente por corte. En las
 filas del bloque de descuentos, el salario es editable; VALOR y TOTAL de
 prestaciones y seguridad social se calculan con sus fórmulas y no aceptan
@@ -241,7 +264,9 @@ Cortes propios de cada canvas:
   eliminar filas sí se permite, solo dentro de la zona de datos.
 - **Terceros** (cierres, adicionales, ocasional, ingresos): las filas bajo el
   bloque estructurado son **zona libre** de anotaciones, compartidas por
-  `sheet-session` y sin tocar ninguna tabla de negocio.
+  `sheet-session` y sin tocar ninguna tabla de negocio. En cierres finales, la
+  celda de porcentaje de cada impuesto tiene override local de 0 a 100 %; en
+  estado LIQUIDADA solo esa celda sigue editable y las demás quedan bloqueadas.
 - **Historial de servicios**: la hoja es de solo lectura para el usuario.
   Editar una liquidación (en el modal) exige `full` y que esté en BORRADOR,
   salvo para el área de Administración, que edita en cualquier estado.

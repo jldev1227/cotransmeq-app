@@ -96,6 +96,21 @@ export interface ItemsDisponiblesResp {
 	total: number;
 }
 
+export type TipoNovedadConductor =
+	| 'VACACIONES'
+	| 'INCAPACIDAD'
+	| 'LICENCIA_MATERNIDAD'
+	| 'LICENCIA_PATERNIDAD';
+
+export interface NovedadConductor {
+	id: string;
+	tipo: TipoNovedadConductor;
+	fecha_inicio: string | null;
+	fecha_fin: string | null;
+	dias: number;
+	observaciones: string | null;
+}
+
 export interface ConceptoDescuento {
 	id?: string;
 	liquidacion_tercero_id?: string;
@@ -800,6 +815,18 @@ export const liquidacionesTercerosDescuentosAPI = {
 		return response.data;
 	},
 
+	/** Reemplaza las novedades por conductor registradas en una hoja del cierre. */
+	async guardarNovedadesConductores(
+		liquidacionTerceroFinalId: string,
+		novedades: Record<string, NovedadConductor[]>
+	): Promise<{ novedades_conductores: Record<string, NovedadConductor[]> }> {
+		const response = await apiClient.put(
+			`/api/liquidaciones-terceros/${liquidacionTerceroFinalId}/novedades-conductores`,
+			{ novedades_conductores: novedades }
+		);
+		return response.data;
+	},
+
 	// ── Filas sueltas de GASTOS y ANTICIPOS ──
 
 	/**
@@ -841,6 +868,21 @@ export const liquidacionesTercerosDescuentosAPI = {
 	}> {
 		const response = await apiClient.delete(
 			`/api/liquidaciones-terceros/conceptos-fila/${conceptoId}`
+		);
+		return response.data;
+	},
+
+	/** Actualiza un campo editable de una fila de gastos o anticipos del cierre. */
+	async actualizarConceptoFila(params: {
+		id: string;
+		field: 'concepto' | 'dias' | 'valor_unitario' | 'observaciones';
+		value: string | number | null;
+		base_version: number;
+	}): Promise<{ rows: ConceptoDescuento[]; version: number }> {
+		const { id, ...body } = params;
+		const response = await apiClient.patch(
+			`/api/liquidaciones-terceros/conceptos-fila/${id}`,
+			body
 		);
 		return response.data;
 	},
@@ -1022,13 +1064,14 @@ export const liquidacionesTercerosDescuentosAPI = {
 	},
 
 	async compararSnapshots(
+		liquidacionId: string,
 		snapshotIdA: string,
 		snapshotIdB: string
 	): Promise<{
 		fields: Array<{ path: string; anterior: any; nuevo: any }>;
 	}> {
 		const response = await apiClient.get(
-			`/api/liquidaciones-terceros/snapshots/${snapshotIdA}/diff`,
+			`/api/liquidaciones-terceros/${liquidacionId}/snapshots/${snapshotIdA}/diff`,
 			{
 				params: { con: snapshotIdB }
 			}

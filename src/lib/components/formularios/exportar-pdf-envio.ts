@@ -39,11 +39,25 @@ async function comoDataUrl(url: string): Promise<string | null> {
 	}
 }
 
-/** Cuerpo listo para mandar: sin lo marcado `no-print` y con el logo incrustado. */
-async function cuerpoParaPdf(doc: HTMLElement): Promise<string> {
+interface DocumentoParaPdf {
+	html: string;
+	footer: { left: string; right: string };
+}
+
+/** Cuerpo listo para mandar: sin controles, con logo incrustado y pie separado. */
+async function cuerpoParaPdf(doc: HTMLElement): Promise<DocumentoParaPdf> {
 	const clon = doc.cloneNode(true) as HTMLElement;
 
 	for (const el of Array.from(clon.querySelectorAll('.no-print'))) el.remove();
+
+	/// El pie dentro del DOM podía dejar una hoja adicional al paginarlo Chrome.
+	/// Puppeteer tiene una caja propia para repetirlo sin alterar el flujo.
+	const pie = clon.querySelector('.pie');
+	const textosPie = Array.from(pie?.querySelectorAll('span') ?? []).map(
+		(span) => span.textContent?.trim() ?? ''
+	);
+	const footer = { left: textosPie[0] ?? '', right: textosPie[1] ?? '' };
+	pie?.remove();
 
 	for (const img of Array.from(clon.querySelectorAll('img'))) {
 		const src = img.getAttribute('src') ?? '';
@@ -55,7 +69,7 @@ async function cuerpoParaPdf(doc: HTMLElement): Promise<string> {
 		else img.remove();
 	}
 
-	return clon.outerHTML;
+	return { html: clon.outerHTML, footer };
 }
 
 /** Mensaje de error de una respuesta que vino como Blob por `responseType`. */
@@ -80,7 +94,7 @@ async function mensajeDeBlob(e: any): Promise<string> {
  * propio botón de descarga.
  */
 export async function exportarPdfEnvio(doc: HTMLElement, nombreArchivo: string): Promise<void> {
-	const html = await cuerpoParaPdf(doc);
+	const documento = await cuerpoParaPdf(doc);
 	/// La MISMA hoja que pinta el preview, importada como valor. No se extrae del
 	/// CSSOM: ese camino depende de la clase de scoping de Svelte y de si la hoja
 	/// es legible, y cuando falla el PDF sale sin una sola regla —solo texto e
@@ -89,7 +103,11 @@ export async function exportarPdfEnvio(doc: HTMLElement, nombreArchivo: string):
 
 	let blob: Blob;
 	try {
-		blob = await formulariosDocumentoPdfAPI.renderizar({ html, css, filename: nombreArchivo });
+		blob = await formulariosDocumentoPdfAPI.renderizar({
+			...documento,
+			css,
+			filename: nombreArchivo
+		});
 	} catch (e: any) {
 		throw new Error(await mensajeDeBlob(e));
 	}

@@ -67,11 +67,9 @@ export interface DiaPeriodoDTO {
 	esDomingo: boolean;
 	indice: number;
 	/**
-	 * Repetición de la fecha: 0 es la primera columna del día.
-	 *
-	 * Una fecha abre más de una columna cuando ALGÚN conductor del libro tuvo
-	 * dos servicios ese día. Es lo que permite ocultar por hoja las que ese
-	 * conductor no usa. Ausente en snapshots viejos, que se pintan enteros.
+	 * Repetición de la fecha: 0 es el primer servicio. La rejilla del servidor
+	 * informa las ocurrencias y el builder compacta por hoja las que pertenecen
+	 * a otros conductores. Ausente en snapshots viejos, que se pintan enteros.
 	 */
 	ocurrencia?: number;
 }
@@ -862,27 +860,10 @@ export interface ResultadoBuild {
 export function buildNominaWorkbook(dto: PeriodoNominaDTO): ResultadoBuild {
 	const unitId = `nomina-${dto.anio}-${dto.mes}`;
 	const dias = dto.periodo.dias;
-	// Las leyendas de clientes y placas se escriben hacia la derecha a razón de
-	// 4 columnas por elemento (nombre en dos, color en una, hueco en una). Con
-	// muchos elementos se sale del ancho de los días, así que la hoja tiene que
-	// ser al menos tan ancha como la leyenda más larga del libro.
 	// Festivos del periodo, calculados UNA vez para todo el libro.
 	// `obtenerFestivosCompletos` recalcula el año entero en cada llamada; con
 	// 31 días × 24 conductores serían 744 recálculos.
 	const festivos = festivosDelPeriodo(dias);
-
-	const maxClientes = dto.hojas.reduce((m, h) => Math.max(m, h.clientes?.length ?? 0), 0);
-	const maxPlacas = dto.hojas.reduce((m, h) => Math.max(m, h.placasUsadas?.length ?? 0), 0);
-	const numColumnas = Math.max(
-		COL.DIA0 + dias.length,
-		COL.DIA0 + maxClientes * 4,
-		COL.DIA0 + maxPlacas * 4,
-		// Las zonas de abajo ya no ensanchan columnas: ganan sitio combinando
-		// celdas, así que la hoja tiene que tener columnas suficientes.
-		ZONA.JORNADA_C0 + ANCHO_JORNADA,
-		ZONA.DESPRENDIBLE_C0 + ANCHO_DESPRENDIBLE,
-		MIN_COLUMNAS
-	);
 
 	const sheets: Record<string, Partial<IWorksheetData>> = {};
 	const sheetOrder: string[] = [];
@@ -902,7 +883,6 @@ export function buildNominaWorkbook(dto: PeriodoNominaDTO): ResultadoBuild {
 			indice: i + 1,
 			sheetId,
 			unitId,
-			numColumnas,
 			festivos,
 			checkboxPorSheetId
 		});
@@ -955,13 +935,54 @@ function hojaVacia(dto: PeriodoNominaDTO): Partial<IWorksheetData> {
 	};
 }
 
+/**
+ * Quita de cada hoja las ocurrencias que pertenecen a otros conductores y
+ * renumera los índices visibles. Las zonas inferiores usan coordenadas fijas;
+ * por eso se puede compactar la rejilla superior sin desplazar sus fórmulas.
+ */
+function compactarRejillaPorHoja(
+	dto: PeriodoNominaDTO,
+	hoja: HojaNominaDTO
+): { dto: PeriodoNominaDTO; hoja: HojaNominaDTO } {
+	const clave = (fecha: string, ocurrencia: number | undefined) =>
+		`${fecha.slice(0, 10)}|${ocurrencia ?? 0}`;
+	const ocurrenciasPropias = new Set(hoja.dias.map((d) => clave(d.fecha, d.ocurrencia)));
+	const indiceNuevoPorOriginal = new Map<number, number>();
+	const dias = dto.periodo.dias
+		.filter((d) => (d.ocurrencia ?? 0) === 0 || ocurrenciasPropias.has(clave(d.fecha, d.ocurrencia)))
+		.map((d, indice) => {
+			indiceNuevoPorOriginal.set(d.indice, indice);
+			return { ...d, indice };
+		});
+	const indiceNuevoPorOcurrencia = new Map(
+		dias.map((d) => [clave(d.fecha, d.ocurrencia), d.indice])
+	);
+	const diasHoja = hoja.dias.flatMap((d) => {
+		const indice = indiceNuevoPorOcurrencia.get(clave(d.fecha, d.ocurrencia));
+		return indice === undefined ? [] : [{ ...d, indice }];
+	});
+	const semanas = dto.periodo.semanas
+		.map((s) => ({
+			...s,
+			indices: s.indices.flatMap((i) => {
+				const indice = indiceNuevoPorOriginal.get(i);
+				return indice === undefined ? [] : [indice];
+			})
+		}))
+		.filter((s) => s.indices.length > 0);
+
+	return {
+		dto: { ...dto, periodo: { ...dto.periodo, dias, semanas } },
+		hoja: { ...hoja, dias: diasHoja }
+	};
+}
+
 function construirHoja(args: {
 	dto: PeriodoNominaDTO;
 	hoja: HojaNominaDTO;
 	indice: number;
 	sheetId: string;
 	unitId: string;
-	numColumnas: number;
 	/** Fechas ISO festivas del periodo. */
 	festivos: Set<string>;
 	/// Mapa que rellena esta función: dónde quedaron las casillas de ajuste,
@@ -971,8 +992,11 @@ function construirHoja(args: {
 	/// de la licencia, que están en bloques distintos.
 	checkboxPorSheetId: Record<string, RangoCheckboxNomina[]>;
 }): Partial<IWorksheetData> {
-	const { dto, hoja, indice, sheetId, unitId, numColumnas, festivos } = args;
-	const dias = dto.periodo.dias;
+	const { dto, hoja, indice, sheetId, unitId, festivos } = args;
+	const compacto = compactarRejillaPorHoja(dto, hoja);
+	const dtoHoja = compacto.dto;
+	const hojaCompacta = compacto.hoja;
+	const dias = dtoHoja.periodo.dias;
 
 	const cellData: Record<number, Record<number, ICellData>> = {};
 	const mergeData: { startRow: number; endRow: number; startColumn: number; endColumn: number }[] = [];
@@ -988,16 +1012,16 @@ function construirHoja(args: {
 	};
 
 	// Índice por columna de los días con planilla, para no buscar en bucle.
-	const porIndice = new Map<number, DiaHojaDTO>(hoja.dias.map((d) => [d.indice, d]));
+	const porIndice = new Map<number, DiaHojaDTO>(hojaCompacta.dias.map((d) => [d.indice, d]));
 
-	zonaDias({ dias, hoja, porIndice, set, merge, dto, festivos, bind });
+	zonaDias({ dias, hoja: hojaCompacta, porIndice, set, merge, dto: dtoHoja, festivos, bind });
 
 	// Un día que la ley marca como festivo pero la planilla no, se paga como
 	// día normal: sin RD ni RNDF. Es dinero, y no salta por ningún lado.
-	const festivosSinMarcar = hoja.dias
+	const festivosSinMarcar = hojaCompacta.dias
 		.filter((d) => festivos.has(d.fecha) && !d.esFestivo)
 		.map((d) => d.fecha);
-	const avisosHoja = [...hoja.avisos];
+	const avisosHoja = [...hojaCompacta.avisos];
 	if (festivosSinMarcar.length) {
 		avisosHoja.push(
 			`Festivo(s) sin marcar en la planilla: ${festivosSinMarcar.join(', ')}. ` +
@@ -1005,16 +1029,16 @@ function construirHoja(args: {
 		);
 	}
 	const { fin: finConfig, celdaSalarioBasico } = zonaConfiguracion({
-		hoja,
+		hoja: hojaCompacta,
 		dias,
 		set,
 		merge,
 		bind
 	});
-	const finEmpresas = zonaEmpresas({ hoja, set, merge, desdeFila: finConfig + 2 });
-	const reparto = zonaJornada({ dto, hoja, set, merge });
+	const finEmpresas = zonaEmpresas({ hoja: hojaCompacta, set, merge, desdeFila: finConfig + 2 });
+	const reparto = zonaJornada({ dto: dtoHoja, hoja: hojaCompacta, set, merge });
 	const { fin: finDesprendible, checkbox: rangosCheckbox } = zonaDesprendible({
-		hoja,
+		hoja: hojaCompacta,
 		set,
 		merge,
 		bind,
@@ -1030,6 +1054,14 @@ function construirHoja(args: {
 	if (rangosCheckbox.length) args.checkboxPorSheetId[sheetId] = rangosCheckbox;
 
 	const rowCount = Math.max(finEmpresas, finDesprendible) + 3;
+	const numColumnas = Math.max(
+		COL.DIA0 + dias.length,
+		COL.DIA0 + (hojaCompacta.clientes?.length ?? 0) * 4,
+		COL.DIA0 + (hojaCompacta.placasUsadas?.length ?? 0) * 4,
+		ZONA.JORNADA_C0 + ANCHO_JORNADA,
+		ZONA.DESPRENDIBLE_C0 + ANCHO_DESPRENDIBLE,
+		MIN_COLUMNAS
+	);
 
 	const columnData: Record<number, { w: number }> = {};
 	columnData[COL.NOMBRE] = { w: 210 };
@@ -1053,27 +1085,6 @@ function construirHoja(args: {
 	// ensanchándolas: un ancho es de la columna entera y deformaría la
 	// cuadrícula de días de arriba.
 	for (let c = COL.DIA0; c < numColumnas; c++) columnData[c] = { w: ANCHO_COL_DIA };
-
-	/**
-	 * AQUÍ NO SE OCULTA NINGUNA COLUMNA, y es una decisión, no un olvido.
-	 *
-	 * Se ocultaban las columnas repetidas que la hoja no usaba. La rejilla se
-	 * dimensiona mirando a TODOS los conductores —si uno solo hace turno
-	 * partido el 5 de julio, esa fecha abre dos columnas en las 25 hojas y en
-	 * 24 la segunda queda vacía—, así que parecía limpio esconderlas.
-	 *
-	 * NO LO ERA: `hd` esconde la columna ENTERA, y por debajo de la rejilla de
-	 * días pasan las zonas de abajo. El desprendible ocupa de la 25 a la 38 y
-	 * esas son también columnas de día. Medido en el corte de julio de 2026 de
-	 * transmeralda: 18 columnas ocultables, y SIETE de ellas —26, 28, 30, 32,
-	 * 34, 36 y 38— caen dentro del desprendible. O sea que esconder los huecos
-	 * de arriba borraba trozos del desprendible de abajo: la columna de
-	 * concepto partida, media columna de VALOR, el rótulo de deducciones.
-	 *
-	 * El precio de no ocultarlas es ver las columnas vacías de las fechas que
-	 * otro conductor repitió. Se marcan en la cabecera (`2.º SERVICIO`) para
-	 * que no se lean como un día repetido, que es exactamente como se leían.
-	 */
 
 	cerrarBordesDeCombinadas(cellData, mergeData);
 	rellenarBordesVacios(cellData, rowCount, numColumnas, mergeData);
@@ -1273,22 +1284,16 @@ function zonaDias(args: {
 				: derivada();
 
 		/**
-		 * Segundo (o tercer) servicio de la MISMA fecha.
-		 *
-		 * Repetía el número del día y las tres letras del nombre —«5 / MAR»
-		 * otra vez— y no había forma de distinguirlo de un día duplicado por
-		 * error, que es como se leía: un día sin hora de inicio ni de fin y sin
-		 * ninguna razón aparente para existir. La razón es que OTRO conductor
-		 * hizo turno partido esa fecha y la rejilla de columnas es común al
-		 * libro entero.
-		 *
-		 * El número del día se conserva —la columna sigue siendo del día 5— y
-		 * lo que cambia es la segunda línea, que es donde iba la información
-		 * repetida.
+		 * Las fechas repetidas reservan columnas para todo el libro, pero solo
+		 * son un servicio adicional en las hojas cuyos datos ocupan esa columna.
+		 * Sin este cruce, el turno partido de un conductor rotulaba como «2.º
+		 * SERV» las hojas de todos los demás.
 		 */
+		const diaHoja = porIndice.get(d.indice);
 		const repetida = (d.ocurrencia ?? 0) > 0;
+		const mostrarServicioExtra = repetida && Boolean(diaHoja);
 		set(FILA.CAB_DIA, c, {
-			v: d.dia,
+			v: repetida && !diaHoja ? '' : d.dia,
 			s: { ...cabecera(festivo ? FESTIVO_CABECERA : domingo ? '#7F1D1D' : GREEN), fs: 10 }
 		});
 		/**
@@ -1296,7 +1301,6 @@ function zonaDias(args: {
 		 * sin esto, un día que no suma se ve igual que los demás y el total de
 		 * abajo parece corto sin razón. Se gestionan desde el modal del carril.
 		 */
-		const diaHoja = porIndice.get(d.indice);
 		const marca = diaHoja?.noSuma
 			? diaHoja.oculto
 				? 'FUERA'
@@ -1304,13 +1308,18 @@ function zonaDias(args: {
 			: diaHoja?.oculto
 				? 'OCULTO'
 				: null;
+		const nombreDia = repetida
+			? mostrarServicioExtra
+				? `${(d.ocurrencia ?? 0) + 1}.º SERV`
+				: ''
+			: d.nombreDia.slice(0, 3);
 		set(FILA.CAB_NOMBRE_DIA, c, {
-			v: marca ?? (repetida ? `${(d.ocurrencia ?? 0) + 1}.º SERV` : d.nombreDia.slice(0, 3)),
+			v: marca ?? nombreDia,
 			s: {
 				...cabecera(
 					marca
 						? '#6B7280'
-						: repetida
+						: mostrarServicioExtra
 							? SERVICIO_EXTRA
 							: festivo
 								? '#92400E'
@@ -1318,7 +1327,7 @@ function zonaDias(args: {
 									? '#991B1B'
 									: SUBCAB
 				),
-				fs: marca || repetida ? 7 : 9
+				fs: marca || mostrarServicioExtra ? 7 : 9
 			}
 		});
 
@@ -1334,11 +1343,8 @@ function zonaDias(args: {
 		 * abajo no se pintaría ninguno — que es justo el caso que esto viene a
 		 * resolver.
 		 */
-		/// Solo en la PRIMERA columna de la fecha. La rejilla de columnas es
-		/// global al libro: si CUALQUIER conductor hizo dos servicios el día 10,
-		/// ese día abre dos columnas para todos, y el concepto se pintaría dos
-		/// veces en la hoja de quien ese día estuvo disponible. A DAYRO le salían
-		/// 18 «D» donde hay 14 días.
+		/// Solo en la primera columna de la fecha: un concepto de calendario
+		/// corresponde al día del conductor y no se repite en sus otros servicios.
 		const concepto = repetida ? undefined : conceptoPorFecha.get(d.fecha);
 		if (concepto) {
 			set(FILA.TURNO, c, {
@@ -1442,8 +1448,8 @@ function zonaDias(args: {
 					entityType: 'liquidacion',
 					entityId: hoja.liquidacionId!,
 					// La celda se identifica por FECHA y OCURRENCIA, no por la
-					// columna: la rejilla es global al libro y se corre cuando
-					// otro conductor abre una columna nueva.
+					// columna: cada hoja compacta su propia rejilla y los índices
+					// visibles pueden cambiar al agregar servicios de este conductor.
 					field: `dia|${dh.fecha}|${dh.ocurrencia ?? 0}|${codigo}`,
 					conductorId: hoja.conductorId
 				});

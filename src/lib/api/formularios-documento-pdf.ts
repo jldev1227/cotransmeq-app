@@ -10,7 +10,12 @@ import { apiClient } from './apiClient';
  * que es el servicio que atiende las dos rutas.
  */
 export const formulariosDocumentoPdfAPI = {
-	async renderizar(payload: { html: string; css: string; filename: string }): Promise<Blob> {
+	async renderizar(payload: {
+		html: string;
+		css: string;
+		filename: string;
+		footer: { left: string; right: string };
+	}): Promise<Blob> {
 		const response = await apiClient.post('/api/formularios/documento/pdf', payload, {
 			responseType: 'blob',
 			/// Un preoperacional de 131 ítems con sus fotos tarda más que el timeout

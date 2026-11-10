@@ -94,6 +94,8 @@ En la ficha SARLAFT, el panel de gestión y soportes permanece visible al recorr
 | `/dashboard/acciones-correctivas/crear` | Alta de una acción. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/acciones-correctivas/[id]` | Detalle de una acción. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/acciones-correctivas/editar/[id]` | Edición de una acción. | `acciones-correctivas` | `acciones-correctivas` |
+| `/dashboard/plan-trabajo` | Panel anual HSEQ/PESV con resumen, indicadores, responsables, ocurrencias y soportes. Acepta `planId` y `ocurrenciaId` para abrir una tarea desde un aviso. | `acciones-correctivas` | `plan-trabajo` |
+| `/dashboard/acciones-correctivas/plan-trabajo` | Compatibilidad: redirige al panel independiente y conserva los parámetros de consulta. | `acciones-correctivas` | Redirección |
 | `/dashboard/incidentes` | Accidentes, incidentes y casi accidentes, con plazos e indicadores. | `incidentes` | `incidentes` |
 | `/dashboard/incidentes/[id]` | Detalle de ancho completo en secuencia: reporte agrupado por contexto, personas y gestión; evidencias, investigación (Res. 1401 de 2007), acciones y cierre. | `incidentes` | `incidentes`, `viaticos` |
 | `/dashboard/evaluaciones` | Evaluaciones de conductores con acceso a compartir su QR público, marcado con el sello corporativo. | `evaluaciones` | `evaluaciones` |
@@ -138,6 +140,12 @@ declaración SARLAFT en
 | `/dashboard/liquidaciones-terceros/ocasional/[id]` | Vista previa de una liquidación ocasional. | `liquidaciones-terceros` | `liquidaciones-terceros-ocasional` |
 
 Los canvas comparten motor y reglas: ver [canvas-univer.md](./canvas-univer.md).
+En cierres finales se pueden consolidar varios borradores del mismo tercero en
+una hoja: el modal de generación agrupa automáticamente las placas elegidas
+cuando se activa esa opción, y «Agrupar borradores» permite combinar hojas ya
+creadas que sigan en estado BORRADOR. El cierre resultante conserva el detalle
+por vehículo —incluida la placa en cada fila—, suma los costos, anticipos y
+gastos asociados a cada vehículo, y recalcula los impuestos sobre el total.
 Los `<title>` de los canvas de cierres, ocasional e ingresos terminan en
 «· Transmeralda»: la marca no se tradujo al migrarlos. El comentario de la
 entrada «Liq. Servicios» en `menu.ts` dice que entra directo al canvas, pero su

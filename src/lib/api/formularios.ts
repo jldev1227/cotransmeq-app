@@ -343,7 +343,81 @@ export interface FiltrosEnvios {
 	includeDeleted?: boolean;
 }
 
+export interface FiltrosImportacionFormularios {
+	fechaDesde: string;
+	fechaHasta: string;
+	estado: 'SUBMITTED' | 'VOIDED';
+	codigoFormulario?: string;
+	busqueda?: string;
+	pagina: number;
+	porPagina: number;
+	crearConductoresFaltantes: boolean;
+	crearVehiculosFaltantes: boolean;
+}
+
+export interface EnvioImportableDto {
+	id: string;
+	huella: string;
+	formCode: string;
+	formName: string;
+	formVersion: number;
+	formTitle: string;
+	status: 'SUBMITTED' | 'VOIDED';
+	businessDate: string;
+	submittedAt: string | null;
+	driver: { id: string; nombre: string; tipoIdentificacion: string; numeroIdentificacion: string | null } | { id: string; nombre: string; correo: string } | null;
+	vehicle: { id: string; placa: string; clase: string } | null;
+	answers: number;
+	attachments: number;
+	yaImportado: boolean;
+	versionDestino: 'REUTILIZAR' | 'COPIAR' | 'CREAR';
+	accionesRequeridas: { crearConductor: boolean; crearVehiculo: boolean };
+	importable: boolean;
+	bloqueos: string[];
+}
+
+export interface ResultadoImportacionFormularios {
+	batchId: string;
+	status: 'COMPLETED' | 'PARTIAL' | 'FAILED';
+	selected: number;
+	imported: number;
+	alreadyImported: number;
+	failed: number;
+	results: Array<{
+		submissionId: string;
+		estado: 'IMPORTED' | 'ALREADY_IMPORTED' | 'FAILED';
+		destinationSubmissionId?: string;
+		createdDriver?: boolean;
+		createdVehicle?: boolean;
+		codigo?: string;
+		mensaje?: string;
+		advertencia?: string;
+	}>;
+}
+
+export interface PreviewImportacionFormularios {
+	items: EnvioImportableDto[];
+	pagina: number;
+	porPagina: number;
+	total: number;
+	paginas: number;
+}
+
 export const enviosFormularioAPI = {
+	previsualizarImportacionTransmeralda(params: FiltrosImportacionFormularios) {
+		return unwrap<PreviewImportacionFormularios>(
+			apiClient.post('/api/formularios/importar-desde-transmeralda/preview', params)
+		);
+	},
+
+	importarDesdeTransmeralda(payload: {
+		seleccion: Array<{ submissionId: string; huella: string }>;
+		crearConductoresFaltantes: boolean;
+		crearVehiculosFaltantes: boolean;
+	}) {
+		return unwrap<ResultadoImportacionFormularios>(apiClient.post('/api/formularios/importar-desde-transmeralda', payload));
+	},
+
 	listar(params: FiltrosEnvios = {}) {
 		return unwrapWithMeta<SubmissionSummaryDto[]>(
 			apiClient.get('/api/formularios/submissions', { params })

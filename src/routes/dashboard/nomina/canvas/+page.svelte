@@ -123,6 +123,23 @@
 	 * a la vista y editable en vez de clavado en el código.
 	 */
 	let corte = $state(Number($page.url.searchParams.get('desde')) || 21);
+	let cortePortal = $state<number | null>(null);
+	let guardandoCortePortal = $state(false);
+	const etiquetaCortePortal = (dia: number) => `${dia}→${dia === 1 ? 'fin de mes' : dia - 1}`;
+
+	async function fijarCortePortal() {
+		if (guardandoCortePortal) return;
+		guardandoCortePortal = true;
+		try {
+			const resultado = await nominaCanvasAPI.fijarCorteDiligenciamiento(corte);
+			cortePortal = resultado.diaInicio;
+			toast.success(`Corte ${etiquetaCortePortal(corte)} fijado para días laborados.`);
+		} catch (error: any) {
+			toast.error(error?.response?.data?.error || 'No se pudo fijar el corte de días laborados.');
+		} finally {
+			guardandoCortePortal = false;
+		}
+	}
 
 	/**
 	 * RANGO ESPECÍFICO en vez del corte, o `null` para liquidar por corte.
@@ -1714,9 +1731,17 @@
 
 	// ─── Ciclo de vida ─────────────────────────────────────
 	onMount(() => {
-		syncUrl();
-		conectarSesion();
-		void loadInicial();
+		void (async () => {
+			try {
+				cortePortal = (await nominaCanvasAPI.corteDiligenciamiento()).diaInicio;
+				if (!$page.url.searchParams.has('desde') && cortePortal) corte = cortePortal;
+			} catch {
+				cortePortal = null;
+			}
+			syncUrl();
+			conectarSesion();
+			await loadInicial();
+		})();
 	});
 
 	/**
@@ -2065,11 +2090,24 @@
 				<span>Corte</span>
 				<UniverSelect
 					value={corte}
-					options={[1, 15, 16, 20, 21, 25, 26].map((d) => ({ value: d, label: String(d) }))}
+					options={Array.from({ length: 28 }, (_, i) => i + 1).map((d) => ({ value: d, label: String(d) }))}
 					ariaLabel="Día inicial del corte"
 					onchange={(valor) => cambiarPeriodo(anio, mes, Number(valor))}
 				/>
 			</label>
+			{#if cortePortal !== null && cortePortal !== corte}
+				<button
+					type="button"
+					class="univer-btn univer-btn-blue"
+					onclick={fijarCortePortal}
+					disabled={guardandoCortePortal}
+					title={`Aplicar el corte ${etiquetaCortePortal(corte)} a la secuencia de días laborados del portal`}
+				>
+					{guardandoCortePortal ? 'Guardando…' : `Fijar ${etiquetaCortePortal(corte)} en el portal`}
+				</button>
+			{:else if cortePortal !== null}
+				<span class="univer-year-picker" title="Corte vigente para los días laborados del portal">Portal: {etiquetaCortePortal(cortePortal)}</span>
+			{/if}
 		{/if}
 
 		<!-- Buscador y no `<select>`: con 25 conductores el desplegable nativo
@@ -2216,6 +2254,7 @@
 <SnapshotPanel
 	open={historialAbierto}
 	scope="nomina"
+	conductorId={conductorActivo}
 	{anio}
 	{mes}
 	onClose={() => (historialAbierto = false)}

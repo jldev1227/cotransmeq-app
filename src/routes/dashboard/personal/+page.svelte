@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { IdCard, UserCog } from 'lucide-svelte';
+	import { IdCard, UserCog, UsersRound } from 'lucide-svelte';
 	import ListadoConductores from '$lib/components/personal/ListadoConductores.svelte';
 	import ListadoAdministrativos from '$lib/components/personal/ListadoAdministrativos.svelte';
+	import ResponsablesArea from '$lib/components/personal/ResponsablesArea.svelte';
 	import { authStore } from '$lib/stores/auth';
 
-	type TipoPersonal = 'conductor' | 'administrativo';
+	type TipoPersonal = 'conductor' | 'administrativo' | 'responsables';
 	let tipoActivo = $state<TipoPersonal>('conductor');
 	function tieneAreaAdministracion() {
 		const area = $authStore.user?.area;
@@ -16,11 +17,15 @@
 
 	$effect(() => {
 		const tipo = page.url.searchParams.get('tipo');
-		tipoActivo = tipo === 'administrativo' && esAdmin ? 'administrativo' : 'conductor';
+		tipoActivo = tipo === 'administrativo' && esAdmin
+			? 'administrativo'
+			: tipo === 'responsables' && esAdmin
+				? 'responsables'
+				: 'conductor';
 	});
 
 	function cambiarTipo(tipo: TipoPersonal) {
-		if (tipo === 'administrativo' && !esAdmin) return;
+		if (tipo !== 'conductor' && !esAdmin) return;
 		tipoActivo = tipo;
 		const url = new URL(page.url);
 		url.searchParams.set('tipo', tipo);
@@ -48,11 +53,16 @@
 				<button type="button" class:active={tipoActivo === 'administrativo'} aria-pressed={tipoActivo === 'administrativo'} onclick={() => cambiarTipo('administrativo')}>
 					<UserCog size={16} /> Administrativos
 				</button>
+				<button type="button" class:active={tipoActivo === 'responsables'} aria-pressed={tipoActivo === 'responsables'} onclick={() => cambiarTipo('responsables')}>
+					<UsersRound size={16} /> Responsables por área
+				</button>
 			{/if}
 		</nav>
 	</header>
 
-	{#if tipoActivo === 'administrativo' && esAdmin}
+	{#if tipoActivo === 'responsables' && esAdmin}
+		<ResponsablesArea />
+	{:else if tipoActivo === 'administrativo' && esAdmin}
 		<ListadoAdministrativos />
 	{:else}
 		<ListadoConductores />
@@ -147,7 +157,7 @@
 			width: 100%;
 			min-width: 0;
 			display: grid;
-			grid-template-columns: repeat(2, minmax(0, 1fr));
+			grid-template-columns: repeat(3, minmax(0, 1fr));
 		}
 		.personal-route__tabs button { min-width: 0; min-height: 44px; padding-inline: .45rem; }
 	}

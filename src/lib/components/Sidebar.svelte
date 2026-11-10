@@ -48,7 +48,7 @@
 		// Recorridos y oculta Conductores; si no, se llega desde la ficha.
 		const { allowed, level } = checkAccess(
 			currentUser.area,
-			item.id,
+			item.permissionId ?? item.id,
 			currentUser.permisos_rutas,
 			currentUser.id
 		);

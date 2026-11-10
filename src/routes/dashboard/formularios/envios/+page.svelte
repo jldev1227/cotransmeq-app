@@ -14,6 +14,8 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
+	import { authStore } from '$lib/stores/auth';
+	import ImportarEnviosModal from '$lib/components/formularios/ImportarEnviosModal.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import { enviosFormularioAPI, formulariosAPI, type FiltrosEnvios } from '$lib/api/formularios';
 	import {
@@ -27,6 +29,8 @@
 	let formularios = $state<FormDefinitionDto[]>([]);
 	let cargando = $state(true);
 	let exportando = $state(false);
+	let mostrarImportador = $state(false);
+	const puedeImportar = $derived(!!$authStore.user && authStore.getAccessLevel('formularios') === 'full');
 
 	let pagina = $state(1);
 	let total = $state(0);
@@ -145,9 +149,14 @@
 			</nav>
 			<h1 class="cabecera__titulo">Envíos</h1>
 		</div>
-		<button type="button" class="btn" disabled={exportando} onclick={exportar}>
-			{exportando ? 'Generando…' : 'Exportar CSV'}
-		</button>
+		<div class="acciones-cabecera">
+			{#if puedeImportar}
+				<button type="button" class="btn btn--importar" onclick={() => (mostrarImportador = true)}>Importar desde Transmeralda</button>
+			{/if}
+			<button type="button" class="btn" disabled={exportando} onclick={exportar}>
+				{exportando ? 'Generando…' : 'Exportar CSV'}
+			</button>
+		</div>
 	</header>
 
 	<div class="filtros">
@@ -307,6 +316,16 @@
 	{/if}
 </div>
 
+{#if mostrarImportador}
+	<ImportarEnviosModal
+		empresaOrigen="TRANSMERALDA"
+		previsualizar={enviosFormularioAPI.previsualizarImportacionTransmeralda}
+		ejecutarImportacion={enviosFormularioAPI.importarDesdeTransmeralda}
+		onclose={() => (mostrarImportador = false)}
+		onimported={() => void cargar()}
+	/>
+{/if}
+
 <style>
 	.pagina {
 		display: flex;
@@ -342,6 +361,17 @@
 		font-size: 1.5rem;
 		font-weight: 600;
 		color: var(--text-primary, #0f172a);
+	}
+
+	.acciones-cabecera {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.btn--importar {
+		color: #047857;
+		border-color: #a7f3d0;
 	}
 
 	.filtros {

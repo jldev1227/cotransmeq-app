@@ -151,8 +151,8 @@ export const recorridosSnapshotsAPI = {
 		};
 	},
 
-	async revertir(id: string) {
-		const { data } = await apiClient.post(`/api/recorridos/snapshots/${id}/revertir`);
+	async revertir(id: string, conductorId?: string | null) {
+		const { data } = await apiClient.post(`/api/recorridos/snapshots/${id}/revertir`, conductorId ? { conductorId } : {});
 		return data as {
 			filasRestauradas: number;
 			fallidas: Array<{ conductor_id: string; error: string }>;

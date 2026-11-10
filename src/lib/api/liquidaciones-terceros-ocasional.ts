@@ -593,10 +593,12 @@ export const liquidacionesTercerosOcasionalAPI = {
 
 	async revertirASnapshot(
 		id: string,
-		snapshotId: string
+		snapshotId: string,
+		placa?: string | null
 	): Promise<OcasionalSnapshot & { payload: any }> {
 		const response = await apiClient.post(
 			`/api/liquidaciones-terceros-ocasional/${id}/snapshots/${snapshotId}/revertir`,
+			placa ? { placa } : {}
 		);
 		return response.data;
 	},

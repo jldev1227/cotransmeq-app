@@ -396,6 +396,12 @@ export function documentoEnvioCss(): string {
 	margin-bottom: 0.1875rem;
 }
 
+/* Los párrafos largos recuperan el ancho de las dos columnas para no dejar una
+   columna vacía junto a un bloque que gana altura por estar estrecho. */
+[data-fdoc] .sec--lectura-ancha {
+	column-span: all;
+}
+
 [data-fdoc] .sec--ancha {
 	margin-top: 0.3125rem;
 }
@@ -427,6 +433,46 @@ export function documentoEnvioCss(): string {
 [data-fdoc] .cab-estado__c {
 	text-align: center;
 	border-left: 1px solid #111;
+}
+
+/* Una tabla real permite repetir la cabecera cuando un checklist continúa en
+   otra columna u hoja, sin partir una fila ni perder el significado de B/M/NA. */
+[data-fdoc] .tabla-checklist {
+	width: 100%;
+	table-layout: fixed;
+	border-collapse: collapse;
+	break-inside: auto;
+}
+
+[data-fdoc] .tabla-checklist .cab-estado,
+[data-fdoc] .tabla-checklist .fila {
+	display: table-row;
+	border: 0;
+}
+
+[data-fdoc] .tabla-checklist th,
+[data-fdoc] .tabla-checklist td {
+	padding: 0;
+	border: 1px solid #111;
+	vertical-align: middle;
+}
+
+[data-fdoc] .tabla-checklist .cab-estado__desc,
+[data-fdoc] .tabla-checklist .fila__desc {
+	display: table-cell;
+}
+
+[data-fdoc] .tabla-checklist .cab-estado__c,
+[data-fdoc] .tabla-checklist .fila__c {
+	display: table-cell;
+	width: 1.35rem;
+	text-align: center;
+	vertical-align: middle;
+}
+
+[data-fdoc] .tabla-checklist .fila__c {
+	font-weight: 900;
+	line-height: 1;
 }
 
 /* La descripción va alineada a la DERECHA, pegada a sus casillas: es lo que
@@ -685,11 +731,18 @@ export function documentoEnvioCss(): string {
 	border-top: 1px solid #111;
 }
 
-[data-fdoc] .evid,
-[data-fdoc] .tabla-wrap {
+[data-fdoc] .evid {
 	border: 1px solid #111;
 	border-top: none;
 	break-inside: avoid;
+}
+
+[data-fdoc] .tabla-wrap {
+	border: 1px solid #111;
+	border-top: none;
+	/* Las tablas largas continúan en la página disponible; el thead se repite
+	   y cada fila se conserva unida en impresión. */
+	break-inside: auto;
 }
 
 [data-fdoc] .evid > .galeria,
@@ -766,8 +819,8 @@ export function documentoEnvioCss(): string {
 }
 
 /* ── Pie ──────────────────────────────────────────────────────────────
-   En pantalla cierra el documento; en papel pasa a ser el pie CORRIDO de cada
-   hoja (ver el bloque de impresión). */
+   En pantalla cierra el documento; Ctrl+P lo deja al final y la exportación
+   del servidor repite su identidad con el pie nativo de Puppeteer. */
 [data-fdoc] .pie {
 	display: flex;
 	justify-content: space-between;
@@ -813,10 +866,9 @@ export function documentoEnvioCss(): string {
 
 	[data-fdoc] .cuerpo {
 		column-gap: 3mm;
-		/* Se llena la primera columna hasta abajo antes de pasar a la segunda, en
-		   vez del reparto equilibrado por defecto: equilibrar deja las dos a media
-		   altura y desperdicia el resto de la cara. */
-		column-fill: auto;
+		/* Chromium llena en secuencia las páginas anteriores y balancea la última
+		   fragmentación. El mismo criterio funciona sin conocer el formato. */
+		column-fill: balance;
 	}
 
 	/* La cabecera de estados se repite una vez por sección; con diez secciones
@@ -867,6 +919,18 @@ export function documentoEnvioCss(): string {
 		break-inside: avoid;
 	}
 
+	[data-fdoc] .cuerpo .sec {
+		/* Una sección larga puede comenzar en el espacio restante. Sus checklists
+		   usan tabla con cabecera repetible; las filas quedan indivisibles. */
+		break-inside: auto;
+	}
+
+	[data-fdoc] .anchas .sec {
+		/* Las secciones anchas pueden continuar en el espacio de página libre.
+		   Sus filas, firmas y evidencias conservan sus propias reglas atómicas. */
+		break-inside: auto;
+	}
+
 	/* Nada de esto se puede partir por la mitad sin dejar de ser legible: media
 	   firma, media foto o una etiqueta de observación sin su texto obligan a
 	   pasar la hoja para entender un solo dato. Las tablas SÍ se parten a
@@ -890,7 +954,8 @@ export function documentoEnvioCss(): string {
 
 	/* Una tabla de hallazgos que cruza de hoja repite su encabezado en la
 	   siguiente; sin esto, la segunda mitad son columnas sin nombre. */
-	[data-fdoc] .tabla thead {
+	[data-fdoc] .tabla thead,
+	[data-fdoc] .tabla-checklist thead {
 		display: table-header-group;
 	}
 
@@ -917,26 +982,13 @@ export function documentoEnvioCss(): string {
 		max-height: 12mm;
 	}
 
-	/* Pie CORRIDO. Chrome repite en todas las hojas los elementos
-	   \`position: fixed\`, que es el único mecanismo disponible aquí: las cajas de
-	   margen de \`@page\` (\`@bottom-center\`) no están implementadas en Chromium.
-	   Va en el margen inferior, que por eso es más ancho que los otros tres.
-
-	   Sin numeración de páginas a propósito: \`counter(page)\` solo existe dentro
-	   de esas cajas de margen, y la otra vía —\`displayHeaderFooter\` de
-	   Puppeteer— la decide el backend, cuyo endpoint solo acepta html, css y
-	   filename. Un «Página 1 de 1» impreso en todas las hojas sería peor que no
-	   ponerlo: en un registro de auditoría, un dato de paginación falso invita a
-	   dudar de que el documento esté completo. Lo que sí viaja en cada hoja es
-	   la identidad del registro (código, versión e id del envío), que es lo que
-	   permite reunir hojas sueltas. */
+	/* En Ctrl+P el pie queda al final del flujo. La exportación del servidor
+	   quita este nodo y pasa sus textos a la caja nativa de Puppeteer, que los
+	   repite dentro del margen inferior sin afectar la paginación. */
 	[data-fdoc] .pie {
-		position: fixed;
-		left: 0;
-		right: 0;
-		bottom: -6.5mm;
+		position: static;
 		flex-wrap: nowrap;
-		margin: 0;
+		margin-top: 0.5mm;
 		padding-top: 0.5mm;
 		font-size: 5pt;
 		background: #fff;

@@ -211,6 +211,9 @@ export function aCierreCompleto(detalle: any): CierreFinalCompleto {
 		conceptos: (Array.isArray(detalle.conceptos)
 			? detalle.conceptos
 			: []) as ConceptoDescuento[],
+		novedades_conductores: detalle.novedades_conductores && typeof detalle.novedades_conductores === 'object'
+			? detalle.novedades_conductores
+			: {},
 		copropietarios: copropietariosDeDetalle(detalle),
 		propietarios: propietariosDeDetalle(detalle)
 	};

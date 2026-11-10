@@ -162,15 +162,15 @@ export function getApiBase(): string {
 export async function portalFetch(path: string, options: RequestInit = {}) {
 	const session = get(portalSession);
 	const token = session?.token || '';
-
 	const base = getApiBase();
+	const headers = new Headers(options.headers);
+	if (token) headers.set('Authorization', `Bearer ${token}`);
+	/// FormData necesita que el navegador escriba el boundary; no se fuerza JSON
+	/// al enviar evidencias desde el portal.
+	if (!(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
 	const res = await fetch(`${base}/api${path}`, {
 		...options,
-		headers: {
-			'Content-Type': 'application/json',
-			...(token ? { Authorization: `Bearer ${token}` } : {}),
-			...(options.headers || {})
-		}
+		headers
 	});
 
 	const json = await res.json();

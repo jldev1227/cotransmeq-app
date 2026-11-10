@@ -48,6 +48,11 @@ export const adicionalesSnapshotsAPI = {
 		return r.data;
 	},
 
+	async obtener(id: string): Promise<SnapshotResumen & { payload: Record<string, any> }> {
+		const r = await apiClient.get(`${BASE}/${id}`);
+		return r.data;
+	},
+
 	/// Diff contra `vs`, o contra la versión inmediatamente anterior.
 	async diff(id: string, vs?: string): Promise<SnapshotDiff> {
 		const r = await apiClient.get(`${BASE}/${id}/diff`, {
@@ -56,8 +61,8 @@ export const adicionalesSnapshotsAPI = {
 		return r.data;
 	},
 
-	async revertir(id: string): Promise<RevertirResultado> {
-		const r = await apiClient.post(`${BASE}/${id}/revertir`);
+	async revertir(id: string, placa?: string | null): Promise<RevertirResultado> {
+		const r = await apiClient.post(`${BASE}/${id}/revertir`, placa ? { placa } : {});
 		return r.data;
 	}
 };

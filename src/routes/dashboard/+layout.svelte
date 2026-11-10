@@ -55,7 +55,9 @@
 			checkAccess(user?.area, moduleId, user?.permisos_rutas, user?.id).allowed;
 
 		if (puedeEntrar('dashboard')) return { href: '/dashboard', label: 'Volver al inicio' };
-		const primerModulo = MENU_ITEMS.find((item) => item.id !== 'dashboard' && puedeEntrar(item.id));
+		const primerModulo = MENU_ITEMS.find((item) =>
+			item.id !== 'dashboard' && puedeEntrar(item.permissionId ?? item.id)
+		);
 		if (primerModulo) return { href: primerModulo.href, label: `Ir a ${primerModulo.label}` };
 
 		/// `perfil` queda accesible incluso cuando la lista blanca no incluye
@@ -73,7 +75,13 @@
 		const match = pathname.match(/^\/dashboard(?:\/([^/]+))?/);
 		if (!match) return;
 		const esRecorridos = pathname.startsWith('/dashboard/conductores/recorridos');
-		const moduleId = esRecorridos ? 'recorridos' : match[1] ?? 'dashboard';
+		// El plan tiene URL propia, pero comparte el permiso HSEQ que protege su API.
+		const esPlanTrabajo = pathname.startsWith('/dashboard/plan-trabajo');
+		const moduleId = esRecorridos
+			? 'recorridos'
+			: esPlanTrabajo
+				? 'acciones-correctivas'
+				: match[1] ?? 'dashboard';
 
 		const { allowed } = checkAccess(user?.area, moduleId, user?.permisos_rutas, user?.id);
 

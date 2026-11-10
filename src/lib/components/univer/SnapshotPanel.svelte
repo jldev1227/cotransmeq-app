@@ -16,22 +16,29 @@
 	import { liquidacionesTercerosOcasionalAPI } from '$lib/api/liquidaciones-terceros-ocasional';
 	import { nominaCanvasAPI } from '$lib/api/nomina-canvas';
 	import { recorridosSnapshotsAPI } from '$lib/api/recorridos-canvas';
+	import { liquidacionesTercerosDescuentosAPI } from '$lib/api/liquidaciones-terceros-descuentos';
+	import { ingresosSnapshotsAPI } from '$lib/api/liquidaciones-terceros-ingresos-snapshots';
+	import { seccionesSnapshot, type SnapshotScope } from './snapshot-preview';
+	import { canvasCambiosAPI, type CambioCanvas } from '$lib/api/canvas-cambios';
 	import { toast } from 'svelte-sonner';
 	import { X } from 'lucide-svelte';
 
 	interface Props {
 		open: boolean;
-		scope: 'adicionales' | 'ocasional' | 'nomina' | 'recorridos';
+		scope: SnapshotScope;
 		anio: number;
 		mes: number;
 		/** Obligatorio cuando `scope === 'ocasional'`. */
 		cabeceraId?: string | null;
+		placa?: string | null;
+		conductorId?: string | null;
+		hoja?: string | null;
 		onClose: () => void;
 		/** Tras restaurar: el consumidor debe releer y reconstruir esa hoja. */
 		onReverted?: (mes: number) => void;
 	}
 
-	let { open, scope, anio, mes, cabeceraId = null, onClose, onReverted }: Props = $props();
+	let { open, scope, anio, mes, cabeceraId = null, placa = null, conductorId = null, hoja = null, onClose, onReverted }: Props = $props();
 
 	const MESES = [
 		'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
@@ -41,6 +48,7 @@
 	let cargando = $state(false);
 	let error = $state('');
 	let snapshots = $state<SnapshotResumen[]>([]);
+	let cambiosCelda = $state<CambioCanvas[]>([]);
 
 	/**
 	 * Versiones sin cambios: las que el servidor cuenta con 0 cambios respecto
@@ -60,6 +68,37 @@
 	let confirmando = $state<SnapshotResumen | null>(null);
 	let textoConfirmacion = $state('');
 	let revirtiendo = $state(false);
+	let payloadPreview = $state<Record<string, any> | null>(null);
+	let placaElegida = $state('');
+	let conductorElegido = $state('');
+	let cargandoPreview = $state(false);
+	let errorPreview = $state('');
+	const placasPreview = $derived([...new Set((payloadPreview?.filas ?? payloadPreview?.items ?? payloadPreview?.hojas?.flatMap((h: any) => h.filas ?? []) ?? [])
+		.map((f: any) => f.placa ?? f.vehiculo_placa).filter(Boolean))] as string[]);
+	const conductoresPreview = $derived((payloadPreview?.hojas ?? [])
+		.map((h: any) => ({ id: h.conductorId ?? h.conductor_id, nombre: h.nombre ?? h.conductor_nombre ?? h.conductorId ?? h.conductor_id }))
+		.filter((h: any, i: number, all: any[]) => h.id && all.findIndex((x) => x.id === h.id) === i));
+	const placaActiva = $derived(placa || (placaElegida && placaElegida !== '__all__' ? placaElegida : null));
+	const conductorActivo = $derived(conductorId || (conductorElegido && conductorElegido !== '__all__' ? conductorElegido : null));
+	const requiereObjetivo = $derived(['ingresos', 'adicionales', 'ocasional', 'nomina', 'recorridos'].includes(scope));
+	const objetivoListo = $derived(!requiereObjetivo || Boolean(scope === 'nomina' || scope === 'recorridos'
+		? conductorId || conductorElegido : placa || placaElegida));
+	const objetivoEtiqueta = $derived(scope === 'nomina' || scope === 'recorridos'
+		? conductorActivo ? `el conductor ${conductoresPreview.find((c: any) => c.id === conductorActivo)?.nombre ?? conductorActivo}` : 'el periodo completo'
+		: placaActiva ? `la placa ${placaActiva}` : 'el periodo completo');
+	const secciones = $derived(seccionesSnapshot(scope, payloadPreview, placaActiva, conductorActivo, hoja));
+	const previewCompleta = $derived(scope !== 'cierres' || !payloadPreview ||
+		Array.isArray(payloadPreview.items_detalle) || (payloadPreview.items_pivote?.length ?? 0) === 0);
+	const indiceSeleccionado = $derived(snapshots.findIndex((s) => s.id === seleccionado?.id));
+	const estadoPreview = $derived(scope === 'nomina'
+		? payloadPreview?.hojas?.find((h: any) => (h.conductorId ?? h.conductor_id) === conductorActivo)?.estado
+		: payloadPreview?.estado ?? payloadPreview?.cabecera?.estado);
+	const scopeCambios = $derived(scope === 'cierres' ? 'cierres-finales' : scope);
+	const sheetKeyCambios = $derived(scope === 'cierres' ? cabeceraId
+		: scope === 'nomina' || scope === 'recorridos' ? conductorActivo
+		: scope === 'adicionales' ? placaActiva
+		: scope === 'ocasional' ? cabeceraId
+		: scope === 'ingresos' ? (hoja === 'ADICIONALES' ? 'adic' : '') : null);
 
 	/// Recarga cuando se abre el panel o cambia el periodo.
 	$effect(() => {
@@ -67,11 +106,21 @@
 		void cargar(anio, mes, cabeceraId);
 	});
 
+	$effect(() => {
+		if (!open || (!sheetKeyCambios && scope !== 'ingresos')) { cambiosCelda = []; return; }
+		void canvasCambiosAPI.listar({ scope: scopeCambios, anio, mes, sheet_key: sheetKeyCambios })
+			.then((items) => { cambiosCelda = items; })
+			.catch((e) => console.warn('[snapshot-panel] no se pudo cargar la trazabilidad', e));
+	});
+
 	async function cargar(a: number, m: number, cid: string | null) {
 		cargando = true;
 		error = '';
 		seleccionado = null;
 		diff = null;
+		payloadPreview = null;
+		placaElegida = '';
+		conductorElegido = '';
 		try {
 			if (scope === 'adicionales') {
 				snapshots = await adicionalesSnapshotsAPI.listar(a, m);
@@ -79,12 +128,17 @@
 				snapshots = (await nominaCanvasAPI.listarSnapshots(a, m)) as any;
 			} else if (scope === 'recorridos') {
 				snapshots = (await recorridosSnapshotsAPI.listar(a, m)) as any;
+			} else if (scope === 'cierres' && cid) {
+				snapshots = (await liquidacionesTercerosDescuentosAPI.listarSnapshots(cid)) as any;
+			} else if (scope === 'ingresos') {
+				snapshots = (await ingresosSnapshotsAPI.listar(a, m)) as any;
 			} else if (cid) {
 				snapshots = (await liquidacionesTercerosOcasionalAPI.listarSnapshots(cid)) as any;
 			} else {
 				snapshots = [];
 				error = 'Este mes no tiene borrador, así que no hay versiones que mostrar.';
 			}
+			snapshots = [...snapshots].sort((a, b) => b.version - a.version);
 		} catch (e: any) {
 			error = e?.message || 'No se pudo cargar el historial';
 		} finally {
@@ -95,6 +149,8 @@
 	async function seleccionar(s: SnapshotResumen) {
 		seleccionado = s;
 		diff = null;
+		payloadPreview = null;
+		void cargarPreview(s);
 		// El diff guardado en la fila es el de su captura. Para las versiones
 		// automáticas no se calcula, así que se pide bajo demanda.
 		if (s.diff && s.diff.length) {
@@ -128,13 +184,17 @@
 			}
 			return;
 		}
-		if (scope !== 'adicionales' && scope !== 'nomina') return;
+		if (scope !== 'adicionales' && scope !== 'nomina' && scope !== 'cierres' && scope !== 'ingresos') return;
 		cargandoDiff = true;
 		try {
-			diff =
-				scope === 'nomina'
-					? await diffDeNomina(s.id)
-					: await adicionalesSnapshotsAPI.diff(s.id);
+			if (scope === 'cierres') {
+				const anterior = snapshots[snapshots.findIndex((x) => x.id === s.id) + 1];
+				diff = cabeceraId && anterior
+					? await liquidacionesTercerosDescuentosAPI.compararSnapshots(cabeceraId, anterior.id, s.id)
+					: { fields: [] };
+			} else {
+				diff = scope === 'nomina' ? await diffDeNomina(s.id) : scope === 'ingresos' ? await ingresosSnapshotsAPI.diff(s.id) : await adicionalesSnapshotsAPI.diff(s.id);
+			}
 		} catch (e: any) {
 			console.warn('[snapshot-panel] diff falló', e);
 			diff = { fields: [] };
@@ -165,10 +225,37 @@
 		};
 	}
 
+	async function cargarPreview(s: SnapshotResumen) {
+		cargandoPreview = true;
+		errorPreview = '';
+		try {
+			const detalle = scope === 'adicionales'
+				? await adicionalesSnapshotsAPI.obtener(s.id)
+				: scope === 'ingresos'
+					? await ingresosSnapshotsAPI.obtener(s.id)
+				: scope === 'nomina'
+					? await nominaCanvasAPI.obtenerSnapshot(s.id)
+					: scope === 'recorridos'
+						? await recorridosSnapshotsAPI.obtener(s.id)
+						: scope === 'cierres' && cabeceraId
+							? await liquidacionesTercerosDescuentosAPI.obtenerSnapshot(cabeceraId, s.id)
+							: cabeceraId
+								? await liquidacionesTercerosOcasionalAPI.obtenerSnapshot(cabeceraId, s.id)
+								: null;
+			if (seleccionado?.id === s.id) payloadPreview = (detalle as any)?.payload ?? null;
+		} catch (e: any) {
+			if (seleccionado?.id === s.id) errorPreview = e?.message || 'No se pudo cargar esta versión';
+		} finally {
+			if (seleccionado?.id === s.id) cargandoPreview = false;
+		}
+	}
+
 	async function capturar() {
 		try {
 			if (scope === 'adicionales') {
 				await adicionalesSnapshotsAPI.capturar(anio, mes);
+			} else if (scope === 'ingresos') {
+				await ingresosSnapshotsAPI.capturar(anio, mes);
 			} else if (scope === 'nomina') {
 				const r = await nominaCanvasAPI.capturarSnapshot(anio, mes);
 				if ((r as any).sinCambios) {
@@ -178,6 +265,10 @@
 					await cargar(anio, mes, cabeceraId);
 					return;
 				}
+			} else if (scope === 'recorridos') {
+				await recorridosSnapshotsAPI.capturar(anio, mes);
+			} else if (scope === 'cierres') {
+				return;
 			} else if (cabeceraId) {
 				await liquidacionesTercerosOcasionalAPI.capturarManual(cabeceraId);
 			}
@@ -194,9 +285,9 @@
 		revirtiendo = true;
 		try {
 			if (scope === 'adicionales') {
-				const r = await adicionalesSnapshotsAPI.revertir(s.id);
+				const r = await adicionalesSnapshotsAPI.revertir(s.id, placaActiva);
 				toast.success(
-					`Restaurada la versión ${s.version}: ${r.restauradas} fila(s) en ${r.cierres_afectados} cierre(s).`
+					`Restaurada la versión ${s.version}${placaActiva ? ` de ${placaActiva}` : ''}: ${r.restauradas} fila(s) en ${r.cierres_afectados} cierre(s).`
 				);
 				if (r.cierres_omitidos?.length) {
 					// No es un fallo: es una regla de negocio. Pero el usuario
@@ -207,8 +298,11 @@
 						{ duration: 10000 }
 					);
 				}
+			} else if (scope === 'ingresos') {
+				await ingresosSnapshotsAPI.revertir(s.id, placaActiva);
+				toast.success(`Restaurada la versión ${s.version}${placaActiva ? ` de ${placaActiva}` : ' del periodo completo'} en ingresos`);
 			} else if (scope === 'nomina') {
-				const r = await nominaCanvasAPI.revertirSnapshot(s.id);
+				const r = await nominaCanvasAPI.revertirSnapshot(s.id, conductorActivo);
 				toast.success(
 					`Restaurada la versión ${s.version}: ${r.restauradas} liquidación(es).`
 				);
@@ -223,7 +317,7 @@
 					);
 				}
 			} else if (scope === 'recorridos') {
-				const r = await recorridosSnapshotsAPI.revertir(s.id);
+				const r = await recorridosSnapshotsAPI.revertir(s.id, conductorActivo);
 				toast.success(
 					`Restaurada la versión ${s.version}: ${r.filasRestauradas} fila(s).`
 				);
@@ -235,9 +329,12 @@
 						{ duration: 10000 }
 					);
 				}
+			} else if (scope === 'cierres' && cabeceraId) {
+				await liquidacionesTercerosDescuentosAPI.revertirASnapshot(cabeceraId, s.id);
+				toast.success(`Restaurada la versión ${s.version} del cierre`);
 			} else if (cabeceraId) {
-				await liquidacionesTercerosOcasionalAPI.revertirASnapshot(cabeceraId, s.id);
-				toast.success(`Restaurada la versión ${s.version}`);
+				await liquidacionesTercerosOcasionalAPI.revertirASnapshot(cabeceraId, s.id, placaActiva);
+				toast.success(`Restaurada la versión ${s.version}${placaActiva ? ` de ${placaActiva}` : ' de la cabecera completa'}`);
 			}
 			confirmando = null;
 			textoConfirmacion = '';
@@ -281,7 +378,7 @@
 					<p class="snap-sub">{MESES[mes - 1]} {anio}</p>
 				</div>
 				<div class="snap-header-actions">
-					<button class="btn-primary snap-btn-sm" onclick={capturar}>Guardar versión</button>
+					{#if scope !== 'cierres'}<button class="btn-primary snap-btn-sm" onclick={capturar}>Guardar versión</button>{/if}
 					<button class="snap-close" onclick={onClose} aria-label="Cerrar">
 						<X size={16} strokeWidth={2.5} />
 					</button>
@@ -348,13 +445,45 @@
 						{:else}
 							<div class="snap-detalle-head">
 								<h3>Versión {seleccionado.version}</h3>
+								<button class="btn-secondary" disabled={indiceSeleccionado >= snapshots.length - 1} onclick={() => seleccionar(snapshots[indiceSeleccionado + 1])}>Anterior</button>
+								<button class="btn-secondary" disabled={indiceSeleccionado <= 0} onclick={() => seleccionar(snapshots[indiceSeleccionado - 1])}>Siguiente</button>
 								<button
 									class="btn-danger snap-btn-sm"
+					disabled={cargandoPreview || !payloadPreview || !previewCompleta || !objetivoListo}
 									onclick={() => { confirmando = seleccionado; textoConfirmacion = ''; }}
 								>
 									Restaurar esta versión
 								</button>
 							</div>
+			<p class="snap-meta">{fmtFecha(seleccionado.created_at)} · {seleccionado.usuario?.nombre ?? 'Captura automática'} · Estado guardado: {estadoPreview ?? 'ver hoja'}</p>
+							{#if cargandoPreview}
+								<p class="snap-msg">Cargando la hoja de esta versión…</p>
+							{:else if errorPreview}
+								<p class="snap-msg snap-msg-error">{errorPreview}</p>
+							{:else if payloadPreview}
+								{#if !previewCompleta}<p class="snap-msg">Esta versión antigua no guardó los valores de los servicios. No se puede verificar la hoja completa antes de restaurar.</p>{/if}
+								<div class="snap-preview" aria-label="Vista previa de la hoja guardada">
+										<h4>Vista previa · {placaActiva ?? conductorActivo ?? 'hoja activa'}</h4>
+					{#if !placa && ['ingresos', 'adicionales', 'ocasional'].includes(scope)}
+						<label class="snap-meta">Placa <select bind:value={placaElegida}><option value="">Selecciona una hoja…</option><option value="__all__">Todas las placas · periodo completo</option>{#each placasPreview as p}<option value={p}>{p}</option>{/each}</select></label>
+					{/if}
+					{#if !conductorId && (scope === 'nomina' || scope === 'recorridos')}
+						<label class="snap-meta">Conductor <select bind:value={conductorElegido}><option value="">Selecciona una hoja…</option><option value="__all__">Todos · periodo completo</option>{#each conductoresPreview as c}<option value={c.id}>{c.nombre}</option>{/each}</select></label>
+					{/if}
+									{#each secciones as seccion}
+										<h5>{seccion.titulo}</h5>
+										<table class="snap-diff"><thead><tr>{#each seccion.columnas as columna}<th>{columna}</th>{/each}</tr></thead>
+											<tbody>{#each seccion.filas as fila}<tr>{#each fila as valor}<td>{fmtValor(valor)}</td>{/each}</tr>{/each}</tbody></table>
+									{/each}
+								</div>
+							{/if}
+				{#if sheetKeyCambios || scope === 'ingresos'}
+					<section class="snap-auditoria">
+						<h4>Ediciones registradas en esta hoja</h4>
+						{#if cambiosCelda.length === 0}<p>No hay cambios de celda registrados en este periodo.</p>
+						{:else}<ul>{#each cambiosCelda as cambio (cambio.id)}<li><strong>{cambio.usuario_nombre}</strong> · {fmtFecha(cambio.created_at)}<br />{cambio.field}: {fmtValor(cambio.valor_anterior)} → {fmtValor(cambio.valor_nuevo)}</li>{/each}</ul>{/if}
+					</section>
+				{/if}
 
 							{#if cargandoDiff}
 								<p class="snap-msg">Calculando diferencias…</p>
@@ -388,10 +517,12 @@
 
 			{#if confirmando}
 				<div class="snap-confirm">
-					<p>
-						Vas a reemplazar <strong>todo el contenido de {MESES[mes - 1]} {anio}</strong>
+						<p>
+							Vas a reemplazar <strong>{scope === 'cierres' ? `el cierre ${placa ?? ''}` : `${objetivoEtiqueta} de ${MESES[mes - 1]} ${anio}`}</strong>
 						por la versión {confirmando.version}. Los cambios posteriores se perderán.
 					</p>
+					{#if scope === 'cierres'}<p>El estado del cierre se muestra para auditoría; restaurar conserva el estado actual.</p>{/if}
+						{#if requiereObjetivo}<p>{objetivoEtiqueta === 'el periodo completo' ? 'Esta opción restaurará todas las hojas del periodo o cabecera.' : 'Solo se reemplazarán los datos de esta hoja; las otras placas o conductores y los valores compartidos se conservan.'}</p>{/if}
 					<p class="snap-confirm-hint">Escribe <code>RESTAURAR</code> para confirmar:</p>
 					<input
 						class="snap-input"
@@ -405,7 +536,7 @@
 						</button>
 						<button
 							class="btn-danger"
-							disabled={revirtiendo || textoConfirmacion.trim().toUpperCase() !== 'RESTAURAR'}
+							disabled={revirtiendo || !objetivoListo || textoConfirmacion.trim().toUpperCase() !== 'RESTAURAR'}
 							onclick={confirmarRevertir}
 						>
 							{revirtiendo ? 'Restaurando…' : 'Restaurar'}
@@ -573,6 +704,14 @@
 		margin-bottom: 12px;
 	}
 	.snap-detalle-head h3 { font-size: 15px; font-weight: 800; margin: 0; color: var(--text-primary); }
+	.snap-preview { max-width: 100%; overflow-x: auto; margin: 16px 0 22px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-base); }
+	.snap-preview h4 { margin: 0 0 12px; font-size: 13px; }
+	.snap-preview h5 { margin: 16px 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+	.snap-preview .snap-diff { min-width: 540px; }
+	.snap-auditoria { margin: 16px 0; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 12px; }
+	.snap-auditoria h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; }
+	.snap-auditoria ul { list-style: none; padding: 0; margin: 0; }
+	.snap-auditoria li { padding: 8px 0; border-top: 1px solid var(--border-subtle); font-size: 12px; }
 
 	.snap-diff {
 		width: 100%;

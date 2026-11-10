@@ -1,5 +1,5 @@
 import { apiClient } from './apiClient';
-import type { AccessLevel } from '$lib/config/permissions';
+import type { AccessLevel, Area } from '$lib/config/permissions';
 
 export interface Usuario {
 	id: string;
@@ -50,7 +50,23 @@ export interface Firmante {
 	firma_signed_url: string | null;
 }
 
+export interface ResponsableArea {
+	area: Area;
+	etiqueta: string;
+	responsable: Pick<Usuario, 'id' | 'nombre' | 'correo' | 'cargo' | 'activo' | 'area'> | null;
+}
+
 export const usuariosAPI = {
+	async listarResponsablesArea(): Promise<ResponsableArea[]> {
+		const response = await apiClient.get('/api/usuarios/responsables-area');
+		return response.data;
+	},
+
+	async actualizarResponsableArea(area: Area, usuario_id: string): Promise<ResponsableArea> {
+		const response = await apiClient.put(`/api/usuarios/responsables-area/${area}`, { usuario_id });
+		return response.data;
+	},
+
 	async listar(): Promise<Usuario[]> {
 		const response = await apiClient.get('/api/usuarios');
 		return response.data;
@@ -75,7 +91,15 @@ export const usuariosAPI = {
 		data: Partial<
 			Pick<
 				Usuario,
-				'nombre' | 'correo' | 'telefono' | 'role' | 'cargo' | 'tipo_vinculacion' | 'area' | 'activo' | 'permisos_rutas'
+				| 'nombre'
+				| 'correo'
+				| 'telefono'
+				| 'role'
+				| 'cargo'
+				| 'tipo_vinculacion'
+				| 'area'
+				| 'activo'
+				| 'permisos_rutas'
 			>
 		>
 	): Promise<Usuario> {
@@ -100,7 +124,10 @@ export const usuariosAPI = {
 	},
 
 	// ── Permiso individual: bonos de planilla de días laborados ──
-	async setBonosPlanilla(userIds: string[], granted: boolean): Promise<{
+	async setBonosPlanilla(
+		userIds: string[],
+		granted: boolean
+	): Promise<{
 		success: boolean;
 		updated: Usuario[];
 		granted: boolean;

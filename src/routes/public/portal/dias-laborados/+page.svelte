@@ -47,6 +47,14 @@
     segmentos?: Segmento[];
   }
 
+  interface CorteDiligenciamiento {
+    diaInicio: number;
+    fecha: string;
+    desde: string;
+    hasta: string;
+    pendientes: string[];
+  }
+
   interface ClienteBasico { id: string; nombre: string; }
   interface VehiculoBasico { id: string; placa: string; conductor_id?: string; }
 
@@ -83,6 +91,14 @@
   let anioActual = hoy.getFullYear();
   let registros: Record<string, RegistroDia> = {};
   let loadingRegistros = false;
+  let corteActual: CorteDiligenciamiento | null = null;
+  let bloqueoFecha = '';
+  let bloqueoCorte: CorteDiligenciamiento | null = null;
+  let modalBloqueoCorteAbierto = false;
+  let fechaObjetivoBloqueo = '';
+  let pendientesAntesBloqueo: string[] = [];
+  let errorCorte = '';
+  let comprobandoFecha = false;
 
   let clientes: ClienteBasico[] = [];
   let vehiculos: VehiculoBasico[] = [];
@@ -139,6 +155,36 @@
       loadingDatos = false;
     }
     await cargarRegistrosMes();
+    await cargarCorteActual();
+  }
+
+  async function cargarCorteActual() {
+    try {
+      const res = await portalFetch('/conductor-portal/dias-laborados/corte');
+      corteActual = res.data as CorteDiligenciamiento;
+    } catch (err) {
+      console.error('Error cargando corte de días laborados:', err);
+    }
+  }
+
+  function fechaLegibleCorte(fecha: string) {
+    return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+      .format(new Date(`${fecha}T00:00:00.000Z`));
+  }
+
+  async function irAlPendiente() {
+    modalBloqueoCorteAbierto = false;
+    const fecha = pendientesAntesBloqueo[0] || bloqueoFecha || corteActual?.pendientes[0];
+    if (!fecha) return;
+    const [anio, mes, dia] = fecha.split('-').map(Number);
+    anioActual = anio;
+    mesActual = mes - 1;
+    await cargarRegistrosMes();
+    void abrirDia(dia);
+  }
+
+  function cerrarAvisoCorte() {
+    modalBloqueoCorteAbierto = false;
   }
 
   // ═══════════════════════════════
@@ -243,6 +289,9 @@
       const f = saved.fecha.slice(0, 10);
       registros[f] = { ...saved, fecha: f };
       registros = { ...registros };
+      bloqueoFecha = '';
+      bloqueoCorte = null;
+      void cargarCorteActual();
 
       // Borrador ya persistido en servidor → limpiar caché
       limpiarBorrador(f);
@@ -328,6 +377,7 @@
       await portalFetch(`/conductor-portal/dias-laborados/registros/${fechaSeleccionada}`, { method: 'DELETE' });
       delete registros[fechaSeleccionada];
       registros = { ...registros };
+      void cargarCorteActual();
       limpiarBorrador(fechaSeleccionada);
       detectarBorradores();
       confirmarEliminar = false;
@@ -376,9 +426,42 @@
     return r ? TIPOS.find(t => t.value === r.tipo) : null;
   }
 
-  function abrirDia(dia: number) {
-    if (esFuturo(dia)) return;
+  async function abrirDia(dia: number) {
+    if (esFuturo(dia) || comprobandoFecha) return;
+    modalBloqueoCorteAbierto = false;
+    bloqueoFecha = '';
+    bloqueoCorte = null;
+    fechaObjetivoBloqueo = '';
+    pendientesAntesBloqueo = [];
     fechaSeleccionada = fechaStr(dia);
+    if (!registros[fechaSeleccionada]) {
+      comprobandoFecha = true;
+      try {
+        const res = await portalFetch(`/conductor-portal/dias-laborados/corte?fecha=${fechaSeleccionada}`);
+        const resumen = res.data as CorteDiligenciamiento;
+        const pendientesAnteriores = resumen.pendientes
+          .filter((fecha) => fecha < fechaSeleccionada)
+          .sort();
+        if (pendientesAnteriores.length > 0) {
+          bloqueoFecha = pendientesAnteriores[0];
+          bloqueoCorte = resumen;
+          fechaObjetivoBloqueo = fechaSeleccionada;
+          pendientesAntesBloqueo = pendientesAnteriores;
+          modalBloqueoCorteAbierto = true;
+          return;
+        }
+        bloqueoFecha = '';
+        bloqueoCorte = null;
+        fechaObjetivoBloqueo = '';
+        pendientesAntesBloqueo = [];
+        errorCorte = '';
+      } catch (err: any) {
+        errorCorte = err.message || 'No se pudo comprobar el corte. Intenta de nuevo.';
+        return;
+      } finally {
+        comprobandoFecha = false;
+      }
+    }
 
     // ¿Existe ya un registro guardado en el servidor para esta fecha?
     const regServidor = registros[fechaSeleccionada];
@@ -673,6 +756,55 @@
     />
   </div>
 
+  {#if errorCorte}
+    <div class="corte-aviso" role="alert">{errorCorte}</div>
+  {/if}
+  {#if bloqueoFecha || (corteActual?.pendientes[0] && corteActual.pendientes[0] < corteActual.fecha)}
+    {@const aviso = bloqueoCorte ?? corteActual}
+    {@const faltantesAnteriores = aviso!.pendientes.filter((fecha) => fecha < aviso!.fecha)}
+    <div class="corte-aviso" role="status">
+      <div>
+        <strong>Completa los días pendientes del corte</strong>
+        <p>El corte va del {fechaLegibleCorte(aviso!.desde)} al {fechaLegibleCorte(aviso!.hasta)}.
+          Hay {faltantesAnteriores.length} {faltantesAnteriores.length === 1 ? 'día pendiente' : 'días pendientes'} antes del {fechaLegibleCorte(aviso!.fecha)}.
+          Primero diligencia el {fechaLegibleCorte(bloqueoFecha || aviso!.pendientes[0])}.</p>
+      </div>
+      <button type="button" on:click={irAlPendiente}>Ir al día pendiente</button>
+    </div>
+  {/if}
+  {#if modalBloqueoCorteAbierto && bloqueoCorte}
+    <div
+      class="corte-modal-overlay"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="corte-modal-title"
+      aria-describedby="corte-modal-description"
+    >
+      <div class="corte-modal">
+        <div class="corte-modal-icon" aria-hidden="true">!</div>
+        <h2 class="corte-modal-title" id="corte-modal-title">Completa primero los días pendientes</h2>
+        <p class="corte-modal-text" id="corte-modal-description">
+          Antes de diligenciar el <strong>{fechaLegibleCorte(fechaObjetivoBloqueo)}</strong>,
+          completa {pendientesAntesBloqueo.length === 1 ? 'este día pendiente' : 'estos días pendientes'} del corte:
+        </p>
+        <ul class="corte-modal-pendientes">
+          {#each pendientesAntesBloqueo as fecha (fecha)}
+            <li>{fechaLegibleCorte(fecha)}</li>
+          {/each}
+        </ul>
+        <p class="corte-modal-periodo">
+          Corte del {fechaLegibleCorte(bloqueoCorte.desde)} al {fechaLegibleCorte(bloqueoCorte.hasta)}.
+        </p>
+        <div class="corte-modal-actions">
+          <button type="button" class="corte-modal-cerrar" on:click={cerrarAvisoCorte}>Cerrar</button>
+          <button type="button" class="corte-modal-ir" on:click={irAlPendiente}>
+            Diligenciar {fechaLegibleCorte(pendientesAntesBloqueo[0])}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Stats -->
   <div class="stats-row">
     <div class="stat-card" style="--accent:#ea580c">
@@ -770,7 +902,7 @@
       {/each}
     </div>
 
-    {#if loadingRegistros}
+    {#if loadingRegistros || comprobandoFecha}
       <div class="cal-loading">
         <span class="spinner-sm"></span> Cargando...
       </div>
@@ -1292,6 +1424,120 @@
 {/if}
 
 <style>
+  .corte-aviso {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .9rem 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid #f6d685;
+    border-radius: 14px;
+    background: #fffbeb;
+    color: #854d0e;
+  }
+  .corte-aviso strong { font-size: .86rem; }
+  .corte-aviso p { margin: .25rem 0 0; font-size: .78rem; line-height: 1.45; }
+  .corte-aviso button {
+    flex-shrink: 0;
+    min-height: 44px;
+    padding: .55rem .85rem;
+    border: 1px solid #d97706;
+    border-radius: 10px;
+    background: #fff;
+    color: #92400e;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .corte-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 280;
+    background: rgba(15, 23, 42, .55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+  }
+  .corte-modal {
+    width: 100%;
+    max-width: 420px;
+    max-height: min(85vh, 640px);
+    overflow-y: auto;
+    padding: 1.35rem;
+    border: 1px solid #f6d685;
+    border-radius: 18px;
+    background: var(--surface, #fff);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .28);
+    color: var(--text, #0f172a);
+  }
+  .corte-modal-icon {
+    width: 42px;
+    height: 42px;
+    margin-bottom: .75rem;
+    border: 1px solid #f6d685;
+    border-radius: 50%;
+    background: #fffbeb;
+    color: #92400e;
+    display: grid;
+    place-items: center;
+    font-size: 1.4rem;
+    font-weight: 800;
+  }
+  .corte-modal-title {
+    margin: 0 0 .5rem;
+    font-size: 1.08rem;
+    font-weight: 800;
+  }
+  .corte-modal-text,
+  .corte-modal-periodo {
+    margin: 0;
+    font-size: .9rem;
+    line-height: 1.5;
+  }
+  .corte-modal-pendientes {
+    max-height: 9rem;
+    overflow-y: auto;
+    margin: .75rem 0;
+    padding: .75rem .75rem .75rem 2rem;
+    border-radius: 12px;
+    background: #fffbeb;
+    color: #854d0e;
+    font-weight: 700;
+  }
+  .corte-modal-pendientes li + li { margin-top: .25rem; }
+  .corte-modal-periodo { color: var(--text3, #64748b); font-size: .8rem; }
+  .corte-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: .6rem;
+    margin-top: 1.15rem;
+  }
+  .corte-modal-actions button {
+    min-height: 44px;
+    padding: .6rem .85rem;
+    border-radius: 10px;
+    font: inherit;
+    font-size: .85rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .corte-modal-cerrar {
+    border: 1px solid var(--border, #cbd5e1);
+    background: var(--surface, #fff);
+    color: var(--text, #0f172a);
+  }
+  .corte-modal-ir {
+    border: 1px solid #b45309;
+    background: #b45309;
+    color: #fff;
+  }
+  @media (max-width: 640px) {
+    .corte-aviso { flex-direction: column; align-items: stretch; }
+    .corte-modal-actions { flex-direction: column-reverse; }
+    .corte-modal-actions button { width: 100%; }
+  }
 
   /* ── Stats ── */
   /* Mismo ritmo vertical que el resto de bloques de la página: la cabecera

@@ -466,6 +466,20 @@
 	}
 
 	/**
+	 * Los párrafos largos se leen mejor a lo ancho de la hoja que comprimidos en
+	 * una columna. Se aplica solo a formatos no densos para conservar intactos los
+	 * preoperacionales extensos que ya llenan ambas columnas.
+	 */
+	function seccionLecturaAncha(section: FormSectionDto): boolean {
+		if (totalChecklist >= 60) return false;
+		return camposDe(section).some((field) => {
+			const forma = formaDe(field);
+			const texto = forma === 'nota' ? (field.helpText ?? field.label) : valorLegible(field);
+			return (forma === 'nota' || forma === 'bloque') && (texto?.trim().length ?? 0) >= 160;
+		});
+	}
+
+	/**
 	 * El cuerpo se imprime por ETAPA cuando el formato las tiene: cada etapa
 	 * trae su banda, su cuerpo a dos columnas y sus bloques anchos. Así el papel
 	 * refleja lo que el conductor cerró paso a paso en el teléfono, y en un
@@ -708,40 +722,42 @@
 					{/if}
 				</h2>
 			{/if}
-			<!-- Cuerpo a dos columnas paralelas. `columns` y no `grid`: las secciones
-			     fluyen y se equilibran solas sin repartirlas a mano. -->
+			<!-- El mismo flujo de columnas se adapta al contenido de cada formulario. -->
 			<div class="cuerpo">
 				{#each grupo.estrechas as section (section.id)}
 					{@const catalogo = catalogoComun(camposDe(section))}
-					<section class="sec">
+					<section class="sec" class:sec--lectura-ancha={seccionLecturaAncha(section)}>
 						<h2 class="banda">{section.title}</h2>
-
-						{#if catalogo}
-							<!-- Cabecera de estados: se dibuja UNA vez por sección en vez de
-							     repetir la etiqueta en cada una de las 130 filas. -->
-							<div class="cab-estado" style={`--n:${catalogo.length}`}>
-								<span class="cab-estado__desc">Descripción</span>
-								{#each catalogo as o (o.id)}
-									<span class="cab-estado__c" title={o.label}>{abreviatura(o)}</span>
-								{/each}
-							</div>
-						{/if}
 
 						{#each tramosDe(section) as tramo}
 							{#if tramo.forma === 'checklist' && catalogo}
-								{#each tramo.campos as field (field.id)}
-									{@const marcado = valorMarcado(field)}
-									{@const opcion = field.options.find((o) => o.value === marcado)}
-									{@const tono = marcado ? tonoDeOpcion(opcion) : 'vacio'}
-									<div class="fila fila--{tono}" style={`--n:${catalogo.length}`}>
-										<span class="fila__desc">{field.label}</span>
-										{#each catalogo as o (o.id)}
-											<span class="fila__c" class:fila__c--on={o.value === marcado}>
-												{o.value === marcado ? '✕' : ''}
-											</span>
+								<!-- La cabecera forma parte de la tabla: Chromium puede repetirla
+								     si el inventario continúa en otra columna u hoja. -->
+								<table class="tabla-checklist">
+									<thead>
+										<tr class="cab-estado">
+											<th class="cab-estado__desc" scope="col">Descripción</th>
+											{#each catalogo as o (o.id)}
+												<th class="cab-estado__c" scope="col" title={o.label}>{abreviatura(o)}</th>
+											{/each}
+										</tr>
+									</thead>
+									<tbody>
+										{#each tramo.campos as field (field.id)}
+											{@const marcado = valorMarcado(field)}
+											{@const opcion = field.options.find((o) => o.value === marcado)}
+											{@const tono = marcado ? tonoDeOpcion(opcion) : 'vacio'}
+											<tr class="fila fila--{tono}">
+												<td class="fila__desc">{field.label}</td>
+												{#each catalogo as o (o.id)}
+													<td class="fila__c" class:fila__c--on={o.value === marcado}>
+														{o.value === marcado ? '✕' : ''}
+													</td>
+												{/each}
+											</tr>
 										{/each}
-									</div>
-								{/each}
+									</tbody>
+								</table>
 							{:else if tramo.forma === 'checklist'}
 								<!-- Escalas mezcladas en la misma sección: sin cabecera común, el
 								     valor va escrito en la fila. -->
@@ -914,11 +930,9 @@
 			{/if}
 		{/snippet}
 
-		<!-- Pie. En pantalla cierra el documento; en papel el CSS lo fija al margen
-		     inferior y Chrome lo repite en TODAS las hojas, que es lo que permite
-		     identificar una hoja suelta. Lleva la identidad completa del registro
-		     —membrete, código, versión e id del envío— y deliberadamente NINGUNA
-		     numeración de páginas: el porqué está en el CSS. -->
+		<!-- En pantalla cierra el documento y en Ctrl+P queda al final. La exportación
+		     al servidor separa estos textos y Puppeteer los repite en el margen
+		     inferior de cada hoja sin alterar el flujo del contenido. -->
 		<footer class="pie">
 			<span>{empresa} · {envio.version?.code ?? ''} v{envio.version?.versionNumber ?? ''}</span>
 			<span>{envio.id}</span>

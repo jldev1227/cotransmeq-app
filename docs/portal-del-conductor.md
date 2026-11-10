@@ -98,6 +98,15 @@ ahí. Al abrir un día, el borrador local tiene prioridad sobre el servidor, por
 eso hay que subir la versión cuando cambia la forma de los datos: si no, un
 arreglo del backend no se nota en el teléfono y al guardar resucita lo viejo.
 
+Al crear un día, el portal consulta el corte fijado en el canvas de Nómina
+(21→20 por defecto) y señala la primera fecha pendiente. No permite saltarla
+para guardar una fecha posterior; el backend repite la validación y responde
+409 si otro dispositivo cambió los registros. Un conductor que ingresó durante
+el corte empieza a contar desde su fecha de ingreso. Los días ya guardados
+pueden editarse. Si se intenta abrir una fecha posterior con días faltantes
+antes de ella, un diálogo muestra las fechas que deben completarse primero y
+permite ir directamente a la más antigua.
+
 ## Formularios: IndexedDB como fuente de verdad
 
 [forms-db.ts](../src/lib/offline/forms-db.ts) es la **única** capa que habla con

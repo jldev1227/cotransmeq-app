@@ -149,6 +149,14 @@ export interface AnalisisNominaDTO {
 }
 
 export const nominaCanvasAPI = {
+	async corteDiligenciamiento(): Promise<{ diaInicio: number }> {
+		const { data } = await apiClient.get('/api/nomina/canvas/corte-diligenciamiento');
+		return data;
+	},
+	async fijarCorteDiligenciamiento(diaInicio: number): Promise<{ diaInicio: number }> {
+		const { data } = await apiClient.put('/api/nomina/canvas/corte-diligenciamiento', { diaInicio });
+		return data;
+	},
 	/** El libro entero del periodo. `corte` es el día de inicio (21 por defecto). */
 	async periodo(
 		anio: number,
@@ -242,6 +250,11 @@ export const nominaCanvasAPI = {
 		return (data ?? []) as ResumenSnapshot[];
 	},
 
+	async obtenerSnapshot(id: string): Promise<ResumenSnapshot & { payload: Record<string, any> }> {
+		const { data } = await apiClient.get(`/api/nomina/snapshots/${id}`);
+		return data;
+	},
+
 	/** Devuelve `{ sinCambios: true }` cuando el contenido es idéntico al último. */
 	async capturarSnapshot(anio: number, mes: number, corte?: number) {
 		const { data } = await apiClient.post('/api/nomina/snapshots', { anio, mes, corte });
@@ -255,8 +268,8 @@ export const nominaCanvasAPI = {
 		return data;
 	},
 
-	async revertirSnapshot(id: string): Promise<ResultadoRevertir> {
-		const { data } = await apiClient.post(`/api/nomina/snapshots/${id}/revertir`);
+	async revertirSnapshot(id: string, conductorId?: string | null): Promise<ResultadoRevertir> {
+		const { data } = await apiClient.post(`/api/nomina/snapshots/${id}/revertir`, conductorId ? { conductorId } : {});
 		return data as ResultadoRevertir;
 	}
 };

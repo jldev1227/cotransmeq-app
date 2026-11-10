@@ -101,11 +101,23 @@
 	 * Espejo de `CONCEPTOS_CALCULADOS_AUTO` en el servidor.
 	 */
 	const AUTOMATICOS = new Set(['DOTACION', 'EXAMEN_MEDICO', 'GASTOS_DIVERSOS', 'PAPELERIA']);
+	type EdicionFila = {
+		concepto: string;
+		dias: number;
+		valor_unitario: number;
+		valor_unitario_texto: string;
+		observaciones: string;
+		recorrido: string;
+		fechas: string;
+		cantidad: number;
+		porcentaje_admin: number;
+	};
 
 	let seccion = $state<Seccion>('GASTO_OPERATIVO');
 	let nombre = $state('');
 	let cantidad = $state(1);
 	let valorUnitario = $state(0);
+	let valorUnitarioTexto = $state('0');
 	/// Solo en ANTICIPOS. El backend lo guarda en `observaciones`, que es donde
 	/// la hoja pinta la columna FECHA (no hay columna propia).
 	let fecha = $state('');
@@ -115,6 +127,18 @@
 
 	let trabajando = $state(false);
 	let error = $state('');
+	let editandoFila = $state<{ tipo: 'concepto' | 'adicional'; id: string } | null>(null);
+	let edicion = $state<EdicionFila>({
+		concepto: '',
+		dias: 0,
+		valor_unitario: 0,
+		valor_unitario_texto: '0',
+		observaciones: '',
+		recorrido: '',
+		fechas: '',
+		cantidad: 1,
+		porcentaje_admin: 10
+	});
 
 	const etiqueta = (c: string) => c.replace(/_/g, ' ');
 
@@ -412,6 +436,30 @@
 		}).format(Math.round(v || 0));
 	}
 
+	function formatMiles(v: number): string {
+		const entero = String(Math.max(0, Math.trunc(Number(v) || 0)));
+		return entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+	}
+
+	/** Mantiene el importe numérico separado del texto agrupado que ve el usuario. */
+	function actualizarMonto(event: Event, actualizar: (texto: string, valor: number) => void) {
+		const input = event.currentTarget as HTMLInputElement;
+		const cursor = input.selectionStart ?? input.value.length;
+		const digitosAntes = input.value.slice(0, cursor).replace(/\D/g, '').length;
+		const digitos = input.value.replace(/\D/g, '');
+		const texto = digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+		actualizar(texto, digitos ? Number(digitos) : 0);
+		input.value = texto;
+
+		let posicion = 0;
+		let contados = 0;
+		while (posicion < texto.length && contados < digitosAntes) {
+			if (texto[posicion] !== '.') contados++;
+			posicion++;
+		}
+		input.setSelectionRange(posicion, posicion);
+	}
+
 	/**
 	 * Alta de un ADICIONAL.
 	 *
@@ -454,6 +502,7 @@
 				fecha = '';
 				cantidad = 1;
 				valorUnitario = 0;
+				valorUnitarioTexto = '0';
 				await onCambiado({ accion: 'add', concepto: desc });
 				return;
 			}
@@ -472,6 +521,7 @@
 			nombre = '';
 			cantidad = 1;
 			valorUnitario = 0;
+			valorUnitarioTexto = '0';
 			fecha = '';
 			await onCambiado({ accion: 'add', concepto: creado });
 		} catch (e: any) {
@@ -508,6 +558,167 @@
 			await onCambiado({ accion: 'remove', concepto: c.concepto });
 		} catch (e: any) {
 			error = e?.response?.data?.error || e?.message || 'Error desconocido';
+		} finally {
+			trabajando = false;
+		}
+	}
+
+	function iniciarEdicionConcepto(c: ConceptoDescuento) {
+		if (trabajando || !c.id || !Number.isInteger(c.version)) return;
+		editandoFila = { tipo: 'concepto', id: c.id };
+		edicion = {
+			...edicion,
+			concepto: etiqueta(c.concepto),
+			dias: Number(c.dias) || 0,
+			valor_unitario: Number(c.valor_unitario) || 0,
+			valor_unitario_texto: formatMiles(Number(c.valor_unitario)),
+			observaciones: c.observaciones || ''
+		};
+		error = '';
+	}
+
+	function iniciarEdicionAdicional(a: AdicionalCierre) {
+		if (trabajando || !a.id || !Number.isInteger(a.version)) return;
+		editandoFila = { tipo: 'adicional', id: a.id };
+		edicion = {
+			...edicion,
+			recorrido: a.recorrido || '',
+			fechas: a.fechas || '',
+			valor_unitario: Number(a.valor_unitario) || 0,
+			valor_unitario_texto: formatMiles(Number(a.valor_unitario)),
+			cantidad: Number(a.cantidad) || 0,
+			porcentaje_admin: Number(a.porcentaje_admin) || 0
+		};
+		error = '';
+	}
+
+	function cancelarEdicion() {
+		editandoFila = null;
+		error = '';
+	}
+
+	function normalizarConcepto(valor: string) {
+		return valor.trim().toUpperCase().replace(/\s+/g, '_');
+	}
+
+	async function guardarEdicionConcepto(c: ConceptoDescuento) {
+		if (trabajando || !c.id || !Number.isInteger(c.version)) return;
+		const concepto = normalizarConcepto(edicion.concepto);
+		if (!concepto) {
+			error = 'El concepto no puede ir vacío.';
+			return;
+		}
+		if (
+			(conceptos ?? []).some(
+				(otro) => otro.id !== c.id && otro.tipo === c.tipo && otro.concepto === concepto
+			)
+		) {
+			error = `${etiqueta(concepto)} ya está en esta sección.`;
+			return;
+		}
+		const dias = Number(edicion.dias);
+		const valor = Number(edicion.valor_unitario);
+		if (
+			!Number.isFinite(valor) ||
+			valor < 0 ||
+			(c.tipo === 'GASTO_OPERATIVO' && (!Number.isFinite(dias) || dias < 0))
+		) {
+			error = 'La cantidad y el valor deben ser números mayores o iguales a cero.';
+			return;
+		}
+
+		const cambios: Array<{
+			field: 'concepto' | 'dias' | 'valor_unitario' | 'observaciones';
+			value: string | number | null;
+		}> = [];
+		if (concepto !== c.concepto) cambios.push({ field: 'concepto', value: concepto });
+		if (c.tipo === 'GASTO_OPERATIVO' && dias !== Number(c.dias ?? 0))
+			cambios.push({ field: 'dias', value: dias });
+		if (valor !== Number(c.valor_unitario)) cambios.push({ field: 'valor_unitario', value: valor });
+		if (c.tipo === 'ANTICIPO' && (edicion.observaciones.trim() || '') !== (c.observaciones || '')) {
+			cambios.push({ field: 'observaciones', value: edicion.observaciones.trim() || null });
+		}
+		if (cambios.length === 0) {
+			cancelarEdicion();
+			return;
+		}
+
+		trabajando = true;
+		error = '';
+		try {
+			let version = c.version!;
+			for (const cambio of cambios) {
+				const result = await liquidacionesTercerosDescuentosAPI.actualizarConceptoFila({
+					id: c.id,
+					...cambio,
+					base_version: version
+				});
+				version = result.version;
+			}
+			editandoFila = null;
+			await onCambiado({ accion: 'update', concepto });
+		} catch (e: any) {
+			try {
+				await onCambiado({ accion: 'update', concepto: c.concepto });
+			} catch {}
+			error = e?.response?.data?.error || e?.message || 'No se pudo guardar la fila.';
+		} finally {
+			trabajando = false;
+		}
+	}
+
+	async function guardarEdicionAdicional(a: AdicionalCierre) {
+		if (trabajando || !a.id || !Number.isInteger(a.version)) return;
+		const unitario = Number(edicion.valor_unitario);
+		const cantidad = Number(edicion.cantidad);
+		const porcentaje = Number(edicion.porcentaje_admin);
+		if (
+			![unitario, cantidad, porcentaje].every(Number.isFinite) ||
+			unitario < 0 ||
+			cantidad < 0 ||
+			porcentaje < 0 ||
+			porcentaje > 100
+		) {
+			error = 'Los importes deben ser positivos y el porcentaje administrativo debe estar entre 0 y 100.';
+			return;
+		}
+		const cambios: Array<{
+			field: 'recorrido' | 'fechas' | 'valor_unitario' | 'cantidad' | 'porcentaje_admin';
+			value: string | number;
+		}> = [];
+		if (edicion.recorrido.trim() !== (a.recorrido || ''))
+			cambios.push({ field: 'recorrido', value: edicion.recorrido.trim() });
+		if (edicion.fechas.trim() !== (a.fechas || ''))
+			cambios.push({ field: 'fechas', value: edicion.fechas.trim() });
+		if (unitario !== Number(a.valor_unitario))
+			cambios.push({ field: 'valor_unitario', value: unitario });
+		if (cantidad !== Number(a.cantidad)) cambios.push({ field: 'cantidad', value: cantidad });
+		if (porcentaje !== Number(a.porcentaje_admin))
+			cambios.push({ field: 'porcentaje_admin', value: porcentaje });
+		if (cambios.length === 0) {
+			cancelarEdicion();
+			return;
+		}
+
+		trabajando = true;
+		error = '';
+		try {
+			let version = a.version;
+			for (const cambio of cambios) {
+				const actualizado = await liquidacionesTercerosAdicionalesAPI.actualizarCampo({
+					id: a.id,
+					...cambio,
+					base_version: version
+				});
+				version = actualizado.version;
+			}
+			editandoFila = null;
+			await onCambiado({ accion: 'update', concepto: edicion.recorrido.trim() || 'adicional' });
+		} catch (e: any) {
+			try {
+				await onCambiado({ accion: 'update', concepto: a.recorrido || 'adicional' });
+			} catch {}
+			error = e?.response?.data?.error || e?.message || 'No se pudo guardar el adicional.';
 		} finally {
 			trabajando = false;
 		}
@@ -689,7 +900,7 @@
 							<th>Fechas</th>
 							<th class="cxm-num">V/unidad</th>
 							<th class="cxm-num">Cant</th>
-							<th class="cxm-num">Admon $</th>
+							<th class="cxm-num">Admon $ / %</th>
 							<th class="cxm-num">V/liquidar</th>
 							<th></th>
 						</tr>
@@ -697,20 +908,94 @@
 					<tbody>
 						{#each adicionales as a (a.id)}
 							<tr>
+								{#if editandoFila?.tipo === 'adicional' && editandoFila.id === a.id}
+									<td>
+										<input
+											class="cxm-edit-input"
+											bind:value={edicion.recorrido}
+											aria-label="Recorrido"
+											disabled={trabajando}
+										/>
+									</td>
+									<td>
+										<input
+											class="cxm-edit-input"
+											bind:value={edicion.fechas}
+											aria-label="Fechas"
+											disabled={trabajando}
+										/>
+									</td>
+									<td class="cxm-num">
+										<input
+							class="cxm-edit-input cxm-edit-num"
+							type="text"
+							inputmode="numeric"
+							value={edicion.valor_unitario_texto}
+							oninput={(event) =>
+								actualizarMonto(event, (texto, valor) => {
+									edicion.valor_unitario_texto = texto;
+									edicion.valor_unitario = valor;
+								})}
+											aria-label="Valor unitario"
+											disabled={trabajando}
+										/>
+									</td>
+									<td class="cxm-num">
+										<input
+											class="cxm-edit-input cxm-edit-num"
+											type="number"
+											min="0"
+											step="1"
+											bind:value={edicion.cantidad}
+											aria-label="Cantidad"
+											disabled={trabajando}
+										/>
+									</td>
+									<td class="cxm-num">
+										<input
+											class="cxm-edit-input cxm-edit-num"
+											type="number"
+											min="0"
+											max="100"
+											step="0.01"
+											bind:value={edicion.porcentaje_admin}
+											aria-label="Porcentaje de administración"
+											disabled={trabajando}
+										/>
+									</td>
+									<td class="cxm-num cxm-total">${formatCOP(Number(a.valor_liquidar))}</td>
+								<td class="cxm-num cxm-acciones">
+									<button
+										class="cxm-guardar"
+										onclick={() => guardarEdicionAdicional(a)}
+										disabled={trabajando}
+								>Guardar</button>
+									<button
+										class="cxm-cancelar"
+										onclick={cancelarEdicion}
+										disabled={trabajando}
+								>Cancelar</button>
+								</td>
+								{:else}
 								<td>{a.recorrido || '—'}</td>
 								<td>{a.fechas || '—'}</td>
 								<td class="cxm-num">${formatCOP(Number(a.valor_unitario))}</td>
 								<td class="cxm-num">{a.cantidad}</td>
-								<td class="cxm-num">${formatCOP(Number(a.valor_admin))}</td>
+								<td class="cxm-num"><span>${formatCOP(Number(a.valor_admin))}</span><small class="cxm-subvalor">{a.porcentaje_admin}%</small></td>
 								<td class="cxm-num cxm-total">${formatCOP(Number(a.valor_liquidar))}</td>
-								<td class="cxm-num">
+								<td class="cxm-num cxm-acciones">
+									<button
+										class="cxm-editar"
+										onclick={() => iniciarEdicionAdicional(a)}
+										disabled={trabajando || !Number.isInteger(a.version)}
+										aria-label="Editar adicional">Editar</button>
 									<button
 										class="cxm-quitar"
 										onclick={() => quitarAdicional(a)}
 										disabled={trabajando}
-										aria-label="Quitar adicional"
-									>×</button>
+										aria-label="Quitar adicional">×</button>
 								</td>
+								{/if}
 							</tr>
 						{/each}
 					</tbody>
@@ -778,15 +1063,92 @@
 				</thead>
 				<tbody>
 					{#each filas as c (c.id ?? c.concepto)}
-						{@const auto = AUTOMATICOS.has(c.concepto)}
+						{@const auto = c.calculado && AUTOMATICOS.has(c.concepto)}
 						<tr>
+							{#if editandoFila?.tipo === 'concepto' && editandoFila.id === c.id}
+								<td>
+									<input
+										class="cxm-edit-input"
+										bind:value={edicion.concepto}
+										aria-label="Concepto"
+										disabled={trabajando}
+									/>
+								</td>
+								<td class="cxm-num">
+									{#if seccion === 'ANTICIPO'}
+										<input
+											class="cxm-edit-input"
+											bind:value={edicion.observaciones}
+											aria-label="Fecha"
+											placeholder="15 AGO"
+											disabled={trabajando}
+										/>
+									{:else}
+										<input
+											class="cxm-edit-input cxm-edit-num"
+											type="number"
+											min="0"
+											step="0.5"
+											bind:value={edicion.dias}
+											aria-label="Cantidad"
+											disabled={trabajando}
+										/>
+									{/if}
+								</td>
+								<td class="cxm-num">
+									<input
+						class="cxm-edit-input cxm-edit-num"
+						type="text"
+						inputmode="numeric"
+						value={edicion.valor_unitario_texto}
+						oninput={(event) =>
+							actualizarMonto(event, (texto, valor) => {
+								edicion.valor_unitario_texto = texto;
+								edicion.valor_unitario = valor;
+							})}
+										aria-label="Valor unitario"
+										disabled={trabajando}
+									/>
+								</td>
+								<td class="cxm-num cxm-total">
+									${formatCOP(
+										(seccion === 'ANTICIPO' ? 1 : Number(edicion.dias) || 0) *
+											(Number(edicion.valor_unitario) || 0)
+									)}
+								</td>
+							{#if seccion === 'ANTICIPO'}
+								<td>
+									<label class="cxm-reparto">
+										<input
+											type="checkbox"
+											checked={c.dividir_igual_propietarios === true}
+											onchange={(e) =>
+												cambiarRepartoIgual(c, e.currentTarget.checked, e.currentTarget)}
+											disabled={trabajando || propietariosCount < 2 || !c.id || !Number.isInteger(c.version)}
+											aria-label="Dividir anticipo por igual entre propietarios"
+										/>
+										<span>Igual</span>
+									</label>
+								</td>
+							{/if}
+							<td class="cxm-num cxm-acciones">
+								<button
+									class="cxm-guardar"
+									onclick={() => guardarEdicionConcepto(c)}
+									disabled={trabajando}
+								>Guardar</button>
+								<button
+									class="cxm-cancelar"
+									onclick={cancelarEdicion}
+									disabled={trabajando}
+								>Cancelar</button>
+							</td>
+							{:else}
 							<td>
 								{etiqueta(c.concepto)}
 								{#if auto}<span class="cxm-auto">automático</span>{/if}
 							</td>
-							<td class="cxm-num">
-								{seccion === 'ANTICIPO' ? (c.observaciones || '—') : (c.dias ?? 0)}
-							</td>
+							<td class="cxm-num">{seccion === 'ANTICIPO' ? (c.observaciones || '—') : (c.dias ?? 0)}</td>
 							<td class="cxm-num">${formatCOP(Number(c.valor_unitario))}</td>
 							<td class="cxm-num cxm-total">${formatCOP(Number(c.valor_total))}</td>
 							{#if seccion === 'ANTICIPO'}
@@ -795,7 +1157,8 @@
 										<input
 											type="checkbox"
 											checked={c.dividir_igual_propietarios === true}
-										onchange={(e) => cambiarRepartoIgual(c, e.currentTarget.checked, e.currentTarget)}
+											onchange={(e) =>
+												cambiarRepartoIgual(c, e.currentTarget.checked, e.currentTarget)}
 											disabled={trabajando || propietariosCount < 2 || !c.id || !Number.isInteger(c.version)}
 											aria-label="Dividir anticipo por igual entre propietarios"
 										/>
@@ -806,17 +1169,22 @@
 									{/if}
 								</td>
 							{/if}
-							<td class="cxm-num">
+							<td class="cxm-num cxm-acciones">
+								<button
+									class="cxm-editar"
+									onclick={() => iniciarEdicionConcepto(c)}
+									disabled={trabajando || !c.id || !Number.isInteger(c.version)}
+									aria-label="Editar {etiqueta(c.concepto)}">Editar</button>
 								<button
 									class="cxm-quitar"
 									onclick={() => quitar(c)}
 									disabled={trabajando || auto}
 									title={auto
-										? 'Se calcula solo a partir de los días de los conductores o del facturado; no se puede quitar.'
+										? 'Se calcula automáticamente. Edita sus valores para convertirlo en manual.'
 										: `Quitar ${etiqueta(c.concepto)}`}
-									aria-label="Quitar {etiqueta(c.concepto)}"
-								>×</button>
+									aria-label="Quitar {etiqueta(c.concepto)}">×</button>
 							</td>
+							{/if}
 						</tr>
 					{/each}
 				</tbody>
@@ -854,7 +1222,17 @@
 				</label>
 				<label>
 					<span>V/unidad</span>
-					<input type="number" min="0" step="1000" bind:value={valorUnitario} disabled={trabajando} />
+					<input
+						type="text"
+						inputmode="numeric"
+						value={valorUnitarioTexto}
+						oninput={(event) =>
+							actualizarMonto(event, (texto, valor) => {
+								valorUnitarioTexto = texto;
+								valorUnitario = valor;
+							})}
+						disabled={trabajando}
+					/>
 				</label>
 				<label class="cxm-corto">
 					<span>Cant</span>
@@ -889,7 +1267,17 @@
 
 				<label>
 					<span>Valor unitario</span>
-					<input type="number" min="0" step="1000" bind:value={valorUnitario} disabled={trabajando} />
+					<input
+						type="text"
+						inputmode="numeric"
+						value={valorUnitarioTexto}
+						oninput={(event) =>
+							actualizarMonto(event, (texto, valor) => {
+								valorUnitarioTexto = texto;
+								valorUnitario = valor;
+							})}
+						disabled={trabajando}
+					/>
 				</label>
 			{/if}
 
@@ -975,6 +1363,59 @@
 	}
 	.cxm-total {
 		font-weight: 700;
+	}
+	.cxm-edit-input {
+		box-sizing: border-box;
+		width: 100%;
+		min-width: 86px;
+		min-height: 32px;
+		border: 1px solid var(--border-default);
+		border-radius: 8px;
+		background: var(--bg-surface);
+		padding: 5px 8px;
+		color: var(--text-primary);
+		font: inherit;
+	}
+	.cxm-edit-num {
+		min-width: 78px;
+		text-align: right;
+	}
+	.cxm-subvalor {
+		display: block;
+		color: var(--text-muted);
+		font-size: 10px;
+	}
+	.cxm-acciones {
+		white-space: nowrap;
+	}
+	.cxm-editar,
+	.cxm-guardar,
+	.cxm-cancelar {
+		min-height: 28px;
+		border: 1px solid var(--border-default);
+		border-radius: 8px;
+		background: var(--bg-surface);
+		padding: 0 8px;
+		color: var(--text-secondary);
+		font: inherit;
+		font-size: 11px;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.cxm-guardar {
+		border-color: var(--accion);
+		background: var(--accion);
+		color: white;
+	}
+	.cxm-editar:hover:not(:disabled),
+	.cxm-cancelar:hover:not(:disabled) {
+		background: var(--bg-base);
+	}
+	.cxm-guardar:disabled,
+	.cxm-editar:disabled,
+	.cxm-cancelar:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
 	}
 	.cxm-reparto {
 		display: inline-flex;

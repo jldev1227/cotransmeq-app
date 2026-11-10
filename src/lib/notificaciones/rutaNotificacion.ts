@@ -61,6 +61,12 @@ export function rutaDeNotificacion(n: NotificacionNavegable): RutaNotificacion |
 	if (ref === 'viatico_fondo') return { url: '/dashboard/viaticos' };
 	if (ref === 'solicitud_web') return { url: `/dashboard/solicitudes?solicitud=${id}` };
 	if (ref === 'ACCION_CORRECTIVA') return { url: `/dashboard/acciones-correctivas/${id}` };
+	if (ref.startsWith('PLAN_TRABAJO_OCURRENCIA')) {
+		const planId = ref.split(':')[1];
+		const params = new URLSearchParams({ ocurrenciaId: id });
+		if (planId) params.set('planId', planId);
+		return { url: `/dashboard/plan-trabajo?${params.toString()}` };
+	}
 	/// Reporte de un incidente (`incidente`) y su recordatorio de los 15 días
 	/// (`incidente_investigacion_pendiente`): la referencia es el incidente.
 	if (ref === 'incidente' || ref === 'incidente_investigacion_pendiente')

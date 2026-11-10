@@ -105,6 +105,7 @@
 		ACTIVIDAD_PESV_ASIGNADA: { icono: ListChecks, tono: 'verde', etiqueta: 'PESV' },
 		ACTIVIDAD_PESV_ACTUALIZADA: { icono: RefreshCw, tono: 'azul', etiqueta: 'PESV' },
 		ACTIVIDAD_PESV_VENCIDA: { icono: CalendarClock, tono: 'rojo', etiqueta: 'PESV' },
+		PLAN_TRABAJO_RECORDATORIO: { icono: CalendarClock, tono: 'ambar', etiqueta: 'Plan HSEQ/PESV' },
 		LIQUIDACION_FACTURADA: { icono: ReceiptText, tono: 'verde', etiqueta: 'Facturación' },
 		FACTURA_ANULADA: { icono: Receipt, tono: 'rojo', etiqueta: 'Facturación' },
 		ACCION_CORRECTIVA_RECORDATORIO: {

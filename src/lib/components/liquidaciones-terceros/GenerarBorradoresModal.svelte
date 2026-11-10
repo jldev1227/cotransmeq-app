@@ -55,15 +55,12 @@
 	let busqueda = $state('');
 
 	/**
-	 * Filtro de periodo de la lista. `0` es "todos".
-	 *
-	 * Arranca abierto a propósito: el cierre de un mes se alimenta a veces de
-	 * liquidaciones facturadas en un mes POSTERIOR, y con la lista atada al
-	 * periodo del canvas esas no se podían elegir —ni se veía que existieran—.
-	 * El periodo del cierre lo sigue fijando el canvas, no lo elegido aquí.
+	 * Filtro de periodo de la lista. `0` es "todos". Abre en el periodo del
+	 * canvas; los selectores siguen permitiendo traer liquidaciones de otros
+	 * periodos cuando el cierre las necesita.
 	 */
-	let filtroAnio = $state(0);
-	let filtroMes = $state(0);
+	let filtroAnio = $state(anio);
+	let filtroMes = $state(mes);
 
 	const MESES = [
 		'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -74,9 +71,9 @@
 		'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
 	];
 
-	/** Años presentes en los datos, del más reciente al más viejo. */
+	/** Años de los datos y del canvas, del más reciente al más viejo. */
 	const aniosDisponibles = $derived(
-		[...new Set(liquidaciones.map((l) => l.anio))].sort((a, b) => b - a)
+		[...new Set([...liquidaciones.map((l) => l.anio), anio])].sort((a, b) => b - a)
 	);
 
 	/**
@@ -217,6 +214,14 @@
 	let errorPlacas = $state('');
 	/** Consecutivos elegidos cuyo detalle vino sin items de terceros. */
 	let sinItems = $state<string[]>([]);
+	interface PeriodoCierrePrevio {
+		anio: number;
+		mes: number;
+	}
+	let historialPorPlaca = $state<Record<string, PeriodoCierrePrevio[]>>({});
+	let cargandoHistorial = $state(false);
+	let errorHistorial = $state('');
+	let historialPromise: Promise<void> | null = null;
 
 	/**
 	 * Detalles ya leídos, por liquidación. Desmarcar y volver a marcar no
@@ -249,6 +254,69 @@
 
 	function normalizar(placa: string): string {
 		return (placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+	}
+
+	/** Consulta los seis periodos cerrados anteriores al periodo del canvas. */
+	function cargarHistorialPlacas(): Promise<void> {
+		if (historialPromise) return historialPromise;
+
+		cargandoHistorial = true;
+		errorHistorial = '';
+		const periodos = Array.from({ length: 6 }, (_, indice) => {
+			const totalMeses = anio * 12 + mes - 2 - indice;
+			return {
+				anio: Math.floor(totalMeses / 12),
+				mes: (totalMeses % 12) + 1
+			};
+		});
+
+		historialPromise = (async () => {
+			const resultados = await Promise.allSettled(
+				periodos.map((periodo) =>
+					liquidacionesTercerosDescuentosAPI.listarPeriodo(periodo.anio, periodo.mes)
+				)
+			);
+			const porPlaca = new Map<string, PeriodoCierrePrevio[]>();
+			let periodosFallidos = 0;
+
+			resultados.forEach((resultado, indice) => {
+				if (resultado.status === 'rejected') {
+					periodosFallidos++;
+					return;
+				}
+
+				for (const cierre of resultado.value.hojas) {
+					const placas = cierre.placas?.length ? cierre.placas : [cierre.placa];
+					for (const placa of placas) {
+						const clave = normalizar(placa);
+						if (!clave) continue;
+						const historial = porPlaca.get(clave) ?? [];
+						if (
+							!historial.some(
+								(p) => p.anio === periodos[indice].anio && p.mes === periodos[indice].mes
+							)
+						) {
+							historial.push(periodos[indice]);
+						}
+						porPlaca.set(clave, historial);
+					}
+				}
+			});
+
+			historialPorPlaca = Object.fromEntries(porPlaca);
+			errorHistorial = periodosFallidos
+				? `No se pudo consultar ${periodosFallidos} de los últimos 6 meses; el historial puede estar incompleto.`
+				: '';
+		})();
+
+		return historialPromise.finally(() => {
+			cargandoHistorial = false;
+		});
+	}
+
+	function etiquetaMesHistorial(periodo: PeriodoCierrePrevio): string {
+		const nombre = MESES_CORTO[periodo.mes - 1] ?? String(periodo.mes);
+		return periodo.anio === anio ? nombre : `${nombre} ${periodo.anio}`;
 	}
 
 	const placasAIncluir = $derived(
@@ -528,6 +596,7 @@
 		const vivas = new Set(nuevas.map((p) => p.placa));
 		placasExcluidas = new Set([...placasExcluidas].filter((p) => vivas.has(p)));
 		placasDetectadas = nuevas;
+		if (nuevas.length > 0) void cargarHistorialPlacas();
 		sinItems = vacias;
 		errorPlacas =
 			fallidas > 0
@@ -617,7 +686,7 @@
 	eyebrow="Cierres finales"
 	title="Generar borradores"
 	subtitle={`Periodo ${String(mes).padStart(2, '0')}/${anio} · fijado por el canvas`}
-	tamano="lg"
+	tamano="xl"
 	cerrarAlFondo={false}
 	bloqueado={enCurso || confirmandoLanzamiento || lanzando || agrupandoGenerados}
 	oncerrar={onClose}
@@ -828,6 +897,7 @@
 					<ul class="gbm-lista gbm-lista-placas">
 						{#each placasDetectadas as p (p.placa)}
 							{@const existentes = cierrePorPlaca.get(normalizar(p.placa)) ?? []}
+							{@const historial = historialPorPlaca[normalizar(p.placa)] ?? []}
 							<li>
 								<label>
 									<input
@@ -837,6 +907,37 @@
 									/>
 									<span class="gbm-cons">{p.placa}</span>
 									<span class="gbm-cliente">{p.tercero}</span>
+									<span class="gbm-historial" aria-label="Historial de cierres de {p.placa}">
+										{#if cargandoHistorial}
+											<span class="gbm-historial-pendiente">Revisando meses…</span>
+										{:else if historial.length > 0}
+											<span class="gbm-historial-titulo">Cierre previo</span>
+											{#each historial as periodo (`${periodo.anio}-${periodo.mes}`)}
+											<span
+												class="gbm-historial-mes"
+												title="Considerada en {MESES[periodo.mes - 1]} {periodo.anio}"
+											>
+													{etiquetaMesHistorial(periodo)}
+												</span>
+											{/each}
+											{#if errorHistorial}
+												<span class="gbm-historial-incompleto" title={errorHistorial}>
+													parcial
+												</span>
+											{/if}
+										{:else if errorHistorial}
+											<span class="gbm-historial-incompleto" title={errorHistorial}>
+												Sin datos concluyentes
+											</span>
+										{:else}
+											<span
+												class="gbm-historial-vacio"
+												title="No aparece en cierres de los seis meses anteriores"
+											>
+												Sin cierre · 6 meses
+											</span>
+										{/if}
+									</span>
 									{#each existentes as c (c.id)}
 										<span class="gbm-estado {claseBadgeEstado(c.estado)}" title="Ya existe un cierre">
 											ya: {c.estado}
@@ -1089,10 +1190,47 @@
 	}
 	.gbm-cliente {
 		flex: 1;
+		min-width: 140px;
 		color: var(--text-secondary);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.gbm-historial {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 4px;
+		max-width: 320px;
+	}
+	.gbm-historial-titulo,
+	.gbm-historial-mes,
+	.gbm-historial-vacio,
+	.gbm-historial-pendiente,
+	.gbm-historial-incompleto {
+		padding: 2px 6px;
+		border-radius: 999px;
+		font-size: 9.5px;
+		font-weight: 650;
+		line-height: 1.35;
+		white-space: nowrap;
+	}
+	.gbm-historial-titulo {
+		color: var(--text-secondary);
+		background: var(--bg-base);
+	}
+	.gbm-historial-mes {
+		color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 12%, var(--bg-base));
+	}
+	.gbm-historial-vacio,
+	.gbm-historial-pendiente {
+		color: var(--text-secondary);
+		background: var(--bg-base);
+	}
+	.gbm-historial-incompleto {
+		color: var(--warning, #92400e);
+		background: color-mix(in srgb, var(--warning, #f59e0b) 15%, var(--bg-base));
 	}
 	.gbm-estado {
 		padding: 2px 7px;

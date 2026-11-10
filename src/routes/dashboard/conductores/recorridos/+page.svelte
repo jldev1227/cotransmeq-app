@@ -1549,6 +1549,7 @@
 <SnapshotPanel
 	open={panelVersiones}
 	scope="recorridos"
+	conductorId={conductorActivo}
 	{anio}
 	{mes}
 	onClose={() => (panelVersiones = false)}

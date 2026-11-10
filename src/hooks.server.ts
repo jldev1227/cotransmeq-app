@@ -66,6 +66,8 @@ function decodeJwtPayload(token: string): JwtPayload | null {
 function getModuleFromPath(pathname: string): string | null {
 	if (/^\/dashboard\/conductores\/rastreo(?:\/|$)/.test(pathname)) return 'rastreo_servicios';
 	if (/^\/dashboard\/rastreo-servicios(?:\/|$)/.test(pathname)) return 'rastreo_servicios';
+	// El plan HSEQ/PESV comparte el permiso que protege su API y su elemento de menú.
+	if (/^\/dashboard\/plan-trabajo(?:\/|$)/.test(pathname)) return 'acciones-correctivas';
 	const match = pathname.match(/^\/dashboard\/([^/]+)/);
 	return match ? match[1] : null;
 }

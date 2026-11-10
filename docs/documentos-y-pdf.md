@@ -8,13 +8,13 @@ elección del camino decide si el documento puede divergir de sí mismo.
 
 ## Los caminos, de un vistazo
 
-| Camino | Quién pinta | Documentos |
-|---|---|---|
-| **DOM → Chromium del servidor** | El navegador maqueta; el backend añade fuentes embebidas (o nada) y pasa el HTML por Puppeteer | Vista previa de los canvas de terceros y de recorridos; documento de un envío de formulario dinámico; liquidación de servicio y liquidación de un tercero (por `/api/pdf/from-html`) |
-| **Plantilla del servidor** | El backend, desde su propio template | SARLAFT, salidas NC, acciones correctivas, inducciones, asistencias, reporte mensual de recargos |
-| **Impresión del navegador** (`window.print()` + `@media print`) | El navegador | Respaldo cuando falla el PDF del servidor; cualquier página con `Ctrl+P`, incluido el documento de un envío |
-| **pdfmake en el navegador** | Una definición de documento en TypeScript | Desprendible de nómina (también el de la app móvil), prima, intereses de cesantías, consolidado del fondo de viáticos, extracto FUEC |
-| **Excel** | `exceljs` en el navegador, o el backend | Libro de un canvas de terceros, historial de liquidaciones de servicios; Excel de la liquidación de servicio (backend) |
+| Camino                                                          | Quién pinta                                                                                    | Documentos                                                                                                                                                                           |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **DOM → Chromium del servidor**                                 | El navegador maqueta; el backend añade fuentes embebidas (o nada) y pasa el HTML por Puppeteer | Vista previa de los canvas de terceros y de recorridos; documento de un envío de formulario dinámico; liquidación de servicio y liquidación de un tercero (por `/api/pdf/from-html`) |
+| **Plantilla del servidor**                                      | El backend, desde su propio template                                                           | SARLAFT, salidas NC, acciones correctivas, inducciones, asistencias, reporte mensual de recargos                                                                                     |
+| **Impresión del navegador** (`window.print()` + `@media print`) | El navegador                                                                                   | Respaldo cuando falla el PDF del servidor; cualquier página con `Ctrl+P`, incluido el documento de un envío                                                                          |
+| **pdfmake en el navegador**                                     | Una definición de documento en TypeScript                                                      | Desprendible de nómina (también el de la app móvil), prima, intereses de cesantías, consolidado del fondo de viáticos, extracto FUEC                                                 |
+| **Excel**                                                       | `exceljs` en el navegador, o el backend                                                        | Libro de un canvas de terceros, historial de liquidaciones de servicios; Excel de la liquidación de servicio (backend)                                                               |
 
 La regla que lo ordena todo: **un documento tiene un solo renderizador.** Dos
 implementaciones del mismo papel divergen en silencio —el preview se ve de un
@@ -31,16 +31,22 @@ renderizador paralelo en el backend tendría que reimplementar los diecinueve
 tipos de campo de un formulario (o las columnas configurables de un canvas) y
 divergiría a la primera modificación.
 
-| Documento | Componente y hoja de estilos | Exportador | Endpoint |
-|---|---|---|---|
+| Documento                                                                            | Componente y hoja de estilos                                                                                                                                                                                                                                                                                                                                                                          | Exportador                                                                                                                                                                       | Endpoint                                                                                           |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | Vista previa de los canvas de cierres, adicionales, ocasional, ingresos y recorridos | [PreviewCanvasModal](../src/lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte), [DocumentoHoja](../src/lib/components/liquidaciones-terceros/preview/DocumentoHoja.svelte), [documento.css.ts](../src/lib/components/liquidaciones-terceros/preview/documento.css.ts); un adaptador por canvas en [preview/datos/](../src/lib/components/liquidaciones-terceros/preview/datos/) | [exportar-pdf.ts](../src/lib/components/liquidaciones-terceros/preview/exportar-pdf.ts), [exportar-zip.ts](../src/lib/components/liquidaciones-terceros/preview/exportar-zip.ts) | `POST /api/liquidaciones-terceros/canvas/pdf` (120 s) y `/canvas/pdf-zip` (600 s: un PDF por hoja) |
-| Documento de un envío de formulario dinámico | [PreviewEnvioPDF](../src/lib/components/formularios/PreviewEnvioPDF.svelte), [documento-envio.css.ts](../src/lib/components/formularios/documento-envio.css.ts) | [exportar-pdf-envio.ts](../src/lib/components/formularios/exportar-pdf-envio.ts) | `POST /api/formularios/documento/pdf` (120 s) |
+| Documento de un envío de formulario dinámico                                         | [PreviewEnvioPDF](../src/lib/components/formularios/PreviewEnvioPDF.svelte), [documento-envio.css.ts](../src/lib/components/formularios/documento-envio.css.ts)                                                                                                                                                                                                                                       | [exportar-pdf-envio.ts](../src/lib/components/formularios/exportar-pdf-envio.ts)                                                                                                 | `POST /api/formularios/documento/pdf` (120 s)                                                      |
 
 Las dos rutas las atiende el mismo servicio del backend
 (`liquidaciones-terceros-pdf/canvas-pdf.service.ts`), que añade las fuentes
 embebidas. El contrato es `{ html, css, filename }` y la respuesta, un blob que
 se **abre** en una pestaña nueva (casi siempre se quiere mirar antes de
 guardar). La URL del blob se revoca al minuto.
+
+El PDF de un envío agrega `footer: { left, right }` al contrato. El cliente quita
+el pie del HTML y manda sus dos textos por separado; el backend usa el pie nativo
+de Puppeteer para repetir la identidad del registro en el margen inferior sin
+participar en la paginación. `Ctrl+P` conserva un pie sencillo al final del
+documento.
 
 Reglas que no se negocian:
 
@@ -80,17 +86,24 @@ El exportador individual y el de lotes usan las rutas locales de marca:
 La misma imagen se usa en nómina y en la liquidación regular del tercero.
 
 En los envíos de formularios, el bloque `@media print` de
-`documento-envio.css.ts` sirve a las dos salidas: el PDF del servidor (Chromium
-imprime emulando el medio `print`) y el `Ctrl+P` del navegador, porque las dos
-parten del mismo DOM. El portal reutiliza el componente tal cual en
+`documento-envio.css.ts` conserva el mismo cuerpo para el PDF del servidor y
+`Ctrl+P`. La exportación del servidor separa el pie para que Puppeteer lo repita
+en cada hoja; la impresión directa lo deja una vez al final. El portal reutiliza
+el componente tal cual en
 [formularios/envios/[id]/documento](../src/routes/public/portal/formularios/envios/[id]/documento/+page@public.svelte),
 una hoja sin la cáscara del portal (`+page@public.svelte`): es lo que la app
 móvil descarga para que el conductor tenga firmas y fotos. El preview es
 **adaptativo, no configurable**: la disposición sale del tipo de cada campo y
 del `color` semántico de sus opciones (`emerald`, `red`, `amber`, `gray`), nunca
-de los literales `B`/`M`/`NA`. No hay plantillas por formato: un formato nuevo
-nacería roto hasta que alguien lo maquetara. El detalle de los formularios
-dinámicos está en [formularios-dinamicos/](./formularios-dinamicos/README_ARQUITECTURA.md).
+de los literales `B`/`M`/`NA`. No hay plantillas ni excepciones por código de
+formato: un formato nuevo usa las mismas reglas según sus campos y contenido.
+El detalle de los formularios dinámicos está en
+[formularios-dinamicos/](./formularios-dinamicos/README_ARQUITECTURA.md).
+
+La impresión adapta el flujo a cada página: equilibra automáticamente la última
+fragmentación entre columnas, permite que las tablas largas continúen en el
+espacio disponible y repite su encabezado. Las filas, firmas y evidencias
+permanecen unidas para conservar la lectura y la auditoría.
 
 El ZIP de cierres compone cada hoja fuera de la vista con `componer-hojas.ts`,
 el mismo código que usa el envío por correo, y las manda al servidor de una vez.
@@ -211,12 +224,12 @@ usa `fit: [w, h]` en vez de `width` y `height` a la vez (ver [AGENTS.md](../AGEN
 [pdfDesprendible.ts](../src/lib/utils/pdfDesprendible.ts) **es el
 desprendible**. Expone:
 
-| Función | Para |
-|---|---|
+| Función                                                     | Para                                                          |
+| ----------------------------------------------------------- | ------------------------------------------------------------- |
 | `construirDocDefinition(liquidacion, firmas, recargosData)` | Arma el documento sin abrirlo. Todos los cálculos están aquí. |
-| `generarPdfDesprendible(...)` | Abrirlo en una pestaña (uso interactivo). |
-| `generarBlobDesprendible(...)` | El ZIP del canvas de nómina. |
-| `generarBase64Desprendible(...)` | La app móvil. |
+| `generarPdfDesprendible(...)`                               | Abrirlo en una pestaña (uso interactivo).                     |
+| `generarBlobDesprendible(...)`                              | El ZIP del canvas de nómina.                                  |
+| `generarBase64Desprendible(...)`                            | La app móvil.                                                 |
 
 Quién lo llama: el canvas de nómina a través de
 [editor/canvas/desprendible-nomina.ts](../src/lib/editor/canvas/desprendible-nomina.ts)
@@ -280,12 +293,12 @@ Detalles que ya mordieron:
 
 ### Otros documentos en pdfmake
 
-| Archivo | Documento | Lo usa |
-|---|---|---|
-| [pdfPrima.ts](../src/lib/utils/pdfPrima.ts) | Liquidación de prima (RH-FR-30), con `logo_nombre.webp` | canvas de primas, portal |
-| [pdfInteresesCesantias.ts](../src/lib/utils/pdfInteresesCesantias.ts) | Intereses de cesantías | `LiquidacionDetalleModal` |
-| [pdfConsolidadoFondo.ts](../src/lib/utils/pdfConsolidadoFondo.ts) | Consolidado del fondo de viáticos de operaciones | `viaticos/ResumenViaticos` (la página le pasa `logo_nombre.webp`; el valor por defecto del componente aún es el logo del gemelo) |
-| [pdfExtracto.ts](../src/lib/utils/pdfExtracto.ts) + [pdfExtractoDoc.ts](../src/lib/utils/pdfExtractoDoc.ts) | Extracto de contrato FUEC (OP-FR-04) | `dashboard/extractos` |
+| Archivo                                                                                                     | Documento                                               | Lo usa                                                                                                                           |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| [pdfPrima.ts](../src/lib/utils/pdfPrima.ts)                                                                 | Liquidación de prima (RH-FR-30), con `logo_nombre.webp` | canvas de primas, portal                                                                                                         |
+| [pdfInteresesCesantias.ts](../src/lib/utils/pdfInteresesCesantias.ts)                                       | Intereses de cesantías                                  | `LiquidacionDetalleModal`                                                                                                        |
+| [pdfConsolidadoFondo.ts](../src/lib/utils/pdfConsolidadoFondo.ts)                                           | Consolidado del fondo de viáticos de operaciones        | `viaticos/ResumenViaticos` (la página le pasa `logo_nombre.webp`; el valor por defecto del componente aún es el logo del gemelo) |
+| [pdfExtracto.ts](../src/lib/utils/pdfExtracto.ts) + [pdfExtractoDoc.ts](../src/lib/utils/pdfExtractoDoc.ts) | Extracto de contrato FUEC (OP-FR-04)                    | `dashboard/extractos`                                                                                                            |
 
 ## Extractos FUEC y QR
 
@@ -316,10 +329,10 @@ móvil en `perfil/AccesoAppMovil.svelte`, que no es un documento.
 `exceljs` siempre con `import()` dinámico: pesa cerca de 1 MB y nadie lo
 necesita hasta pulsar el botón.
 
-| Archivo | Exporta |
-|---|---|
+| Archivo                                                                                             | Exporta                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [preview/exportar-excel.ts](../src/lib/components/liquidaciones-terceros/preview/exportar-excel.ts) | El libro entero de un canvas (cierres, adicionales, ocasional, ingresos y nómina), una pestaña por hoja, a partir del modelo (`DocumentoPreview`) y no del DOM: un libro son doce meses o cuarenta cierres que no están en pantalla. |
-| [builders/servicios-historial-excel.ts](../src/lib/editor/builders/servicios-historial-excel.ts) | El historial de liquidaciones de servicios: una fila por ítem con la cabecera repetida, para poder filtrar y ordenar en Excel sin celdas de agrupado. |
+| [builders/servicios-historial-excel.ts](../src/lib/editor/builders/servicios-historial-excel.ts)    | El historial de liquidaciones de servicios: una fila por ítem con la cabecera repetida, para poder filtrar y ordenar en Excel sin celdas de agrupado.                                                                                |
 
 [utils/exportTerceroXLSX.ts](../src/lib/utils/exportTerceroXLSX.ts) (una
 liquidación de tercero con la estructura del PDF) existe pero nadie lo importa

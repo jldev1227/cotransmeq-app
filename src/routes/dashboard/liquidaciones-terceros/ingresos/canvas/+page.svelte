@@ -96,6 +96,7 @@
 	import UniverSelect from '$lib/components/univer/UniverSelect.svelte';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail from '$lib/components/univer/UniverSideRail.svelte';
+	import SnapshotPanel from '$lib/components/univer/SnapshotPanel.svelte';
 	import ModalFilasIngresos from '$lib/components/univer/ModalFilasIngresos.svelte';
 	import SelectorCanvasTerceros from '$lib/components/univer/SelectorCanvasTerceros.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
@@ -119,7 +120,7 @@
 	import { toast } from 'svelte-sonner';
 	/// Iconografía compartida de los canvas: la misma acción, el mismo
 	/// dibujo en todas las pantallas. Ver `iconos-canvas.svelte`.
-	import { icoCorreo, icoRecargar } from '$lib/components/univer/iconos-canvas.svelte';
+	import { icoCorreo, icoRecargar, icoHistorial } from '$lib/components/univer/iconos-canvas.svelte';
 
 	const MESES = [
 		'ENERO',
@@ -500,6 +501,7 @@
 	}
 
 	let previewAbierto = $state(false);
+	let historialAbierto = $state(false);
 	/**
 	 * Envío por correo de la HOJA ACTIVA: el PDF adjunto es este mismo
 	 * documento, compuesto AL ENVIAR con lo que hay en pantalla (igual que
@@ -1454,6 +1456,13 @@
 				onSelect: () => (previewAbierto = true)
 			},
 			{
+				id: 'historial',
+				label: 'Historial',
+				hint: `Versiones guardadas de ${HOJAS_INGRESOS[hojaActiva].chip} en ${periodDisplay}.`,
+				icon: icoHistorial,
+				onSelect: () => (historialAbierto = true)
+			},
+			{
 				id: 'zip',
 				label: 'Exportar PDF (ZIP)',
 				hint: `Descargar un ZIP con un PDF por hoja de ${anio}: otros ingresos y adicionales de cada mes.`,
@@ -1540,6 +1549,16 @@
 		onClose={() => (previewAbierto = false)}
 	/>
 {/if}
+
+<SnapshotPanel
+	open={historialAbierto}
+	scope="ingresos"
+	{anio}
+	mes={mesActivo}
+	hoja={hojaActiva}
+	onClose={() => (historialAbierto = false)}
+	onReverted={(m) => void recargarMes(m)}
+/>
 
 <style>
 	/* Fila: canvas elástico + carril de 32px. Misma estructura que el canvas de

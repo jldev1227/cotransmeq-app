@@ -308,6 +308,7 @@ a qué pantalla llevar según el tipo y la referencia:
 | `GENERAL` · `viatico_anticipo` / `viatico_solicitud` | anticipo / solicitud | `/dashboard/viaticos?anticipo=` / `?solicitud=` |
 | `GENERAL` · `viatico_fondo` | el usuario | `/dashboard/viaticos` (el fondo va arriba del resumen) |
 | `ACCION_CORRECTIVA_*` · `ACCION_CORRECTIVA` | acción | `/dashboard/acciones-correctivas/<id>` |
+| `PLAN_TRABAJO_OCURRENCIA` | ocurrencia del plan anual | `/dashboard/plan-trabajo?planId=<plan>&ocurrenciaId=<id>` |
 | `LIQUIDACION_FACTURADA` / `FACTURA_ANULADA` · `factura:<número>` | factura | `/dashboard/liquidaciones-servicios?tab=facturas&busqueda=<número>` |
 | `LIQUIDACION_FACTURADA` / `FACTURA_ANULADA` sin huella (anteriores al 11-oct-2026) | factura | `/dashboard/liquidaciones-servicios?tab=facturas` |
 | `LIQUIDACION_CREADA` / `_PENDIENTE` / `_ACTUALIZADA` / `_ANULADA` | liquidación de servicios | `/dashboard/liquidaciones-servicios/<id>?mode=view` |

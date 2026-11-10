@@ -49,6 +49,7 @@ import {
 	CellValueType,
 	HorizontalAlign,
 	LocaleType,
+	WrapStrategy,
 	type IWorkbookData,
 	type ICellData,
 	type IStyleData,
@@ -61,7 +62,7 @@ import {
 	type CeldaDeCapa
 } from '../business/zona-libre';
 import { rellenarBordesVacios } from './relleno-bordes';
-import type { ConceptoDescuento } from '$lib/api/liquidaciones-terceros-descuentos';
+import type { ConceptoDescuento, NovedadConductor } from '$lib/api/liquidaciones-terceros-descuentos';
 import { getConductorGrupos } from '../business/conductor-grupos.service';
 import { totalDiasNoPropietarios } from '../business/conceptos.service';
 import type { BindingSeed, CierreBinding } from '../business/cierres-finales-cell-binding';
@@ -304,6 +305,8 @@ export interface CierreFinalCompleto {
 	itemsEliminados: ItemCierre[];
 	adicionales: AdicionalCierre[];
 	conceptos: ConceptoDescuento[];
+	/// Novedades de cada conductor, guardadas en el cierre y separadas de los conceptos de nómina.
+	novedades_conductores: Record<string, NovedadConductor[]>;
 	copropietarios: CopropietarioCierre[];
 	/** Map `0::conductorId` → es propietario. Ver nota en `claveConductor`. */
 	propietarios: Record<string, boolean>;
@@ -455,6 +458,7 @@ export function buildCierreFinalSheet(
 		itemsEliminados: itemsEliminadosSeparados,
 		adicionales,
 		conceptos,
+		novedades_conductores,
 		copropietarios,
 		propietarios
 	} = cierre;
@@ -478,7 +482,7 @@ export function buildCierreFinalSheet(
 
 	const bindings: BindingSeed[] = [];
 	const filasSoloConsulta = new Set<number>();
-	const celdasFormula: Array<{ fila: number; columna: number }> = [];
+	const celdasBloqueadas: Array<{ fila: number; columna: number }> = [];
 
 	/** Registra una celda editable. En hoja bloqueada no registra nada. */
 	const bind = (
@@ -689,7 +693,7 @@ export function buildCierreFinalSheet(
 	const setFormula = (
 		r: number, col: number, formula: string, cached: number, style: IStyleData
 	) => {
-		celdasFormula.push({ fila: r, columna: col });
+		celdasBloqueadas.push({ fila: r, columna: col });
 		if (!cellData[r]) cellData[r] = {};
 		cellData[r][col] = {
 			v: cached, t: CellValueType.NUMBER, f: formula, s: style
@@ -1208,6 +1212,7 @@ export function buildCierreFinalSheet(
 		row++;
 	} else {
 		for (const g of grupos) {
+			const inicioBloqueConductor = row;
 			const cKey = claveConductor(g.conductorId);
 			const esProp = propietarios[cKey] === true;
 			const ccDoc = (g.conceptos[0] as any)?.conductor?.numero_identificacion;
@@ -1363,6 +1368,64 @@ export function buildCierreFinalSheet(
 				n(g.totalConductor),
 				{ ...nominaTfStyle, ht: HorizontalAlign.RIGHT } as any);
 			rowData[row] = { h: 22 };
+
+			if (g.conductorId) {
+				const novedades = novedades_conductores?.[g.conductorId] ?? [];
+				const fecha = (valor: string | null) => valor
+					? new Intl.DateTimeFormat('es-CO', {
+						day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC'
+					}).format(new Date(`${valor}T00:00:00.000Z`))
+					: '';
+				const detalle = novedades.length
+					? novedades.map((novedad) => {
+						const tipo = {
+							VACACIONES: 'Vacaciones',
+							INCAPACIDAD: 'Incapacidad',
+							LICENCIA_MATERNIDAD: 'Licencia de maternidad',
+							LICENCIA_PATERNIDAD: 'Licencia de paternidad'
+						}[novedad.tipo] ?? novedad.tipo;
+						const periodo = novedad.fecha_inicio && novedad.fecha_fin
+							? ` · ${fecha(novedad.fecha_inicio)} a ${fecha(novedad.fecha_fin)}`
+							: '';
+						const nota = novedad.observaciones ? ` · ${novedad.observaciones}` : '';
+						return `${tipo} · ${novedad.dias} ${novedad.dias === 1 ? 'día' : 'días'}${periodo}${nota}`;
+					}).join('\n')
+					: 'NO PRESENTA NOVEDADES';
+				const finBloqueConductor = row;
+				const encabezadoNovedad: IStyleData = {
+					...conductorHeader, fs: 9, cl: { rgb: TEXTO_MARCA }, ht: HorizontalAlign.LEFT
+				};
+				const cuerpoNovedad: IStyleData = {
+					fs: 9, cl: { rgb: novedades.length ? TEXT_DARK : GREEN_DARK },
+					bl: novedades.length ? 0 : 1,
+					bg: { rgb: novedades.length ? '#F8FAFC' : GREEN_SOFT },
+					bd: allBorders(), ht: HorizontalAlign.LEFT, tb: WrapStrategy.WRAP
+				};
+			for (let fila = inicioBloqueConductor; fila <= finBloqueConductor; fila++) {
+				if (!cellData[fila]) cellData[fila] = {};
+				cellData[fila][5] = { s: fila === inicioBloqueConductor ? encabezadoNovedad : cuerpoNovedad };
+				cellData[fila][6] = { s: fila === inicioBloqueConductor ? encabezadoNovedad : cuerpoNovedad };
+				celdasBloqueadas.push({ fila, columna: 5 }, { fila, columna: 6 });
+			}
+			mergeData.push({
+				startRow: inicioBloqueConductor, endRow: inicioBloqueConductor,
+				startColumn: 5, endColumn: 6, rangeType: 0
+			});
+			mergeData.push({
+				startRow: inicioBloqueConductor + 1, endRow: finBloqueConductor,
+				startColumn: 5, endColumn: 6, rangeType: 0
+			});
+			cellData[inicioBloqueConductor][5] = {
+				v: 'NOVEDADES', t: CellValueType.STRING, s: encabezadoNovedad
+			};
+			cellData[inicioBloqueConductor + 1][5] = {
+				v: detalle, t: CellValueType.STRING, s: cuerpoNovedad
+			};
+			const altoNecesario = Math.min(112, Math.max(44, (novedades.length + 1) * 22));
+			rowData[inicioBloqueConductor + 1] = {
+				h: Math.max(rowData[inicioBloqueConductor + 1]?.h ?? 22, altoNecesario)
+			};
+			}
 			row += 2; // fila + separación
 		}
 	}
@@ -2083,7 +2146,7 @@ export function buildCierreFinalSheet(
 		inicioItems: firstItemRow,
 		itemPorFila,
 		filasBloqueadas: filasSoloConsulta,
-		celdasBloqueadas: celdasFormula,
+		celdasBloqueadas,
 		celdasConBinding: bindings.map(({ r, c }) => ({ fila: r, columna: c }))
 	});
 	aplicarCapa(cellData, unitId, sheetId, anotaciones);

@@ -82,10 +82,12 @@
 	import ConfiguracionTercerosModal from '$lib/components/liquidaciones-terceros/ConfiguracionTercerosModal.svelte';
 	import EliminarCierreModal from '$lib/components/liquidaciones-terceros/EliminarCierreModal.svelte';
 	import ConductoresCierreModal from '$lib/components/liquidaciones-terceros/ConductoresCierreModal.svelte';
+	import NovedadesConductorCierreModal from '$lib/components/liquidaciones-terceros/NovedadesConductorCierreModal.svelte';
 	import PropietariosCierreModal from '$lib/components/liquidaciones-terceros/PropietariosCierreModal.svelte';
 	import ConceptosCierreModal from '$lib/components/liquidaciones-terceros/ConceptosCierreModal.svelte';
 	import ItemsDisponiblesModal from '$lib/components/liquidaciones-terceros/ItemsDisponiblesModal.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
+	import SnapshotPanel from '$lib/components/univer/SnapshotPanel.svelte';
 	import EnviosCierresModal from '$lib/components/liquidaciones-terceros/envios/EnviosCierresModal.svelte';
 	import { documentoCierre } from '$lib/components/liquidaciones-terceros/preview/datos/cierres.doc';
 	import {
@@ -103,7 +105,7 @@
 	import { toast } from 'svelte-sonner';
 	/// Iconografía compartida de los canvas: la misma acción, el mismo
 	/// dibujo en todas las pantallas. Ver `iconos-canvas.svelte`.
-	import { icoBorradores, icoCorreo, icoExcel, icoVer, icoZip } from '$lib/components/univer/iconos-canvas.svelte';
+	import { icoBorradores, icoCorreo, icoExcel, icoHistorial, icoVer, icoZip } from '$lib/components/univer/iconos-canvas.svelte';
 
 	const MESES = [
 		'ENERO',
@@ -180,6 +182,7 @@
 	let detalles = $state<Record<string, CierreFinalCompleto>>({});
 	/// Cierre cuya hoja está activa.
 	let cierreActivo = $state<string | null>($page.url.searchParams.get('cierre'));
+	let historialAbierto = $state(false);
 
 	let modalBorradores = $state(false);
 	let modalAgrupar = $state(false);
@@ -1301,6 +1304,7 @@
 	}
 
 	let modalConductores = $state(false);
+	let modalNovedades = $state(false);
 	let modalPropietarios = $state(false);
 	/// Cierre cuyo borrado está pendiente de confirmar, o `null`.
 	/// Guarda el objeto y no el id porque el modal necesita placa y
@@ -2305,6 +2309,15 @@
 				onSelect: () => (modalConductores = true)
 			},
 			{
+				id: 'novedades',
+				label: 'Novedades de conductores',
+				hint: 'Registrar vacaciones, incapacidades o licencias con sus días y periodo. El resumen queda junto a cada conductor en esta hoja.',
+				icon: icoConductor,
+				disabled: !hojaEditable || !detalleActivo || !!accionEnCurso,
+				disabledHint: motivoBloqueo,
+				onSelect: () => (modalNovedades = true)
+			},
+			{
 				id: 'propietarios',
 				label: 'Propietarios de la placa',
 				hint: 'Repartir el valor a pagar entre varios propietarios en cascada: el primero toma su % del total y los demás se reparten el remanente. Por defecto la hoja tiene uno solo.',
@@ -2362,6 +2375,14 @@
 				disabled: !detalleActivo,
 				disabledHint: 'La hoja activa todavía se está cargando.',
 				onSelect: () => (previewAbierto = true)
+			},
+			{
+				id: 'historial',
+				label: 'Historial',
+				hint: `Ver versiones guardadas de ${cierreActivoObj?.placa ?? 'esta placa'}.`,
+				icon: icoHistorial,
+				disabled: !cierreActivo,
+				onSelect: () => (historialAbierto = true)
 			},
 			{
 				id: 'excel',
@@ -2474,6 +2495,17 @@
 	/>
 {/if}
 
+<SnapshotPanel
+	open={historialAbierto}
+	scope="cierres"
+	{anio}
+	{mes}
+	cabeceraId={cierreActivo}
+	placa={cierreActivoObj?.placa ?? null}
+	onClose={() => (historialAbierto = false)}
+	onReverted={() => { if (cierreActivo) void recargarCierre(cierreActivo); }}
+/>
+
 {#if modalConductores && cierreActivoObj && detalleActivo}
 	<ConductoresCierreModal
 		cierreId={cierreActivoObj.id}
@@ -2503,6 +2535,28 @@
 					? `${partes.join(' · ')}. Dotación y examen médico recalculados.`
 					: 'Días y propietario actualizados; dotación y examen médico recalculados.'
 			});
+		}}
+	/>
+{/if}
+
+{#if modalNovedades && cierreActivoObj && detalleActivo}
+	<NovedadesConductorCierreModal
+		cierreId={cierreActivoObj.id}
+		placa={cierreActivoObj.placa}
+		periodo={periodDisplay}
+		conceptos={detalleActivo.conceptos}
+		novedadesIniciales={detalleActivo.novedades_conductores}
+		onClose={() => (modalNovedades = false)}
+		onGuardado={async () => {
+			await conOverlay(
+				{
+					titulo: 'Actualizando novedades',
+					detalle: `${cierreActivoObj.placa} · actualizando el resumen de novedades por conductor.`
+				},
+				() => recargarCierre(cierreActivoObj.id)
+			);
+			modalNovedades = false;
+			toast.success(`Novedades de ${cierreActivoObj.placa} guardadas`);
 		}}
 	/>
 {/if}

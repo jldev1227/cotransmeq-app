@@ -42,6 +42,7 @@ import {
 export type MenuItem = {
 	id: string;
 	label: string;
+	permissionId?: string;
 	/// Componente de `lucide-svelte`, no un nombre de icono. Antes esto era una
 	/// cadena que `getIcon()` resolvía contra un mapa de SVG escritos a mano e
 	/// inyectados con `{@html}`: un `icon` mal escrito renderizaba un hueco en
@@ -258,6 +259,14 @@ export const MENU_ITEMS: MenuItem[] = [
 		icon: ToolCase,
 		badge: null,
 		href: '/dashboard/mantenimiento'
+	},
+	{
+		id: 'plan-trabajo',
+		permissionId: 'acciones-correctivas',
+		label: 'Plan HSEQ/PESV',
+	icon: CalendarCheck,
+		badge: null,
+	href: '/dashboard/plan-trabajo'
 	},
 	{
 		id: 'acciones-correctivas',
