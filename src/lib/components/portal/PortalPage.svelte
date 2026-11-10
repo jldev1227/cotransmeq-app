@@ -14,12 +14,13 @@
 
 	interface Props {
 		children: Snippet;
+		ancho?: 'normal' | 'amplio';
 	}
 
-	let { children }: Props = $props();
+	let { children, ancho = 'normal' }: Props = $props();
 </script>
 
-<div class="portal-page">
+<div class="portal-page" class:amplio={ancho === 'amplio'}>
 	{@render children()}
 </div>
 
@@ -38,5 +39,6 @@
 			gap: 1rem;
 			padding-top: 0.25rem;
 		}
+		.portal-page.amplio { max-width: 1180px; }
 	}
 </style>

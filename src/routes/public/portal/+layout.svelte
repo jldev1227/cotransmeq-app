@@ -1,16 +1,39 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { toast } from 'svelte-sonner';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { portalSession, isAuthenticated, conductorNombre, conductorCedula, diasRestantes } from '$lib/stores/portalStore';
+  import {
+    portalSession,
+    isAuthenticated,
+    conductorNombre,
+    conductorCedula,
+    expirarSesionPortal,
+    type PortalSession
+  } from '$lib/stores/portalStore';
   import { startSync, wakeAll } from '$lib/offline/forms-sync';
   import { clearAll, hayTrabajoPendiente } from '$lib/offline/forms-db';
   import '../../../app.css';
 
   /// Logotipo en blanco: la barra y el menú van sobre el verde de marca.
   const LOGO_SRC = '/assets/logo_nombre_white.webp';
+  const AVISO_SESION_MS = 5 * 60 * 1000;
 
   let mobileMenuOpen = false;
+  let segundosSesionRestantes = 0;
+  let relojSesionListo = false;
+  let textoTiempoSesion = 'Calculando sesión…';
+  let mostrarAvisoSesion = false;
+  let timerSesion: ReturnType<typeof setTimeout> | null = null;
+  let sesionVigilada: PortalSession | null = null;
+  let tokenAvisado: string | null = null;
+
+  $: textoTiempoSesion = formatoTiempoSesion(segundosSesionRestantes);
+  $: mostrarAvisoSesion =
+    relojSesionListo &&
+    !!$portalSession &&
+    segundosSesionRestantes > 0 &&
+    segundosSesionRestantes <= AVISO_SESION_MS / 1000;
 
   /**
    * Mantiene viva la outbox en TODO el portal y adopta builds nuevos sin cortar
@@ -49,14 +72,24 @@
     /// El layout persiste entre `/portal` y sus páginas hijas. Suscribirse a la
     /// sesión cubre también el login que ocurre después del primer montaje.
     const desuscribirSesion = portalSession.subscribe((sesion) => {
+      actualizarRelojSesion(sesion);
       if (!sesion) return;
       void startSync()
         .then(() => wakeAll())
         .catch((err) => console.error('[portal] no se pudo iniciar la sincronización', err));
     });
 
+    const recalcularSesionAlVolver = () => {
+      if (document.visibilityState !== 'hidden') actualizarRelojSesion(sesionVigilada);
+    };
+    window.addEventListener('focus', recalcularSesionAlVolver);
+    document.addEventListener('visibilitychange', recalcularSesionAlVolver);
+
     return () => {
       desuscribirSesion();
+      if (timerSesion) clearTimeout(timerSesion);
+      window.removeEventListener('focus', recalcularSesionAlVolver);
+      document.removeEventListener('visibilitychange', recalcularSesionAlVolver);
       window.clearInterval(vigilanciaActualizacion);
       navigator.serviceWorker?.removeEventListener('controllerchange', alCambiarWorker);
       for (const evento of ['pointerdown', 'keydown', 'input', 'touchstart'] as const) {
@@ -115,6 +148,15 @@
     }
   ];
 
+  /// La lista completa sigue activa en su ruta; estos accesos no caben en la navegación global.
+  const rutasSinAccesoEnMenu = [
+    '/public/portal/actividades',
+    '/public/portal/capacitaciones',
+    '/public/portal/viaticos'
+  ];
+  const sidebarNavItems = navItems.filter((item) => !rutasSinAccesoEnMenu.includes(item.path));
+  const bottomNavItems = sidebarNavItems;
+
   $: currentPath = $page.url.pathname;
 
   /**
@@ -164,6 +206,56 @@
     if (hora < 19) return 'Buenas tardes';
     return 'Buenas noches';
   }
+
+  function formatoTiempoSesion(segundos: number): string {
+    if (segundos <= 0) return 'Sesión vencida';
+    if (segundos < 60) return `${segundos} s restantes`;
+    if (segundos < 3600) {
+      const minutos = Math.ceil(segundos / 60);
+      return `${minutos} min ${minutos === 1 ? 'restante' : 'restantes'}`;
+    }
+    if (segundos < 86400) {
+      const horas = Math.floor(segundos / 3600);
+      const minutos = Math.ceil((segundos % 3600) / 60);
+      return minutos ? `${horas} h ${minutos} min restantes` : `${horas} h restantes`;
+    }
+    const dias = Math.ceil(segundos / 86400);
+    return `${dias} ${dias === 1 ? 'día' : 'días'} restantes`;
+  }
+
+  function actualizarRelojSesion(sesion: PortalSession | null) {
+    if (timerSesion) clearTimeout(timerSesion);
+    timerSesion = null;
+    sesionVigilada = sesion;
+    relojSesionListo = true;
+
+    if (!sesion) {
+      segundosSesionRestantes = 0;
+      tokenAvisado = null;
+      return;
+    }
+
+    const milisegundosRestantes = new Date(sesion.expiresAt).getTime() - Date.now();
+    segundosSesionRestantes = Math.max(0, Math.ceil(milisegundosRestantes / 1000));
+    if (segundosSesionRestantes === 0) {
+      // La expiración solo cierra la sesión; IndexedDB conserva trabajo offline.
+      void expirarSesionPortal();
+      return;
+    }
+
+    if (milisegundosRestantes <= AVISO_SESION_MS && tokenAvisado !== sesion.token) {
+      tokenAvisado = sesion.token;
+      toast.warning('Tu sesión está por vencer. Solicita un enlace nuevo para continuar.');
+    }
+
+    const proximoTick =
+      milisegundosRestantes <= 60_000
+        ? Math.min(1000, milisegundosRestantes)
+        : milisegundosRestantes <= 60 * 60_000
+          ? Math.min(60_000, milisegundosRestantes)
+          : Math.min(60 * 60_000, milisegundosRestantes - 60 * 60_000);
+    timerSesion = setTimeout(() => actualizarRelojSesion(sesion), Math.max(250, proximoTick));
+  }
 </script>
 
 <svelte:head>
@@ -190,7 +282,9 @@
             <div class="avatar">{initial($conductorNombre)}</div>
             <div class="chip-text">
               <span class="chip-name">{$conductorNombre || 'Conductor'}</span>
-              <span class="chip-sub">CC {$conductorCedula} · {$diasRestantes} días</span>
+              <span class="chip-sub" class:por-vencer={mostrarAvisoSesion}>
+                CC {$conductorCedula} · {textoTiempoSesion}
+              </span>
             </div>
           </div>
           <button class="btn-salir" on:click={cerrarSesion} aria-label="Cerrar sesión" title="Cerrar sesión">
@@ -201,6 +295,7 @@
         </div>
       </div>
     </header>
+    <div class="topbar-spacer" aria-hidden="true"></div>
 
     <!-- ════════ MENÚ LATERAL (escritorio) + CONTENIDO ════════ -->
     <div class="main-layout">
@@ -213,7 +308,7 @@
         </div>
 
         <div class="sidebar-nav">
-          {#each navItems as item}
+          {#each sidebarNavItems as item}
             <button
               class="sidebar-item"
               class:active={currentPath.startsWith(item.path)}
@@ -231,7 +326,7 @@
         </div>
 
         <div class="sidebar-footer">
-          <span class="sidebar-restantes">Sesión activa · {$diasRestantes} días restantes</span>
+          <span class="sidebar-restantes">Sesión · {textoTiempoSesion}</span>
           <button class="sidebar-item sidebar-item--salir" on:click={cerrarSesion}>
             <span class="sidebar-icon">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -244,13 +339,21 @@
       </nav>
 
       <main class="content">
+        {#if mostrarAvisoSesion}
+          <aside class="session-alert" role="status" aria-live="polite">
+            <div>
+              <strong>Tu sesión está por vencer</strong>
+              <p>Te quedan {textoTiempoSesion}. Solicita un enlace nuevo para continuar.</p>
+            </div>
+          </aside>
+        {/if}
         <slot />
       </main>
     </div>
 
     <!-- ════════ BARRA INFERIOR (móvil) ════════ -->
     <nav class="bottom-nav" aria-label="Navegación móvil">
-      {#each navItems as item}
+      {#each bottomNavItems as item}
         <button
           class="bottom-nav-item"
           class:active={currentPath.startsWith(item.path)}
@@ -315,22 +418,29 @@
      BARRA SUPERIOR
   ═══════════════════════════════════════ */
   .topbar {
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
     z-index: 100;
+    height: calc(100px + env(safe-area-inset-top, 0px));
     background: var(--au-dark, #014339);
     color: #fff;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 
+  .topbar-spacer { height: calc(100px + env(safe-area-inset-top, 0px)); }
+
   .topbar-inner {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 36px minmax(42px, 1fr);
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    height: 64px;
-    padding: 0 1rem;
-    padding-top: env(safe-area-inset-top, 0);
+    column-gap: 0.75rem;
+    row-gap: 0.25rem;
+    height: 100%;
+    padding: env(safe-area-inset-top, 0px) 0.75rem 0.5rem;
   }
 
   .brand {
@@ -411,6 +521,19 @@
     color: rgba(255, 255, 255, 0.62);
     letter-spacing: 0.02em;
   }
+  .chip-sub.por-vencer { color: #fde68a; }
+  .session-alert {
+    display: flex;
+    align-items: center;
+    margin: 0 0 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #f59e0b;
+    border-radius: 12px;
+    background: #fffbeb;
+    color: #78350f;
+  }
+  .session-alert strong { font-size: 0.875rem; }
+  .session-alert p { margin: 0.2rem 0 0; font-size: 0.8rem; }
 
   .btn-salir {
     display: inline-flex;
@@ -440,8 +563,8 @@
   ═══════════════════════════════════════ */
   .main-layout {
     display: flex;
-    min-height: calc(100vh - 64px);
-    min-height: calc(100dvh - 64px);
+    min-height: calc(100vh - 100px - env(safe-area-inset-top, 0px));
+    min-height: calc(100dvh - 100px - env(safe-area-inset-top, 0px));
   }
 
   /* ═══════════════════════════════════════
@@ -449,9 +572,10 @@
   ═══════════════════════════════════════ */
   .sidebar {
     display: none;
-    position: sticky;
+    position: fixed;
     top: 64px;
-    align-self: flex-start;
+    left: 0;
+    z-index: 40;
     height: calc(100vh - 64px);
     height: calc(100dvh - 64px);
     width: 250px;
@@ -666,18 +790,33 @@
      RESPONSIVE
   ═══════════════════════════════════════ */
   @media (min-width: 640px) {
+    .topbar { height: 64px; }
+    .topbar-spacer { height: 64px; }
     .brand-tag { display: inline; }
-    .conductor-chip { display: flex; }
-    .topbar-inner { padding: 0 1.25rem; }
+    .topbar-inner { display: flex; height: 64px; gap: 1rem; padding: 0 1.25rem; }
+    .topbar-right { display: flex; }
+    .main-layout { min-height: calc(100vh - 64px); min-height: calc(100dvh - 64px); }
+  }
+
+  @media (max-width: 639px) {
+    .brand { grid-column: 1; grid-row: 1; }
+    .topbar-right { display: contents; }
+    .conductor-chip { display: flex; grid-column: 1 / -1; grid-row: 2; width: 100%; min-width: 0; padding: 0.25rem 0.65rem; }
+    .chip-text { flex: 1; min-width: 0; }
+    .chip-name { max-width: 100%; }
+    .chip-sub { white-space: nowrap; }
+    .btn-salir { grid-column: 2; grid-row: 1; width: 36px; height: 36px; }
+    .main-layout { min-height: calc(100vh - 100px - env(safe-area-inset-top, 0px)); min-height: calc(100dvh - 100px - env(safe-area-inset-top, 0px)); }
   }
 
   @media (min-width: 768px) {
-    .sidebar { display: flex; }
-    .bottom-nav { display: none; }
-    .content { padding: 1.25rem 1.5rem 2rem; }
+    .conductor-chip { display: flex; }
   }
 
   @media (min-width: 1024px) {
+    .sidebar { display: flex; }
+    .bottom-nav { display: none; }
+    .main-layout { padding-left: 270px; }
     .sidebar { width: 270px; }
     .content { padding: 1.5rem 2rem 2.5rem; }
   }

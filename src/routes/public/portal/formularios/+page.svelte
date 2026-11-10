@@ -404,7 +404,7 @@
 
 <svelte:head><title>Formularios · Portal del Conductor</title></svelte:head>
 
-<PortalPage>
+<PortalPage ancho="amplio">
 	<PortalHeader
 		eyebrow="Centro de operaciones"
 		titulo="Formularios"
