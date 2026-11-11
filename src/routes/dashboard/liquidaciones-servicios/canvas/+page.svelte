@@ -40,6 +40,7 @@
 	import ModalLiquidacion, {
 		type SolicitudEditor
 	} from '$lib/components/univer/ModalLiquidacion.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import PresenceAvatars from '$lib/components/PresenceAvatars.svelte';
 	import { upsertLiquidacion, yaEstaba } from '$lib/editor/canvas/upsert-liquidacion';
 
@@ -914,6 +915,44 @@
 	);
 	let revertirLiq = $state<{ id: string; consecutivo: string } | null>(null);
 	let revertirFactura = $state<FacturaActivaDeLiquidacion | null>(null);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'crear-liquidacion', open: solicitudEditor?.modo === 'crear' },
+		{ key: 'ver-liquidacion', id: solicitudEditor?.id ?? undefined, open: solicitudEditor?.modo === 'ver' },
+		{ key: 'editar-liquidacion', id: solicitudEditor?.id ?? undefined, open: solicitudEditor?.modo === 'editar' },
+		{ key: 'facturar-liquidaciones', open: modalFacturar },
+		{ key: 'configurar-liquidador', open: modalConfig },
+		{ key: 'operadoras-liquidacion', open: modalOperadoras },
+		{ key: 'revertir-facturada', id: revertirLiq?.id, open: !!revertirLiq }
+	]);
+
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		modalFacturar = referencia?.key === 'facturar-liquidaciones';
+		modalConfig = referencia?.key === 'configurar-liquidador';
+		modalOperadoras = referencia?.key === 'operadoras-liquidacion';
+		solicitudEditor =
+			referencia?.key === 'crear-liquidacion'
+				? { modo: 'crear', id: null }
+				: referencia?.key === 'ver-liquidacion' && referencia.id
+					? { modo: 'ver', id: referencia.id }
+					: referencia?.key === 'editar-liquidacion' && referencia.id
+						? { modo: 'editar', id: referencia.id }
+						: null;
+		const liquidacion = referencia?.key === 'revertir-facturada' && referencia.id
+			? liquidaciones.find((item) => item.id === referencia.id)
+			: undefined;
+		revertirLiq = liquidacion
+			? { id: liquidacion.id, consecutivo: liquidacion.consecutivo }
+			: null;
+		const factura = liquidacion?.factura_items?.find((item) => item.factura.estado === 'ACTIVA')?.factura;
+		revertirFactura = factura
+			? {
+					id: factura.id,
+					numero_factura: factura.numero_factura,
+					fecha_facturacion: liquidacion?.fecha_facturacion ?? '',
+					liquidaciones_en_factura: 1
+				}
+			: null;
+	}
 
 	async function devolverAAprobada() {
 		const liq = facturadaUnica;
@@ -1724,6 +1763,7 @@
 	<UniverActionOverlay accion={accionEnCurso} />
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ModalRevertirFacturada
 	open={revertirLiq !== null}
 	liquidacion={revertirLiq}

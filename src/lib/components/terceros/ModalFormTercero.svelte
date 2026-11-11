@@ -198,6 +198,7 @@
 </script>
 
 <ModalEntidad
+	modalRef="form-tercero"
 	{open}
 	eyebrow={editando ? 'EDITAR TERCERO' : 'NUEVO TERCERO'}
 	title={editando ? form.nombre_completo || 'Tercero' : 'Registrar tercero'}

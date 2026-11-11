@@ -109,6 +109,7 @@
 			activa={filtroTipo}
 			variante="oscuro"
 			etiqueta="Buscar por"
+			modalRef="seleccionar-terceros-ocasionales"
 			onCambiar={(id) => (filtroTipo = id as FiltroTipo)}
 		/>
 	{/snippet}

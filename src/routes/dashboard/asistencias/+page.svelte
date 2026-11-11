@@ -41,6 +41,7 @@
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import BarraSeleccion from '$lib/components/listing/BarraSeleccion.svelte';
 	import ModalFormularioAsistencia from '$lib/components/asistencias/ModalFormularioAsistencia.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import ModalCompartirQR from '$lib/components/common/ModalCompartirQR.svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import { numero, opcion, texto, valoresPorDefecto, type DefinicionesFiltros } from '$lib/listing/filtros';
@@ -362,19 +363,49 @@
 	let modalAbierto = $state(false);
 	let formularioEnEdicion = $state<FormularioAsistencia | null>(null);
 	let qrCompartir = $state<{ titulo: string; url: string } | null>(null);
+	let formularioModalIdURL = $state<string | null>(null);
+	let qrModalIdURL = $state<string | null>(null);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'formulario-asistencia', id: formularioModalIdURL ?? undefined, open: modalAbierto },
+		{ key: 'qr-asistencia', id: qrModalIdURL ?? undefined, open: qrCompartir !== null }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		const key = referencia?.key;
+		const id = referencia?.id ?? null;
+		modalAbierto = key === 'formulario-asistencia';
+		formularioModalIdURL = key === 'formulario-asistencia' ? id : null;
+		formularioEnEdicion = null;
+		qrModalIdURL = key === 'qr-asistencia' ? id : null;
+		qrCompartir = null;
+		if (!id || (key !== 'formulario-asistencia' && key !== 'qr-asistencia')) return;
+		void asistenciasAPI.obtenerFormularioPorId(id).then((formulario) => {
+			if (formularioModalIdURL !== id && qrModalIdURL !== id) return;
+			if (key === 'formulario-asistencia') formularioEnEdicion = formulario;
+			else
+				qrCompartir = {
+					titulo: 'Asistencia · ' + formulario.tematica,
+					url: asistenciasAPI.generarUrlPublica(formulario.token)
+				};
+		}).catch((error: unknown) => {
+			toast.error(error instanceof Error ? error.message : 'No se pudo abrir el formulario');
+		});
+	}
 
 	function abrirNuevo() {
 		formularioEnEdicion = null;
+		formularioModalIdURL = null;
 		modalAbierto = true;
 	}
 	function abrirEdicion(f: FormularioAsistencia) {
 		formularioEnEdicion = f;
+		formularioModalIdURL = f.id;
 		modalAbierto = true;
 	}
 	function verRespuestas(f: FormularioAsistencia) {
 		goto(`/dashboard/asistencias/${f.id}/respuestas`);
 	}
 	function abrirQR(f: FormularioAsistencia) {
+		qrModalIdURL = f.id;
 		qrCompartir = {
 			titulo: 'Asistencia · ' + f.tematica,
 			url: asistenciasAPI.generarUrlPublica(f.token)
@@ -679,10 +710,14 @@
 	/>
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ModalFormularioAsistencia
 	open={modalAbierto}
 	formulario={formularioEnEdicion}
-	oncerrar={() => (modalAbierto = false)}
+	oncerrar={() => {
+		modalAbierto = false;
+		formularioModalIdURL = null;
+	}}
 	onguardado={recargar}
 />
 
@@ -691,7 +726,10 @@
 	titulo={qrCompartir?.titulo ?? ''}
 	url={qrCompartir?.url ?? ''}
 	selloSrc="/assets/sello-firma-terceros.webp"
-	oncerrar={() => (qrCompartir = null)}
+	oncerrar={() => {
+		qrCompartir = null;
+		qrModalIdURL = null;
+	}}
 />
 
 <style>

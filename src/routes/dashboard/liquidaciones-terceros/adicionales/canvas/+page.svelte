@@ -49,6 +49,7 @@
 	import AutosaveIndicator from '$lib/components/AutosaveIndicator.svelte';
 	import SelectorCanvasTerceros from '$lib/components/univer/SelectorCanvasTerceros.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import { documentoAdicionales } from '$lib/components/liquidaciones-terceros/preview/datos/adicionales.doc';
 	import {
 		exportarExcelLibro,
@@ -164,6 +165,14 @@
 	 * costaría una recarga completa del año.
 	 */
 	let previewAbierto = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'preview-canvas', open: previewAbierto },
+		{ key: 'historial-adicionales', open: historialAbierto }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		previewAbierto = referencia?.key === 'preview-canvas';
+		historialAbierto = referencia?.key === 'historial-adicionales';
+	}
 	let documentoPreview = $derived(
 		previewAbierto
 			? documentoAdicionales({
@@ -912,6 +921,7 @@
 	errorLabel="Reintentar"
 />
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 {#if previewAbierto && documentoPreview}
 	<PreviewCanvasModal
 		scope="adicionales"

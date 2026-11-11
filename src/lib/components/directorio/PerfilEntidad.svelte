@@ -7,6 +7,7 @@
 	import ModalFormVehiculo from '$lib/components/vehiculos/ModalFormVehiculo.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import HistorialSimit from './HistorialSimit.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import { Activity, ArrowLeft, CalendarDays, FileSearch, Gauge, Hash, Info, Mail, MapPin, Pencil, Phone, Truck, UserRound } from 'lucide-svelte';
 
 	type Tipo = 'vehiculo' | 'tercero';
@@ -15,6 +16,7 @@
 	let ficha = $state<any>(null);
 	let cargando = $state(true);
 	let error = $state('');
+	const esVehiculo = $derived(tipo === 'vehiculo');
 	const tab = $derived(
 		page.url.searchParams.get('tab') === 'informacion'
 			? 'informacion'
@@ -23,8 +25,13 @@
 				: 'actividad'
 	);
 	let editandoVehiculo = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'form-vehiculo', id: entidadId, open: esVehiculo && editandoVehiculo }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		editandoVehiculo = esVehiculo && referencia?.key === 'form-vehiculo';
+	}
 
-	const esVehiculo = $derived(tipo === 'vehiculo');
 	const volverA = $derived(esVehiculo ? '/dashboard/flota' : '/dashboard/terceros');
 	const nombre = $derived(esVehiculo ? ficha?.placa || 'Vehículo' : ficha?.nombre_completo || 'Tercero');
 	const subtitulo = $derived(
@@ -229,6 +236,7 @@
 </div>
 
 {#if esVehiculo}
+	<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 	<ModalFormVehiculo
 		open={editandoVehiculo}
 		vehiculoId={entidadId}

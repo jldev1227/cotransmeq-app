@@ -26,6 +26,7 @@
 	import { progresoEtapas, resolverEtapas } from '$lib/formularios/etapas';
 	import FormRenderer from '$lib/components/formularios/FormRenderer.svelte';
 	import PreviewEnvioPDF from '$lib/components/formularios/PreviewEnvioPDF.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 
 	const submissionId = $derived($page.params.submissionId!);
 
@@ -50,6 +51,12 @@
 	let error = $state<string | null>(null);
 
 	let modalAnular = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'anular-envio', open: modalAnular }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		modalAnular = referencia?.key === 'anular-envio';
+	}
 	let motivo = $state('');
 	let anulando = $state(false);
 	let descartando = $state(false);
@@ -535,6 +542,7 @@
 	{/if}
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 {#if modalAnular}
 	<div
 		class="modal"

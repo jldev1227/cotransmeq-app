@@ -36,6 +36,7 @@
 	} from '$lib/formularios/types';
 	import AssignmentEditor from '$lib/components/formularios/AssignmentEditor.svelte';
 	import ModalDuplicarFormulario from '$lib/components/formularios/ModalDuplicarFormulario.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import TabsVista from '$lib/components/ui/TabsVista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 
@@ -47,6 +48,17 @@
 	let trabajando = $state(false);
 	let editorAsignacion = $state<{ versionId: string; existing?: AssignmentDto } | null>(null);
 	let duplicando = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'asignacion-formulario', id: editorAsignacion?.versionId, open: !!editorAsignacion },
+		{ key: 'duplicar-formulario', open: duplicando }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		duplicando = referencia?.key === 'duplicar-formulario';
+		editorAsignacion =
+		referencia?.key === 'asignacion-formulario' && referencia.id
+			? { versionId: referencia.id }
+			: null;
+	}
 
 	/**
 	 * Los envíos de este formato, aquí mismo.
@@ -632,6 +644,7 @@
 	{/if}
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 {#if editorAsignacion}
 	<!-- `{#key}` fuerza el remount: el editor siembra sus campos UNA vez desde
 	     `existing`, así que reusar la instancia al cambiar de asignación mostraría

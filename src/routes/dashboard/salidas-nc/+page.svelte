@@ -27,6 +27,7 @@
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
 	import ModalSalidaNC from '$lib/components/salidas-nc/ModalSalidaNC.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import {
 		limpiar as limpiarFiltrosDe,
@@ -243,13 +244,31 @@
 	// ── Acciones ─────────────────────────────────────────────────────────
 	let modalAbierto = $state(false);
 	let enEdicion = $state<SalidaNoConforme | null>(null);
+	let edicionModalIdURL = $state<string | null>(null);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'form-salida-nc', id: edicionModalIdURL ?? undefined, open: modalAbierto }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		modalAbierto = referencia?.key === 'form-salida-nc';
+		edicionModalIdURL = referencia?.key === 'form-salida-nc' ? (referencia.id ?? null) : null;
+		enEdicion = null;
+		if (!edicionModalIdURL) return;
+		const id = edicionModalIdURL;
+		void salidasNCAPI.obtenerPorId(id).then((salida) => {
+			if (edicionModalIdURL === id && modalAbierto) enEdicion = salida;
+		}).catch((error: unknown) => {
+			toast.error(error instanceof Error ? error.message : 'No se pudo abrir la salida');
+		});
+	}
 
 	function abrirNueva() {
 		enEdicion = null;
+		edicionModalIdURL = null;
 		modalAbierto = true;
 	}
 	function abrirEdicion(s: SalidaNoConforme) {
 		enEdicion = s;
+		edicionModalIdURL = s.id;
 		modalAbierto = true;
 	}
 
@@ -484,10 +503,14 @@
 	</div>
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ModalSalidaNC
 	open={modalAbierto}
 	salida={enEdicion}
-	oncerrar={() => (modalAbierto = false)}
+	oncerrar={() => {
+		modalAbierto = false;
+		edicionModalIdURL = null;
+	}}
 	onguardado={recargar}
 />
 

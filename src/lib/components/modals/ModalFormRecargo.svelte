@@ -45,6 +45,7 @@
 	import Campo from '../directorio/Campo.svelte';
 	import { municipios } from '$lib/stores/municipios';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import ModalTabUrlSync from '$lib/components/navigation/ModalTabUrlSync.svelte';
 
 	// Props
 	export let isOpen = false;
@@ -1741,6 +1742,12 @@
 	bloqueado={isLoading || mostrarModalEmpresa || mostrarModalConductor || mostrarModalVehiculo}
 	oncerrar={handleClose}
 >
+	<ModalTabUrlSync
+		modalRef="form-recargo"
+		tabs={['informacion', 'condiciones', 'horarios']}
+		defaultTab="informacion"
+		bind:active={activeTab}
+	/>
 	{#snippet accionesCabecera()}
 		<div
 			class="rf-progreso"

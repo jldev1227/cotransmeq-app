@@ -249,6 +249,7 @@
 			activa={seccion}
 			variante="oscuro"
 			etiqueta="Secciones"
+			modalRef="filas-ocasionales"
 			onCambiar={(id) => {
 				seccion = id as Seccion;
 				error = '';

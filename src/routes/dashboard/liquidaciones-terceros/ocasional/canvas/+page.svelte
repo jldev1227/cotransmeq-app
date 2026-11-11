@@ -31,6 +31,7 @@
 	import AutosaveIndicator from '$lib/components/AutosaveIndicator.svelte';
 	import SelectorCanvasTerceros from '$lib/components/univer/SelectorCanvasTerceros.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import EnvioHojaModal from '$lib/components/liquidaciones-terceros/envios/EnvioHojaModal.svelte';
 	import {
 		exportarExcelLibro,
@@ -977,6 +978,22 @@
 	 * el modal, y la constancia queda en `liquidacion_tercero_envio`.
 	 */
 	let envioAbierto = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'historial-ocasional', id: cabeceraActiva?.id, open: historialAbierto },
+		{ key: 'filas-ocasionales', id: cabeceraActiva?.id, open: modalGastosOpen },
+		{ key: 'traer-items-ocasional', id: cabeceraActiva?.id, open: modalTraerItems },
+		{ key: 'seleccionar-terceros-ocasionales', id: cabeceraActiva?.id, open: modalTercerosOpen },
+		{ key: 'preview-canvas', id: cabeceraActiva?.id, open: previewAbierto },
+		{ key: 'envios-ocasionales', id: cabeceraActiva?.id, open: envioAbierto }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		historialAbierto = referencia?.key === 'historial-ocasional';
+		modalGastosOpen = referencia?.key === 'filas-ocasionales';
+		modalTraerItems = referencia?.key === 'traer-items-ocasional';
+		modalTercerosOpen = referencia?.key === 'seleccionar-terceros-ocasionales';
+		previewAbierto = referencia?.key === 'preview-canvas';
+		envioAbierto = referencia?.key === 'envios-ocasionales';
+	}
 	function documentoMesActivo() {
 		const d = datosMesActivo;
 		if (!d || (!d.cabecera && !d.items.length && !d.adicionales.length)) return null;
@@ -1234,6 +1251,7 @@
 <!-- Selección de terceros para el borrador del mes activo. Se monta solo
      cuando está abierto: el componente dispara `loadTerceros()` de forma
      reactiva en cuanto ve `isOpen && mes && anio`. -->
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <SnapshotPanel
 	open={historialAbierto}
 	scope="ocasional"

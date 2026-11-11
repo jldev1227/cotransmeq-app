@@ -1,4 +1,5 @@
 <script lang="ts">
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import TablaLista from '$lib/components/listing/TablaLista.svelte';
@@ -39,6 +40,34 @@
 	// Modal state
 	let modalOpen = false;
 	let editingId: string | null = null;
+	let referenciasModal: EstadoModalURL[] = [];
+	$: referenciasModal = [
+		{ key: 'configuracion-salario', id: editingId ?? undefined, open: modalOpen }
+	];
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		const id = referencia?.key === 'configuracion-salario' ? (referencia.id ?? null) : null;
+		modalOpen = referencia?.key === 'configuracion-salario';
+		editingId = id;
+		if (!modalOpen) return;
+		if (!id) {
+			form = getEmptyForm();
+			return;
+		}
+		const existente = configuraciones.find((config) => config.id === id);
+		if (existente) {
+			abrirEditar(existente);
+			return;
+		}
+		void cargarDatos().then(() => {
+			if (!modalOpen || editingId !== id) return;
+			const encontrada = configuraciones.find((config) => config.id === id);
+			if (encontrada) abrirEditar(encontrada);
+			else {
+				modalOpen = false;
+				editingId = null;
+			}
+		});
+	}
 	let deleteLoading = false;
 
 	// Highlight state (socket)
@@ -738,6 +767,7 @@
 
 <!-- Modal Crear/Editar. Siempre montado: `ModalBase` decide si se ve y así
      anima también al cerrarse. -->
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ModalBase
 	open={modalOpen}
 	eyebrow="Configuración de salarios"

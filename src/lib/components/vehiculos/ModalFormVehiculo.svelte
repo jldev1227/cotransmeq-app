@@ -259,6 +259,7 @@
 </script>
 
 <ModalEntidad
+	modalRef="form-vehiculo"
 	{open}
 	eyebrow={editando ? 'EDITAR VEHÍCULO' : 'NUEVO VEHÍCULO'}
 	title={editando ? form.placa || 'Vehículo' : 'Registrar vehículo'}

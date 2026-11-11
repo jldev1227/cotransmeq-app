@@ -51,6 +51,7 @@
 	import MisFormularios from '$lib/components/formularios/MisFormularios.svelte';
 	import TarjetasMetricas from '$lib/components/formularios/TarjetasMetricas.svelte';
 	import type { Metrica } from '$lib/components/formularios/TarjetasMetricas.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 
 	/**
 	 * Tres vistas del módulo.
@@ -89,6 +90,12 @@
 	let total = $state(0);
 
 	let modalCrear = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'crear-formulario', open: modalCrear }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		modalCrear = referencia?.key === 'crear-formulario';
+	}
 	let creando = $state(false);
 	let nuevoCode = $state('');
 	let nuevoNombre = $state('');
@@ -1199,6 +1206,7 @@
 	{/if}
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 {#if modalCrear}
 	<div
 		class="modal"

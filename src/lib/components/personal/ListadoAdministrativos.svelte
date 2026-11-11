@@ -20,6 +20,7 @@
 	import ModalPermisosModulos from '$lib/components/usuarios/ModalPermisosModulos.svelte';
 	import ModalInvitarUsuario from '$lib/components/usuarios/ModalInvitarUsuario.svelte';
 	import ModalNuevoUsuario from '$lib/components/usuarios/ModalNuevoUsuario.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import { mascota } from '$lib/mascot';
 	import {
 		Ban,
@@ -330,6 +331,38 @@
 
 	let detailUsuario = $state<Usuario | null>(null);
 	let detailSesiones = $state<Sesion[]>([]);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'editar-usuario', id: editUsuario?.id, open: showEditModal },
+		{ key: 'permisos-usuario', id: permisosUsuario?.id, open: showPermisosModal },
+		{ key: 'habilitar-usuario', id: confirmUsuario?.id, open: showConfirmModal && confirmAction === 'enable' },
+		{ key: 'deshabilitar-usuario', id: confirmUsuario?.id, open: showConfirmModal && confirmAction === 'disable' },
+		{ key: 'invitar-usuario', open: modalInvAbierto },
+		{ key: 'nuevo-usuario', open: modalNuevoAbierto }
+	]);
+
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		showEditModal = referencia?.key === 'editar-usuario';
+		showPermisosModal = referencia?.key === 'permisos-usuario';
+		modalInvAbierto = referencia?.key === 'invitar-usuario';
+		modalNuevoAbierto = referencia?.key === 'nuevo-usuario';
+		showConfirmModal =
+			referencia?.key === 'habilitar-usuario' || referencia?.key === 'deshabilitar-usuario';
+		confirmAction = referencia?.key === 'habilitar-usuario' ? 'enable' : 'disable';
+		const usuario = referencia?.id
+			? (usuarios.find((item) => item.id === referencia.id) ??
+				({ id: referencia.id, nombre: '', correo: '' } as Usuario))
+			: null;
+		editUsuario = referencia?.key === 'editar-usuario' ? usuario : editUsuario;
+		permisosUsuario = referencia?.key === 'permisos-usuario' ? usuario : permisosUsuario;
+		confirmUsuario = showConfirmModal ? usuario : confirmUsuario;
+		if (usuario && !usuarios.some((item) => item.id === usuario.id)) {
+			void usuariosAPI.obtenerPorId(usuario.id).then((cargado) => {
+				if (editUsuario?.id === cargado.id) editUsuario = cargado;
+				if (permisosUsuario?.id === cargado.id) permisosUsuario = cargado;
+				if (confirmUsuario?.id === cargado.id) confirmUsuario = cargado;
+			});
+		}
+	}
 
 	// ─── Carga inicial ───────────────────────────────────────────────────
 	/// Función de baja; antes se usaba `off('usuario-deshabilitado')` sin
@@ -1611,6 +1644,7 @@
 	{/if}
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ModalEditarUsuario
 	open={showEditModal}
 	usuario={editUsuario}

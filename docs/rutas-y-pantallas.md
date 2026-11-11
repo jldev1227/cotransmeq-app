@@ -234,6 +234,27 @@ servidor; las demás sí.
 
 ## Diferencias con Transmeralda
 
+## Modales navegables por URL
+
+Las pantallas con modales sincronizados reconocen `modal=<clave>`, `modalId=<id>`,
+`modalIds=<id,id,...>` y `modalTab=<pestaña>`. Esto permite compartir o recargar
+el mismo modal y su pestaña activa. Al abrir o cerrar un modal, la navegación usa
+`goto` y conserva los filtros, otros parámetros y el fragmento de la URL. Cada
+pantalla declara las claves de modal que admite; un enlace no válido no debe
+mostrar un diálogo distinto ni modificar el estado del listado.
+
+La cobertura incluye recargos, personal, clientes, terceros, flota, servicios,
+formularios, nómina, liquidaciones de servicios y los canvas de liquidaciones
+de terceros. También incluye los formularios de incidentes, asistencias y
+salidas no conformes, además de la configuración de salarios. Al añadir o mover
+un modal, actualiza el registro de referencias y verifica apertura inicial,
+pestañas, volver/avanzar y preservación de filtros.
+
+En el canvas de nómina, la referencia de la preview es
+modal=ver-desprendible&modalId=idLiquidacion; al recargar regenera el PDF
+temporal. modal=generar-borradores-nomina abre el diálogo de generación, no la
+preview del desprendible.
+
 - `ingreso-svelte` no tiene el `+page.svelte` muerto de
   `dashboard/formularios/envios`.
 - `/dashboard/recargos`: Transmeralda tiene historial de cambios y subida de

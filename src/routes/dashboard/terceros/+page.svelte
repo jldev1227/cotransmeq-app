@@ -27,6 +27,7 @@
 	import { tercerosAPI, type Tercero, type TerceroCounts } from '$lib/api/terceros';
 	import ModalFormTercero from '$lib/components/terceros/ModalFormTercero.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import { toast } from 'svelte-sonner';
 
 	// ── Permisos ──────────────────────────────────────────────────────
@@ -100,6 +101,21 @@
 	let showImportModal = $state(false);
 	let isImporting = $state(false);
 	let importResult = $state<{ importados: number; duplicados: number; total: number } | null>(null);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'form-tercero', id: modalTercero.id ?? undefined, open: modalTercero.abierto },
+		{ key: 'eliminar-tercero', id: terceroToDelete?.id, open: showDeleteModal },
+		{ key: 'importar-terceros-flota', open: showImportModal }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		const abreFormulario = referencia?.key === 'form-tercero';
+		modalTercero = { abierto: abreFormulario, id: abreFormulario ? (referencia?.id ?? null) : null };
+		showDeleteModal = referencia?.key === 'eliminar-tercero';
+		terceroToDelete = showDeleteModal && referencia?.id
+			? (terceros.find((tercero) => tercero.id === referencia.id) ??
+				({ id: referencia.id } as Tercero))
+			: null;
+		showImportModal = referencia?.key === 'importar-terceros-flota';
+	}
 
 	const hasActiveFilter = $derived(filtros.q.trim() !== '' || filtros.tipo !== 'TODOS');
 
@@ -492,6 +508,8 @@
 		</div>
 	{/if}
 </div>
+
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 
 <!-- Crear / editar: el mismo modal que flota, conductores y clientes. -->
 <ModalFormTercero

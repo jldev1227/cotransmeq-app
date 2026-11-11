@@ -257,6 +257,7 @@
 		activa={pestanaActiva ?? ''}
 		variante="oscuro"
 		etiqueta="Hoja del documento"
+		modalRef="preview-canvas"
 		onCambiar={(id) => onPestana?.(id)}
 	/>
 {/snippet}

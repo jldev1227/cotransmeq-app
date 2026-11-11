@@ -25,6 +25,7 @@
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import {
 		obtenerPrimas,
+		obtenerPrimaPorId,
 		crearPrima,
 		editarPrima,
 		eliminarPrima as eliminarPrimaApi,
@@ -37,6 +38,7 @@
 	} from '$lib/api/nomina';
 	import type { Prima, CreatePrimaPayload, PrimasStats, PrimaEstado } from '$lib/types/nomina';
 	import PrimaFormModal from '$lib/components/nomina/PrimaFormModal.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import { generarPdfPrima } from '$lib/utils/pdfPrima';
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
 	import SelectorCanvasNomina from '$lib/components/univer/SelectorCanvasNomina.svelte';
@@ -133,6 +135,31 @@
 		}>
 	>([]);
 	let sendPrimasComplete = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'form-prima', id: primaToEdit?.id, open: showPrimaFormModal },
+		{ key: 'eliminar-prima', id: primaToDelete ?? undefined, open: showDeletePrimaModal },
+		{ key: 'preview-primas', ids: [...selectedPrimas], open: showPreviewPrimasModal }
+	]);
+
+	function aplicarReferenciaModal(referencia: { key: string; id?: string; ids?: string[] } | null) {
+		showPrimaFormModal = referencia?.key === 'form-prima';
+		showDeletePrimaModal = referencia?.key === 'eliminar-prima';
+		primaToDelete = showDeletePrimaModal ? (referencia?.id ?? null) : null;
+		if (referencia?.key === 'form-prima') {
+			primaToEdit = referencia.id
+				? (primas.find((prima) => prima.id === referencia.id) ?? ({ id: referencia.id } as Prima))
+				: null;
+			if (referencia.id && !primas.some((prima) => prima.id === referencia.id)) {
+				void obtenerPrimaPorId(referencia.id).then((respuesta) => {
+					if (primaToEdit?.id === referencia.id) primaToEdit = respuesta.data;
+				});
+			}
+		} else if (!showPrimaFormModal) primaToEdit = null;
+		if (referencia?.key === 'preview-primas' && referencia.ids?.length) {
+			selectedPrimas = new Set(referencia.ids);
+			void abrirPreviewPrimas();
+		} else if (!showPreviewPrimasModal) cerrarPreviewPrimasModal();
+	}
 	let paginationPrimas = $state({
 		total: 0,
 		page: 1,
@@ -807,6 +834,7 @@
 		{/if}
 	</div>
 
+	<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 	<!-- Modal Eliminar Prima -->
 	{#if showDeletePrimaModal}
 		<div

@@ -10,6 +10,7 @@
 	import ModalTrazabilidad from '$lib/components/liquidaciones/ModalTrazabilidad.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { mascota } from '$lib/mascot';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 	import { recordarListado } from '$lib/stores/volverLiquidaciones';
@@ -306,6 +307,7 @@
 	let detailModal = $state(false);
 	let detailLoading = $state(false);
 	let detailLiq = $state<LiquidacionServicio | null>(null);
+	let detailLiqId = $state<string | null>(null);
 
 	let deleteModalOpen = $state(false);
 	let deleteTargetLiq = $state<LiquidacionServicio | null>(null);
@@ -420,6 +422,107 @@
 	let liquidacionesEditarLoading = $state(false);
 
 	let detalleFactura = $state<FacturaLiquidacion | null>(null);
+	let detalleFacturaId = $state<string | null>(null);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'detalle-liquidacion', id: detailLiqId ?? undefined, open: detailModal },
+		{ key: 'eliminar-liquidacion', id: deleteTargetLiq?.id, open: deleteModalOpen },
+		{ key: 'anular-liquidacion', id: anularTargetId || undefined, open: anularModalOpen },
+		{ key: 'historial-liquidacion', id: historialLiqId ?? undefined, open: historialModalOpen },
+		{ key: 'facturar-liquidaciones', ids: facturarPreselected, open: facturarModalOpen },
+		{ key: 'operadoras-liquidacion', open: modalOperadoras },
+		{ key: 'detalle-factura', id: detalleFacturaId ?? undefined, open: !!detalleFacturaId },
+		{ key: 'anular-factura', id: anularFacturaTarget?.id, open: anularFacturaModalOpen },
+		{ key: 'eliminar-factura', id: eliminarFacturaTarget?.id, open: eliminarFacturaModalOpen },
+		{ key: 'editar-factura', id: editarFacturaTarget?.id, open: editarFacturaModalOpen },
+		{ key: 'revertir-facturada', id: revertirLiq?.id, open: !!revertirLiq }
+	]);
+
+	function aplicarReferenciaModal(referencia: { key: string; id?: string; ids?: string[] } | null) {
+		const key = referencia?.key;
+		detailModal = key === 'detalle-liquidacion';
+		detailLiqId = detailModal ? (referencia?.id ?? null) : null;
+		if (detailModal && referencia?.id) void verDetalle(referencia.id);
+		deleteModalOpen = key === 'eliminar-liquidacion';
+		deleteTargetLiq =
+			deleteModalOpen && referencia?.id
+				? (liquidaciones.find((item) => item.id === referencia.id) ??
+					({ id: referencia.id } as LiquidacionServicio))
+				: null;
+		anularModalOpen = key === 'anular-liquidacion';
+		anularTargetId = anularModalOpen ? (referencia?.id ?? '') : '';
+		if (!anularModalOpen) anularMotivo = '';
+		historialModalOpen = key === 'historial-liquidacion';
+		historialLiqId = historialModalOpen ? (referencia?.id ?? null) : null;
+		historialLiqConsecutivo =
+			(historialModalOpen && liquidaciones.find((item) => item.id === referencia?.id)?.consecutivo) ||
+			(referencia?.id ?? '');
+		if (historialModalOpen && historialLiqId) void cargarHistorialLiq();
+		facturarModalOpen = key === 'facturar-liquidaciones';
+		facturarPreselected = referencia?.ids ?? [];
+		if (facturarModalOpen) void cargarFacturables();
+		modalOperadoras = key === 'operadoras-liquidacion';
+		detalleFacturaId = key === 'detalle-factura' ? (referencia?.id ?? null) : null;
+		if (detalleFacturaId) void verDetalleFactura(detalleFacturaId);
+		anularFacturaModalOpen = key === 'anular-factura';
+		eliminarFacturaModalOpen = key === 'eliminar-factura';
+		editarFacturaModalOpen = key === 'editar-factura';
+		anularFacturaTarget =
+			anularFacturaModalOpen && referencia?.id
+				? (facturas.find((factura) => factura.id === referencia.id) ??
+					({ id: referencia.id } as FacturaLiquidacion))
+				: null;
+		eliminarFacturaTarget =
+			eliminarFacturaModalOpen && referencia?.id
+				? (facturas.find((factura) => factura.id === referencia.id) ??
+					({ id: referencia.id } as FacturaLiquidacion))
+				: null;
+		editarFacturaTarget =
+			editarFacturaModalOpen && referencia?.id
+				? (facturas.find((factura) => factura.id === referencia.id) ??
+					({ id: referencia.id } as FacturaLiquidacion))
+				: null;
+		if (
+			referencia?.id &&
+			(anularFacturaModalOpen || eliminarFacturaModalOpen || editarFacturaModalOpen)
+		) {
+			void facturacionLiquidacionesAPI.obtenerPorId(referencia.id).then((factura) => {
+				if (anularFacturaTarget?.id === factura.id) anularFacturaTarget = factura;
+				if (eliminarFacturaTarget?.id === factura.id) eliminarFacturaTarget = factura;
+				if (editarFacturaTarget?.id === factura.id) {
+					editarFacturaTarget = factura;
+					void cargarLiquidacionesParaEditarFactura();
+				}
+			}).catch((error: unknown) => {
+				toast.error(error instanceof Error ? error.message : 'No se pudo cargar la factura');
+			});
+		}
+		if (key === 'revertir-facturada' && referencia?.id) {
+			const liquidacion = liquidaciones.find((item) => item.id === referencia.id);
+			if (liquidacion) {
+				const factura = liquidacion.factura_items?.find((item) => item.factura.estado === 'ACTIVA')?.factura;
+				revertirLiq = { id: liquidacion.id, consecutivo: liquidacion.consecutivo };
+				revertirFactura = factura
+					? { id: factura.id, numero_factura: factura.numero_factura, fecha_facturacion: liquidacion.fecha_facturacion ?? '', liquidaciones_en_factura: 1 }
+					: null;
+			} else {
+				void liquidacionesServiciosAPI.obtenerPorId(referencia.id).then((liquidacionCompleta) => {
+					if (revertirLiq?.id !== liquidacionCompleta.id) return;
+					const factura = liquidacionCompleta.factura_items?.find((item) => item.factura.estado === 'ACTIVA')?.factura;
+					revertirLiq = { id: liquidacionCompleta.id, consecutivo: liquidacionCompleta.consecutivo };
+					revertirFactura = factura
+						? { id: factura.id, numero_factura: factura.numero_factura, fecha_facturacion: liquidacionCompleta.fecha_facturacion ?? '', liquidaciones_en_factura: 1 }
+						: null;
+				}).catch((error: unknown) => {
+					toast.error(error instanceof Error ? error.message : 'No se pudo cargar la liquidación');
+				});
+				revertirLiq = { id: referencia.id, consecutivo: '' };
+				revertirFactura = null;
+			}
+		} else {
+			revertirLiq = null;
+			revertirFactura = null;
+		}
+	}
 
 	/* ── Config liquidador servicio ── */
 	let configLoading = $state(false);
@@ -1167,6 +1270,7 @@
 
 	async function verDetalle(id: string) {
 		detailModal = true;
+		detailLiqId = id;
 		detailLoading = true;
 		detailLiq = null;
 		try {
@@ -1174,12 +1278,14 @@
 		} catch (err: any) {
 			toast.error(err.message || 'No se pudo cargar la liquidación');
 			detailModal = false;
+			detailLiqId = null;
 		} finally {
 			detailLoading = false;
 		}
 	}
 	function cerrarDetalle() {
 		detailModal = false;
+		detailLiqId = null;
 		detailLiq = null;
 	}
 
@@ -1515,12 +1621,19 @@
 	}
 
 	async function verDetalleFactura(id: string) {
+		detalleFacturaId = id;
 		detalleFactura = null;
 		try {
 			detalleFactura = await facturacionLiquidacionesAPI.obtenerPorId(id);
 		} catch (err: any) {
+			detalleFacturaId = null;
 			toast.error(err.message || 'No se pudo cargar la factura');
 		}
+	}
+
+	function cerrarDetalleFactura() {
+		detalleFactura = null;
+		detalleFacturaId = null;
 	}
 
 	function abrirEditarFactura(factura: FacturaLiquidacion) {
@@ -3184,6 +3297,8 @@
 	</div>
 {/if}
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
+
 <!-- MODAL: ELIMINAR LIQUIDACION -->
 <ConfirmDialog
 	open={deleteModalOpen && !!deleteTargetLiq}
@@ -3250,7 +3365,7 @@
 <!-- MODAL: DETALLE FACTURA -->
 {#if detalleFactura}
 	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="modal-bg" onclick={(e) => { if (e.target === e.currentTarget) detalleFactura = null; }}>
+	<div class="modal-bg" onclick={(e) => { if (e.target === e.currentTarget) cerrarDetalleFactura(); }}>
 		<div class="modal-box factura-detail-modal" style="max-width:680px">
 			<!-- Header -->
 			<div class="modal-hd">
@@ -3266,7 +3381,7 @@
 						</h3>
 					</div>
 				</div>
-				<button class="btn-icon" onclick={() => (detalleFactura = null)} aria-label="Cerrar">
+				<button class="btn-icon" onclick={cerrarDetalleFactura} aria-label="Cerrar">
 					<X class="h-3.5 w-3.5" />
 				</button>
 			</div>
@@ -3428,7 +3543,7 @@
 
 				<!-- Footer actions -->
 				<div class="mt-5 flex justify-end">
-					<button class="btn-secondary apple-transition" onclick={() => (detalleFactura = null)}
+					<button class="btn-secondary apple-transition" onclick={cerrarDetalleFactura}
 						>Cerrar</button
 					>
 				</div>

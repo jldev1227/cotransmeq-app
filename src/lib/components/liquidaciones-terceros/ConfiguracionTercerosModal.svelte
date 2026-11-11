@@ -227,6 +227,7 @@
 			activa={seccion}
 			variante="oscuro"
 			etiqueta="Configuración de liquidaciones de terceros"
+			modalRef="configuracion-cierre-terceros"
 			onCambiar={(id) => (seccion = id as Seccion)}
 		/>
 	{/snippet}
