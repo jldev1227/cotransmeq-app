@@ -87,6 +87,7 @@
 	import ConceptosCierreModal from '$lib/components/liquidaciones-terceros/ConceptosCierreModal.svelte';
 	import ItemsDisponiblesModal from '$lib/components/liquidaciones-terceros/ItemsDisponiblesModal.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import SnapshotPanel from '$lib/components/univer/SnapshotPanel.svelte';
 	import EnviosCierresModal from '$lib/components/liquidaciones-terceros/envios/EnviosCierresModal.svelte';
 	import { documentoCierre } from '$lib/components/liquidaciones-terceros/preview/datos/cierres.doc';
@@ -1315,6 +1316,37 @@
 	let modalConceptos = $state(false);
 	let modalConfiguracion = $state(false);
 	let modalTraerItems = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'borradores-cierre', open: modalBorradores },
+		{ key: 'agrupar-cierres', open: modalAgrupar },
+		{ key: 'estado-lote-cierres', open: modalEstadoLote },
+		{ key: 'envios-cierres', open: modalEnvios },
+		{ key: 'preview-canvas', id: cierreActivo ?? undefined, open: previewAbierto },
+		{ key: 'historial-cierre', id: cierreActivo ?? undefined, open: historialAbierto },
+		{ key: 'conductores-cierre', id: cierreActivo ?? undefined, open: modalConductores },
+		{ key: 'novedades-cierre', id: cierreActivo ?? undefined, open: modalNovedades },
+		{ key: 'propietarios-cierre', id: cierreActivo ?? undefined, open: modalPropietarios },
+		{ key: 'conceptos-cierre', id: cierreActivo ?? undefined, open: modalConceptos },
+		{ key: 'configuracion-cierre-terceros', open: modalConfiguracion },
+		{ key: 'traer-items-cierre', id: cierreActivo ?? undefined, open: modalTraerItems },
+		{ key: 'eliminar-cierre', id: cierreAEliminar?.id, open: !!cierreAEliminar }
+	]);
+
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		modalBorradores = referencia?.key === 'borradores-cierre';
+		modalAgrupar = referencia?.key === 'agrupar-cierres';
+		modalEstadoLote = referencia?.key === 'estado-lote-cierres';
+		modalEnvios = referencia?.key === 'envios-cierres';
+		previewAbierto = referencia?.key === 'preview-canvas';
+		historialAbierto = referencia?.key === 'historial-cierre';
+		modalConductores = referencia?.key === 'conductores-cierre';
+		modalNovedades = referencia?.key === 'novedades-cierre';
+		modalPropietarios = referencia?.key === 'propietarios-cierre';
+		modalConceptos = referencia?.key === 'conceptos-cierre';
+		modalConfiguracion = referencia?.key === 'configuracion-cierre-terceros';
+		modalTraerItems = referencia?.key === 'traer-items-cierre';
+		cierreAEliminar = referencia?.key === 'eliminar-cierre' ? cierreActivoObj : null;
+	}
 	/// Hubo altas o bajas mientras el modal de conceptos estuvo abierto, así que
 	/// al cerrarlo hay que remontar el libro una vez.
 	let hayCambiosDeConceptos = $state(false);
@@ -2472,6 +2504,7 @@
 	<UniverActionOverlay accion={accionEnCurso} />
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ModalEstadoLote
 	open={modalEstadoLote}
 	hojas={indice}

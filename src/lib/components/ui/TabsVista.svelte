@@ -10,6 +10,8 @@
 </script>
 
 <script lang="ts">
+	import ModalTabUrlSync from '$lib/components/navigation/ModalTabUrlSync.svelte';
+
 	/**
 	 * Pestañas de vista: las mismas de los modales de directorio
 	 * (`ModalEntidad`) y de las páginas que separan su contenido en vistas.
@@ -25,6 +27,8 @@
 		variante?: 'oscuro' | 'claro';
 		/** Etiqueta accesible del grupo. */
 		etiqueta?: string;
+		/** Si vive en un modal direccionable, conserva la pestaña en `modalTab`. */
+		modalRef?: string;
 		onCambiar?: (id: string) => void;
 	}
 
@@ -33,6 +37,7 @@
 		activa = $bindable(),
 		variante = 'claro',
 		etiqueta = 'Vistas',
+		modalRef,
 		onCambiar
 	}: Props = $props();
 
@@ -53,6 +58,15 @@
 			[j]?.focus();
 	}
 </script>
+
+{#if modalRef}
+	<ModalTabUrlSync
+		modalRef={modalRef}
+		tabs={tabs.map((tab) => tab.id)}
+		defaultTab={tabs[0]?.id}
+		bind:active={activa}
+	/>
+{/if}
 
 <div class="tv tv--{variante}" role="tablist" aria-label={etiqueta}>
 	{#each tabs as tab, i (tab.id)}

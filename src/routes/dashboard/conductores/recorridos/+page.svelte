@@ -39,6 +39,7 @@
 	import SelectorHojaConductor from '$lib/components/conductores/SelectorHojaConductor.svelte';
 	import SnapshotPanel from '$lib/components/univer/SnapshotPanel.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 
 	import { authStore } from '$lib/stores/auth';
 	import { recorridosCanvasAPI, recorridosSnapshotsAPI } from '$lib/api/recorridos-canvas';
@@ -153,6 +154,17 @@
 	let previewIndice = $state(0);
 	let accionEnCurso = $state<{ titulo: string; detalle?: string } | null>(null);
 	let conductorActivo = $state<string | null>(null);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'configuracion-bonos', open: modalBonos },
+		{ key: 'historial-recorridos', id: conductorActivo ?? undefined, open: panelVersiones },
+		{ key: 'preview-canvas', id: conductorActivo ?? undefined, open: previewAbierto }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		if (referencia?.id) conductorActivo = referencia.id;
+		modalBonos = referencia?.key === 'configuracion-bonos';
+		panelVersiones = referencia?.key === 'historial-recorridos';
+		previewAbierto = referencia?.key === 'preview-canvas';
+	}
 
 	/**
 	 * Descarta engines de un montaje que perdió la carrera.
@@ -1546,6 +1558,7 @@
 	<UniverActionOverlay accion={accionEnCurso} />
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <SnapshotPanel
 	open={panelVersiones}
 	scope="recorridos"

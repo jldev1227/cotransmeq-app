@@ -64,6 +64,7 @@
 	import SelectorHojaNomina from '$lib/components/univer/SelectorHojaNomina.svelte';
 	import ModalEnviarDesprendibles from '$lib/components/univer/ModalEnviarDesprendibles.svelte';
 	import ModalNotificarNomina from '$lib/components/univer/ModalNotificarNomina.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	/// Iconos COMPARTIDOS por todos los canvas. Los propios de nómina —liquidar,
 	/// aprobar, pagar…— se siguen declarando abajo: son de este dominio.
 	import {
@@ -198,6 +199,11 @@
 	let previewAutomaticoConsumido = false;
 	let previewFirmadoUrl = $state<string | null>(null);
 	let previewFirmadoNombre = $state('');
+	/// La URL lleva el id de liquidación, nunca el blob temporal del iframe.
+	/// Al entrar por enlace volvemos a generar el PDF para reconstruir la vista.
+	let previewLiquidacionId = $state<string | null>(null);
+	let previewGenerandoKey = $state<string | null>(null);
+	let previewMostradoKey = $state<string | null>(null);
 	/// El modal del desprendible es uno solo para todas las entradas (carril,
 	/// asistente, notificación de firma); solo cambia el rótulo.
 	let previewEtiqueta = $state('DESPRENDIBLE');
@@ -1083,6 +1089,24 @@
 		});
 	});
 
+	/// modal=ver-desprendible&modalId=<liquidacionId> restaura el PDF aunque
+	/// el object URL anterior ya no exista (por ejemplo, después de recargar).
+	$effect(() => {
+		const id = previewLiquidacionId;
+		if (!id || loading || !datos) return;
+		const clave = id + ':' + previewEtiqueta;
+		if (previewGenerandoKey === clave || previewMostradoKey === clave) return;
+		const hoja = datos.hojas.find((item) => item.liquidacionId === id);
+		if (!hoja) {
+			untrack(() => {
+				toast.info('Ese desprendible no está en este periodo.');
+				previewLiquidacionId = null;
+			});
+			return;
+		}
+		untrack(() => void solicitarPreview(hoja, previewEtiqueta));
+	});
+
 	// ─── Sesión colaborativa ───────────────────────────────
 	function conectarSesion() {
 		/// `dispose` limpia los temporizadores de acuse, así que los patches que
@@ -1283,20 +1307,44 @@
 			toast.warning('Este conductor todavía no tiene liquidación en el periodo.');
 			return;
 		}
-		const hoja = hojaActiva;
-		await conOverlay('Generando el desprendible', hoja.nombre, async () => {
-			mostrarPreview(hoja, await blobDesprendible(hoja.liquidacionId!), 'DESPRENDIBLE');
-		});
+		await solicitarPreview(hojaActiva, 'DESPRENDIBLE');
 	}
 
 	async function abrirPreviewFirmado(hoja: NonNullable<typeof hojaActiva>) {
-		await conOverlay('Generando el desprendible firmado', hoja.nombre, async () => {
-			// La notificación significa que la firma acaba de cambiar: nunca se
-			// debe servir aquí el blob que el canvas pudiera tener en memoria.
-			limpiarCacheDesprendibles();
-			const blob = await blobDesprendible(hoja.liquidacionId!);
-			mostrarPreview(hoja, blob, 'FIRMA RECIBIDA');
-		});
+		await solicitarPreview(hoja, 'FIRMA RECIBIDA', true);
+	}
+
+	async function solicitarPreview(
+		hoja: NonNullable<typeof hojaActiva>,
+		etiqueta: string,
+		forzarActualizacion = false
+	) {
+		const id = hoja.liquidacionId;
+		if (!id) return;
+		previewLiquidacionId = id;
+		previewEtiqueta = etiqueta;
+		const clave = id + ':' + etiqueta;
+		if (previewGenerandoKey === clave || (previewMostradoKey === clave && previewFirmadoUrl)) return;
+		previewGenerandoKey = clave;
+		irAConductor(hoja.conductorId);
+		try {
+			const resultado = await conOverlay(
+				forzarActualizacion ? 'Generando el desprendible firmado' : 'Generando el desprendible',
+				hoja.nombre,
+				async () => {
+					await tick();
+					// La notificación de firma exige el PDF recién generado, no uno cacheado.
+					if (forzarActualizacion) limpiarCacheDesprendibles();
+					const blob = await blobDesprendible(id);
+					if (previewLiquidacionId !== id || previewGenerandoKey !== clave) return;
+					mostrarPreview(hoja, blob, etiqueta);
+					previewMostradoKey = clave;
+				}
+			);
+			if (resultado === null && previewLiquidacionId === id) cerrarPreviewFirmado();
+		} finally {
+			if (previewGenerandoKey === clave) previewGenerandoKey = null;
+		}
 	}
 
 	function mostrarPreview(hoja: NonNullable<typeof hojaActiva>, blob: Blob, etiqueta: string) {
@@ -1310,6 +1358,8 @@
 	function cerrarPreviewFirmado() {
 		if (previewFirmadoUrl) URL.revokeObjectURL(previewFirmadoUrl);
 		previewFirmadoUrl = null;
+		previewLiquidacionId = null;
+		previewMostradoKey = null;
 	}
 
 	async function exportarExcel() {
@@ -1752,6 +1802,36 @@
 	/// Generación de borradores en lote. Sustituye al viaje por el formulario:
 	/// se eligen los conductores y el servidor genera, persiste y anuncia.
 	let mostrarGenerar = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'historial-nomina', id: conductorActivo ?? undefined, open: historialAbierto },
+		{ key: 'enviar-desprendibles', open: mostrarEnviar },
+		{ key: 'notificar-nomina', open: mostrarNotificar },
+		{ key: 'periodo-desprendible', id: conductorActivo ?? undefined, open: mostrarPeriodo },
+		{ key: 'dias-desprendible', id: conductorActivo ?? undefined, open: mostrarDiasDesprendible },
+		{ key: 'adicionales-desprendible', id: conductorActivo ?? undefined, open: mostrarAdicionales },
+		{ key: 'generar-borradores-nomina', open: mostrarGenerar },
+		{ key: 'ver-desprendible', id: previewLiquidacionId ?? undefined, open: previewLiquidacionId !== null }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		historialAbierto = referencia?.key === 'historial-nomina';
+		mostrarEnviar = referencia?.key === 'enviar-desprendibles';
+		mostrarNotificar = referencia?.key === 'notificar-nomina';
+		mostrarPeriodo = referencia?.key === 'periodo-desprendible';
+		mostrarDiasDesprendible = referencia?.key === 'dias-desprendible';
+		mostrarAdicionales = referencia?.key === 'adicionales-desprendible';
+		mostrarGenerar = referencia?.key === 'generar-borradores-nomina';
+		if (referencia?.key === 'ver-desprendible' && referencia.id) {
+			if (previewLiquidacionId !== referencia.id) {
+				if (previewFirmadoUrl) URL.revokeObjectURL(previewFirmadoUrl);
+				previewFirmadoUrl = null;
+				previewMostradoKey = null;
+			}
+			previewLiquidacionId = referencia.id;
+			previewEtiqueta = 'DESPRENDIBLE';
+		} else if (previewLiquidacionId || previewFirmadoUrl) {
+			cerrarPreviewFirmado();
+		}
+	}
 
 	function antesDeSalir(): boolean {
 		session?.dispose();
@@ -2251,6 +2331,7 @@
 	{/if}
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <SnapshotPanel
 	open={historialAbierto}
 	scope="nomina"

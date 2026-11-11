@@ -35,6 +35,7 @@
 		subtitle?: string;
 		tabs: TabEntidad[];
 		tabActiva: string;
+		modalRef?: string;
 		/** Errores por pestaña: la pestaña se marca y se cuenta. */
 		erroresPorTab?: Record<string, number>;
 		guardando?: boolean;
@@ -54,6 +55,7 @@
 		subtitle,
 		tabs,
 		tabActiva = $bindable(),
+		modalRef,
 		erroresPorTab = {},
 		guardando = false,
 		cargando = false,
@@ -143,6 +145,7 @@
 								variante="oscuro"
 								etiqueta="Secciones del formulario"
 								tabs={tabs.map((t) => ({ ...t, errores: erroresPorTab[t.id] ?? 0 }))}
+								{modalRef}
 								bind:activa={tabActiva}
 							/>
 						</div>

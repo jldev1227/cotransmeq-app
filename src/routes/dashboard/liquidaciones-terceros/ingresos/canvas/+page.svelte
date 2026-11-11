@@ -100,6 +100,7 @@
 	import ModalFilasIngresos from '$lib/components/univer/ModalFilasIngresos.svelte';
 	import SelectorCanvasTerceros from '$lib/components/univer/SelectorCanvasTerceros.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import EnvioHojaModal from '$lib/components/liquidaciones-terceros/envios/EnvioHojaModal.svelte';
 	import {
 		documentoIngresos,
@@ -509,6 +510,18 @@
 	 * el modal, y la constancia queda en `liquidacion_tercero_envio`.
 	 */
 	let envioAbierto = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'filas-ingresos', id: hojaActiva, open: modalFilas },
+		{ key: 'preview-canvas', id: hojaActiva, open: previewAbierto },
+		{ key: 'historial-ingresos', id: hojaActiva, open: historialAbierto },
+		{ key: 'envios-ingresos', id: hojaActiva, open: envioAbierto }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		modalFilas = referencia?.key === 'filas-ingresos';
+		previewAbierto = referencia?.key === 'preview-canvas';
+		historialAbierto = referencia?.key === 'historial-ingresos';
+		envioAbierto = referencia?.key === 'envios-ingresos';
+	}
 	function documentoHojaActiva() {
 		if (!filasMesActivo.length) return null;
 		return documentoIngresos({
@@ -1499,6 +1512,7 @@
 	/>
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ModalFilasIngresos
 	open={modalFilas}
 	hoja={hojaActiva}

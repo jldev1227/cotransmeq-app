@@ -14,11 +14,7 @@ import type { PageLoad } from './$types';
  * aterrizar en el mes en curso solo por pasar por la redirección.
  */
 export const load: PageLoad = ({ url }) => {
-	const destino = new URLSearchParams();
-	for (const clave of ['anio', 'mes', 'desde'] as const) {
-		const valor = url.searchParams.get(clave);
-		if (valor) destino.set(clave, valor);
-	}
+	const destino = new URLSearchParams(url.searchParams);
 	const consulta = destino.toString();
 	redirect(307, consulta ? `/dashboard/nomina/canvas?${consulta}` : '/dashboard/nomina/canvas');
 };

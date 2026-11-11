@@ -451,6 +451,7 @@
 						cuenta: historial.length > 0 ? historial.length : null
 					}
 				]}
+				modalRef="detalle-recargo"
 				bind:activa={selectedTab}
 			/>
 		{/if}

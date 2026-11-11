@@ -60,6 +60,8 @@
 	import { socketUtils } from '$lib/socket';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import { numero, opcion, texto, type DefinicionesFiltros } from '$lib/listing/filtros';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
+	import { escribirReferenciaModalURL } from '$lib/navigation/modal-url';
 
 	// Labels para los chips removibles del FilterDrawer
 	// ── Permisos ──────────────────────────────────────────────────────
@@ -161,8 +163,40 @@
 	let servicioSeleccionado = $state<ServicioConRelaciones | null>(null);
 
 	let servicioEditar = $state<ServicioConRelaciones | null>(null);
+	let servicioEditarIdRef = $state<string | null>(null);
 	let servicioAEliminar = $state<ServicioConRelaciones | null>(null);
+	let ticketServicioIdRef = $state<string | null>(null);
 	let inicializado = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'ticket-servicio', id: ticketServicioIdRef ?? undefined, open: mostrarModalTicket || !!ticketServicioIdRef },
+		{ key: 'form-servicio', id: servicioEditarIdRef ?? servicioEditar?.id, open: mostrarModalFormServicio },
+		{ key: 'eliminar-servicio', id: servicioAEliminar?.id, open: mostrarModalConfirm && !!servicioAEliminar }
+	]);
+
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		const key = referencia?.key;
+		const id = referencia?.id;
+		mostrarModalTicket = false;
+		servicioSeleccionado = null;
+		ticketServicioIdRef = key === 'ticket-servicio' ? (id ?? null) : null;
+		if (key === 'ticket-servicio' && id) void abrirTicketPorId(id);
+
+		mostrarModalFormServicio = key === 'form-servicio';
+		servicioEditarIdRef = key === 'form-servicio' ? (id ?? null) : null;
+		servicioEditar = key === 'form-servicio' && !id ? null : servicios.find((s) => s.id === id) ?? null;
+		if (key === 'form-servicio' && id && !servicioEditar) {
+			void obtenerServicioParaModal(id).then((servicio) => {
+				if (servicioEditarIdRef === id && mostrarModalFormServicio) servicioEditar = servicio;
+			}).catch((error: unknown) => {
+				toast.error(error instanceof Error ? error.message : 'No se pudo cargar el servicio');
+			});
+		}
+
+		mostrarModalConfirm = key === 'eliminar-servicio';
+		servicioAEliminar = key === 'eliminar-servicio' && id
+			? (servicios.find((s) => s.id === id) ?? ({ id } as ServicioConRelaciones))
+			: null;
+	}
 
 	type VistaActiva = 'lista' | 'calendario' | 'canvas';
 	type CampoFechaCal = 'fecha_solicitud' | 'fecha_realizacion' | 'fecha_finalizacion';
@@ -492,12 +526,9 @@
 	 * del servicio…»), que solo sabe navegar a rutas, y sirve igual para
 	 * compartir el enlace.
 	 *
-	 * El parámetro se lee AQUÍ, en el cuerpo, por la misma razón que
-	 * `restaurarDesdeUrl`: el efecto que escribe la URL lo borraría antes de
-	 * que un `onMount` lo viera. El efecto de abajo cubre las navegaciones
-	 * posteriores (el asistente pide otro ticket sin salir de la pantalla).
-	 * Una vez abierto, el parámetro se quita de la barra: cerrar el modal no
-	 * debe reabrirlo, ni quedar en el historial.
+	 * El alias histórico `?ticket=` se convierte a `modal=ticket-servicio` cuando
+	 * termina de cargar el registro. La referencia canónica se conserva mientras
+	 * el ticket está abierto para que copiar el enlace reproduzca esa vista.
 	 */
 	let ticketPendiente = $state<string | null>(browser ? pageState.url.searchParams.get('ticket') : null);
 
@@ -510,22 +541,41 @@
 		if (!inicializado || !ticketPendiente) return;
 		const id = ticketPendiente;
 		ticketPendiente = null;
-		void abrirTicketPorId(id);
+		const destino = escribirReferenciaModalURL(pageState.url, {
+			key: 'ticket-servicio',
+			id
+		});
+		destino.searchParams.delete('ticket');
+		void goto(destino.href, {
+			replaceState: true,
+			noScroll: true,
+			keepFocus: true,
+			invalidateAll: false
+		});
 	});
 
 	async function abrirTicketPorId(id: string) {
-		const servicio = servicios.find((s) => s.id === id) ?? (await serviciosStore.obtenerServicio(id));
+		const servicio = await obtenerServicioParaModal(id).catch((error: unknown) => {
+			toast.error(error instanceof Error ? error.message : 'No se encontró el servicio del ticket');
+			return null;
+		});
 		if (!servicio) {
-			toast.error('No se encontró el servicio del ticket');
 			return;
 		}
 		servicioSeleccionado = servicio;
+		ticketServicioIdRef = id;
 		mostrarModalTicket = true;
-		const url = new URL(pageState.url);
-		if (url.searchParams.has('ticket')) {
-			url.searchParams.delete('ticket');
-			replaceState(url, pageState.state);
+	}
+
+	async function obtenerServicioParaModal(id: string): Promise<ServicioConRelaciones | null> {
+		const existente = servicios.find((servicio) => servicio.id === id);
+		if (existente) return existente;
+		const response = await fetchConSesion(`/api/servicios/${encodeURIComponent(id)}`);
+		const resultado = await response.json().catch(() => null);
+		if (!response.ok || !resultado?.success || !resultado.data) {
+			throw new Error(resultado?.message || 'No se pudo cargar el servicio');
 		}
+		return resultado.data as ServicioConRelaciones;
 	}
 
 	/// Cada URL en la que se asienta el listado (al entrar y con cada filtro,
@@ -888,19 +938,23 @@
 
 	function handleNuevoServicio() {
 		servicioEditar = null;
+		servicioEditarIdRef = null;
 		mostrarModalFormServicio = true;
 	}
 	function handleEditarServicio(servicio: ServicioConRelaciones) {
 		servicioEditar = servicio;
+		servicioEditarIdRef = servicio.id;
 		mostrarModalFormServicio = true;
 	}
 	function handleModalFormClose() {
 		mostrarModalFormServicio = false;
 		servicioEditar = null;
+		servicioEditarIdRef = null;
 	}
 	async function handleModalFormSuccess() {
 		mostrarModalFormServicio = false;
 		servicioEditar = null;
+		servicioEditarIdRef = null;
 		await serviciosStore.obtenerServicios({}, true);
 	}
 
@@ -1038,6 +1092,7 @@
 				icono: Ticket,
 				onSelect: () => {
 					servicioSeleccionado = servicio;
+					ticketServicioIdRef = servicio.id;
 					mostrarModalTicket = true;
 				}
 			},
@@ -1599,6 +1654,8 @@
 	{/if}
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
+
 <!-- Modales -->
 {#if mostrarModalTicket && servicioSeleccionado}
 	<ModalTicket
@@ -1606,6 +1663,7 @@
 		onClose={() => {
 			mostrarModalTicket = false;
 			servicioSeleccionado = null;
+			ticketServicioIdRef = null;
 		}}
 	/>
 {/if}

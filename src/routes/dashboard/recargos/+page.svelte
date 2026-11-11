@@ -50,6 +50,7 @@
 		type AccionSeleccion
 	} from '$lib/components/listing/BarraSeleccion.svelte';
 	import { mascota } from '$lib/mascot';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { Copy, Eye, Pencil, RefreshCw, RotateCcw, Tags, Trash2, Upload } from 'lucide-svelte';
 
@@ -137,6 +138,25 @@
 	let reporteLoading = $state(false);
 	let planillaAdjuntaEnCurso = $state<string | null>(null);
 	let recargoParaAdjuntar = $state<CanvasRecargo | null>(null);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'detalle-recargo', id: selectedRecargoId ?? undefined, open: modalViewIsOpen },
+		{ key: 'form-recargo', id: selectedRecargoId ?? undefined, open: modalFormIsOpen },
+		{ key: 'importar-origen', open: modalImportarTransmeraldaIsOpen },
+		{ key: 'eliminar-recargos', ids: [...selectedRows], open: modalDeleteIsOpen },
+		{ key: 'cambiar-estado-recargos', ids: [...selectedRows], open: modalEstadoIsOpen },
+		{ key: 'restaurar-recargos', ids: [...selectedRows], open: modalRestaurarIsOpen }
+	]);
+
+	function aplicarReferenciaModal(referencia: { key: string; id?: string; ids?: string[] } | null) {
+		modalViewIsOpen = referencia?.key === 'detalle-recargo';
+		modalFormIsOpen = referencia?.key === 'form-recargo';
+		modalImportarTransmeraldaIsOpen = referencia?.key === 'importar-origen';
+		modalDeleteIsOpen = referencia?.key === 'eliminar-recargos';
+		modalEstadoIsOpen = referencia?.key === 'cambiar-estado-recargos';
+		modalRestaurarIsOpen = referencia?.key === 'restaurar-recargos';
+		selectedRecargoId = referencia?.id ?? null;
+		if (referencia?.ids) selectedRows = new Set(referencia.ids);
+	}
 
 	function abrirModalAdjunto(event: MouseEvent, recargo: CanvasRecargo) {
 		/// La fila/tarjeta es seleccionable; el botón de archivo debe consumir el
@@ -2976,6 +2996,8 @@
 </div>
 
 <!-- Modales -->
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
+
 {#if recargoParaAdjuntar}
 	<ModalAdjuntarPlanilla
 		open={true}

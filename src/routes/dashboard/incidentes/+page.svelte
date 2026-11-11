@@ -45,6 +45,7 @@
 		type DefinicionesFiltros
 	} from '$lib/listing/filtros';
 	import { listadoIncidentes } from '$lib/incidentes/listado';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import {
 		incidentesAPI,
 		mensajeError,
@@ -288,6 +289,12 @@
 	}
 
 	let modalReporte = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'reporte-incidente', open: modalReporte }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		modalReporte = referencia?.key === 'reporte-incidente';
+	}
 </script>
 
 <svelte:head>
@@ -542,6 +549,7 @@
 	{/if}
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ModalReporteIncidente
 	open={modalReporte}
 	oncerrar={() => (modalReporte = false)}

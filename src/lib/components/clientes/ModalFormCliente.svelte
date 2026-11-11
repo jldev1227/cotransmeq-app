@@ -200,6 +200,7 @@
 </script>
 
 <ModalEntidad
+	modalRef="form-cliente"
 	{open}
 	eyebrow={editando ? 'EDITAR CLIENTE' : 'NUEVO CLIENTE'}
 	title={editando ? form.nombre || 'Cliente' : 'Registrar cliente'}

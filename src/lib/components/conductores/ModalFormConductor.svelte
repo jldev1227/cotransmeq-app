@@ -346,6 +346,7 @@
 </script>
 
 <ModalEntidad
+	modalRef="form-conductor"
 	{open}
 	eyebrow={editando ? 'EDITAR CONDUCTOR' : 'NUEVO CONDUCTOR'}
 	title={editando ? nombreCompleto || 'Conductor' : 'Registrar conductor'}

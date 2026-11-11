@@ -4,6 +4,7 @@
 	import { clientesAPI } from '$lib/api/apiClient';
 	import { listadoClientes } from '$lib/stores/volverListado';
 	import { authStore } from '$lib/stores/auth';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import ModalFormCliente from '$lib/components/clientes/ModalFormCliente.svelte';
 	import TarifasCliente from '$lib/components/clientes/TarifasCliente.svelte';
@@ -48,6 +49,12 @@
 	let cliente = $state<Cliente | null>(null);
 	let isLoading = $state(true);
 	let modalAbierto = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'form-cliente', open: modalAbierto }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		modalAbierto = referencia?.key === 'form-cliente';
+	}
 	let error: string | null = $state(null);
 	const clienteId = $derived(page.params.id as string);
 	const puedeVerTarifas = $derived(!!$authStore.user && authStore.getAccessLevel('liquidaciones-servicios') !== null);
@@ -212,6 +219,7 @@
 	{/if}
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ModalFormCliente open={modalAbierto} {clienteId} onclose={() => (modalAbierto = false)} onguardado={loadCliente} />
 
 <style>

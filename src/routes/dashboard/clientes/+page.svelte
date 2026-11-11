@@ -33,6 +33,7 @@
 	import { page } from '$app/state';
 	import { crearListingStore } from '$lib/listing/listingStore';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import {
 		contarActivos,
 		firma,
@@ -459,6 +460,22 @@
 	/// Crear y editar van en el mismo modal, como en flota y conductores.
 	let modalCliente = $state<{ abierto: boolean; id: string | null }>({ abierto: false, id: null });
 	const abrirFormulario = (id: string | null = null) => (modalCliente = { abierto: true, id });
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'form-cliente', id: modalCliente.id ?? undefined, open: modalCliente.abierto },
+		{ key: 'eliminar-cliente', id: clienteToDelete?.id, open: showDeleteModal && !!clienteToDelete }
+	]);
+
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		modalCliente =
+			referencia?.key === 'form-cliente'
+				? { abierto: true, id: referencia.id ?? null }
+				: { abierto: false, id: null };
+		showDeleteModal = referencia?.key === 'eliminar-cliente';
+		clienteToDelete =
+			referencia?.key === 'eliminar-cliente' && referencia.id
+				? ({ id: referencia.id, nombre: '' } as Cliente)
+				: null;
+	}
 
 	/// Orden de la tabla: A–Z por nombre de entrada. El tercer clic de la
 	/// cabecera («sin orden») vuelve a A–Z, que es el orden natural de un directorio.
@@ -472,10 +489,10 @@
 	onMount(() => {
 		/// Enlaces viejos a `/agregar` llegan aquí con `?nuevo=1`.
 		if (pageState.url.searchParams.has('nuevo') && puedeEditar) {
-			abrirFormulario();
 			const url = new URL(pageState.url);
 			url.searchParams.delete('nuevo');
-			history.replaceState(history.state, '', url);
+			url.searchParams.set('modal', 'form-cliente');
+			void goto(url, { replaceState: true, keepFocus: true, noScroll: true });
 		}
 		/// Estos tres eventos no existían en el backend hasta ahora: el módulo
 		/// emitía `cliente:oculto` y `clientes:actualizacion-masiva`, así que
@@ -842,6 +859,7 @@
 </div>
 
 <!-- Mover a papelera: el diálogo de confirmación de la app. -->
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ConfirmDialog
 	open={showDeleteModal && !!clienteToDelete}
 	tone="danger"

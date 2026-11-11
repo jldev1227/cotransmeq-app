@@ -771,6 +771,7 @@
 			<TabsVista
 				variante="oscuro"
 				etiqueta="Secciones del cierre"
+				modalRef="conceptos-cierre"
 				tabs={pestanas}
 				activa={seccion}
 				onCambiar={(id) => irASeccion(id as Seccion)}

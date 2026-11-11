@@ -32,6 +32,7 @@
 	import { crearListingStore } from '$lib/listing/listingStore';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import { coincide } from '$lib/listing/texto';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import {
 		contarActivos,
 		firma,
@@ -94,6 +95,20 @@
 	let selectedVehiculoId = $state<string | null>(null);
 	let isDeleteModalOpen = $state(false);
 	let vehiculoToDelete = $state<Vehiculo | null>(null);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'form-vehiculo', id: selectedVehiculoId ?? undefined, open: isModalOpen },
+		{ key: 'eliminar-vehiculo', id: vehiculoToDelete?.id, open: isDeleteModalOpen }
+	]);
+
+	function aplicarReferenciaModal(referencia: { key: string; id?: string } | null) {
+		isModalOpen = referencia?.key === 'form-vehiculo';
+		selectedVehiculoId = isModalOpen ? (referencia?.id ?? null) : null;
+		isDeleteModalOpen = referencia?.key === 'eliminar-vehiculo';
+		vehiculoToDelete =
+			isDeleteModalOpen && referencia?.id
+				? ({ id: referencia.id, placa: '' } as Vehiculo)
+				: null;
+	}
 
 	// Estados para modo selección
 	let vehiculosSeleccionados = $state(new Set<string>());
@@ -757,6 +772,7 @@
 
 </div>
 
+<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 <ModalFormVehiculo
 	open={isModalOpen}
 	vehiculoId={selectedVehiculoId}

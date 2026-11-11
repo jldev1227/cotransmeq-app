@@ -55,5 +55,8 @@ export const load: PageLoad = ({ url }) => {
 	// 307 y no 301/308: el destino depende de la fecha de hoy, un redirect
 	// permanente lo dejaría cacheado en el navegador para siempre.
 	// Ruta ABSOLUTA: `./canvas` se resolvería contra `/dashboard/` y daría 404.
-	redirect(307, `/dashboard/liquidaciones-terceros/${destino}?anio=${anio}&mes=${mes}`);
+	const consulta = new URLSearchParams(url.searchParams);
+	consulta.set('anio', String(anio));
+	consulta.set('mes', String(mes));
+	redirect(307, `/dashboard/liquidaciones-terceros/${destino}?${consulta.toString()}`);
 };

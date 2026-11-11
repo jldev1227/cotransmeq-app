@@ -9,6 +9,7 @@
 	import Cropper, { type OnCropCompleteEvent } from 'svelte-easy-crop';
 	import { conductoresAPI } from '$lib/api/apiClient';
 	import ModalFormConductor from '$lib/components/conductores/ModalFormConductor.svelte';
+	import ModalUrlSync from '$lib/components/navigation/ModalUrlSync.svelte';
 	import { socketUtils } from '$lib/socket';
 	import { toast } from 'svelte-sonner';
 	import ReadonlyField from '$lib/components/ReadonlyField.svelte';
@@ -230,6 +231,9 @@
 	let isLoading = true;
 	/// Editar abre el mismo modal que crear (listado de conductores).
 	let modalAbierto = false;
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		modalAbierto = referencia?.key === 'form-conductor';
+	}
 	let error: string | null = null;
 	let activeTab: TabType = 'actividad';
 	/// `?tab=` abre cualquiera de las secciones disponibles y también reacciona
@@ -711,6 +715,10 @@
 	}
 </script>
 
+<ModalUrlSync
+	referencias={[{ key: 'form-conductor', id: conductorId, open: modalAbierto }]}
+	onCambio={aplicarReferenciaModal}
+/>
 <ModalFormConductor
 	open={modalAbierto}
 	{conductorId}

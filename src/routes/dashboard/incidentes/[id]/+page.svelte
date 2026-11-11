@@ -36,6 +36,7 @@
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
 	import ModalReporteIncidente from '$lib/components/incidentes/ModalReporteIncidente.svelte';
+	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import ModalAccionIncidente from '$lib/components/incidentes/ModalAccionIncidente.svelte';
 	import { authStore } from '$lib/stores/auth';
 	import { checkAccess } from '$lib/config/permissions';
@@ -320,6 +321,14 @@
 	// ─── Acciones ───────────────────────────────────────────────────────────
 	let modalAccion = $state(false);
 	let modalReporte = $state(false);
+	const referenciasModal = $derived<EstadoModalURL[]>([
+		{ key: 'reporte-incidente', open: modalReporte },
+		{ key: 'accion-incidente', open: modalAccion }
+	]);
+	function aplicarReferenciaModal(referencia: { key: string } | null) {
+		modalReporte = referencia?.key === 'reporte-incidente';
+		modalAccion = referencia?.key === 'accion-incidente';
+	}
 
 	async function desvincular(accionId: string, numero: string) {
 		if (!inc) return;
@@ -934,6 +943,7 @@
 		</div>
 	</div>
 
+	<ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 	<ModalReporteIncidente
 		open={modalReporte}
 		incidente={inc}

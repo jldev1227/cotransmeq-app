@@ -238,6 +238,7 @@
 			bind:activa={seccion}
 			variante="oscuro"
 			etiqueta="Bloques del pie"
+			modalRef="filas-ingresos"
 			onCambiar={() => (error = '')}
 		/>
 	{/snippet}
