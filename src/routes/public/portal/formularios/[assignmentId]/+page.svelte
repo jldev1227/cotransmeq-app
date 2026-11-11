@@ -34,6 +34,7 @@
 		getDraft,
 		draftsForAssignment,
 		guardarPlacas,
+		placasCacheadas,
 		putAttachment,
 		putDefinition,
 		putDraft,
@@ -52,7 +53,7 @@
 	import { createRunnerState, type RunnerState } from '$lib/formularios/runner-state.svelte';
 	import { computeProgress } from '$lib/formularios/validate-answers';
 	import { fechaLocalDe, formatearFechaCorta } from '$lib/formularios/fecha-diligenciamiento';
-	import type { FormVersionDto } from '$lib/formularios/types';
+	import type { FormFieldDto, FormVersionDto } from '$lib/formularios/types';
 	import type { PreparedMedia } from '$lib/offline/forms-media';
 	import { ordenarPorEtiqueta } from '$lib/utils/ordenarOpciones';
 	import FormRenderer from '$lib/components/formularios/FormRenderer.svelte';
@@ -92,6 +93,34 @@
 	let error = $state<string | null>(null);
 	let enviando = $state(false);
 	let vehiculos = $state<{ id: string; placa: string }[]>([]);
+
+	function encontrarLookupVehiculo(version: FormVersionDto | null): FormFieldDto | null {
+		const visitar = (fields: FormFieldDto[]): FormFieldDto | null => {
+			for (const field of fields) {
+				if (
+					field.type === 'LOOKUP' &&
+					field.config.source === 'VEHICLE' &&
+					field.config.bindContext === 'vehicleId'
+				) return field;
+				const nested = visitar(field.children ?? []);
+				if (nested) return nested;
+			}
+			return null;
+		};
+		for (const section of version?.sections ?? []) {
+			const found = visitar(section.fields);
+			if (found) return found;
+		}
+		return null;
+	}
+
+	const lookupVehiculo = $derived(encontrarLookupVehiculo(definicion));
+
+	function idDeLookup(value: unknown): string {
+		return value && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'string'
+			? (value as { id: string }).id
+			: '';
+	}
 
 	let timerLocal: ReturnType<typeof setTimeout> | null = null;
 	let timerBackup: ReturnType<typeof setInterval> | null = null;
@@ -269,7 +298,14 @@
 	 * interceptor redirige a `/login` en el 401, tirando el borrador abierto.
 	 */
 	async function cargarVehiculos() {
-		if (!contextoRequerido.includes('vehicleId')) return;
+		if (!contextoRequerido.includes('vehicleId') && !lookupVehiculo) return;
+		if (lookupVehiculo) {
+			const cache = await placasCacheadas().catch(() => ({}));
+			vehiculos = ordenarPorEtiqueta(
+				Object.entries(cache).map(([id, placa]) => ({ id, placa })),
+				(v) => v.placa
+			);
+		}
 		try {
 			const lista = await portalFormulariosAPI.listarVehiculos();
 			/// Ordenado por placa: el backend las devuelve en orden de creación y el
@@ -283,7 +319,7 @@
 			/// modo sin conexión.
 			await guardarPlacas(vehiculos);
 		} catch {
-			vehiculos = [];
+			/// Conserva el catálogo cacheado para que el selector siga sirviendo sin red.
 		}
 	}
 
@@ -419,6 +455,27 @@
 	 * del vehículo: un preoperacional a medias con los datos de otro vehículo es
 	 * peor que uno vacío.
 	 */
+	/// El contexto técnico se sincroniza con el LOOKUP; al cambiar a sede,
+	/// limpiar la respuesta quita también el vehículo guardado en el borrador.
+	$effect(() => {
+		const field = lookupVehiculo;
+		const currentRunner = runner;
+		if (!field || !currentRunner) return;
+		const answer = currentRunner.valueOf(field.id, null);
+		const id = idDeLookup(answer);
+		const placa = answer && typeof answer === 'object'
+			? String((answer as { placa?: unknown }).placa ?? '')
+			: '';
+		if (id) {
+			if (contexto.vehicleId !== id || contexto.vehiclePlate !== placa) {
+				contexto = { ...contexto, vehicleId: id, vehiclePlate: placa };
+			}
+		} else if (contexto.vehicleId || contexto.vehiclePlate) {
+			const { vehicleId: _vehicleId, vehiclePlate: _vehiclePlate, ...rest } = contexto;
+			contexto = rest;
+		}
+	});
+
 	async function cambiarVehiculo(vehicleId: string, placa?: string) {
 		const anterior = contexto.vehicleId;
 		if (anterior && anterior !== vehicleId && runner && runner.answers.size > 0) {
@@ -534,7 +591,7 @@
 	// ── Envío ────────────────────────────────────────────────────────────────
 
 	function faltaContexto(): string[] {
-		return contextoRequerido.filter((clave) => {
+		return contextoRequerido.filter((clave) => !(clave === 'vehicleId' && lookupVehiculo)).filter((clave) => {
 			const valor = contexto[clave];
 			return valor === undefined || valor === null || valor === '';
 		});
@@ -649,7 +706,7 @@
 				<span class="contexto__hint">Se toma de cuando abriste el formulario.</span>
 			</div>
 
-			{#if contextoRequerido.includes('vehicleId')}
+			{#if contextoRequerido.includes('vehicleId') && !lookupVehiculo}
 				{#if vehiculos.length}
 					<!-- Buscador de placas, no desplegable: en una flota de decenas de
 					     vehículos el `<select>` nativo obliga a recorrer la lista entera
@@ -710,6 +767,47 @@
 						onadd={(media) => agregarEvidencia(field, occurrenceId, media)}
 						onremove={quitarEvidencia}
 					/>
+				{/snippet}
+				{#snippet lookup({ field, value, disabled, inputId, onSelect, onClear })}
+					{#if field.config.source === 'VEHICLE' && field.config.bindContext === 'vehicleId'}
+						{#if vehiculos.length}
+							<Autocomplete
+								options={vehiculoOptions}
+								value={idDeLookup(value)}
+								placeholder={value && typeof value === 'object'
+									? String((value as { placa?: unknown }).placa ?? '🔍 Buscar placa...')
+									: '🔍 Buscar placa...'}
+								disabled={disabled}
+								{inputId}
+								ariaLabel={field.label}
+								on:select={(e) => {
+									const placa = e.detail.placa ?? e.detail.label;
+									onSelect({ id: e.detail.id, placa });
+									cambiarVehiculo(e.detail.id, placa).catch(reportar);
+								}}
+								on:clear={() => {
+									onClear();
+									cambiarVehiculo('', '').catch(reportar);
+								}}
+							/>
+						{:else}
+							<div class="lookup">
+								<span class="lookup__vacio">
+									{value && typeof value === 'object'
+										? String((value as { placa?: unknown }).placa ?? 'Vehículo seleccionado')
+										: 'Conecta para cargar el catálogo de placas.'}
+								</span>
+							</div>
+						{/if}
+					{:else}
+						<div class="lookup">
+							<span class="lookup__valor">
+								{value && typeof value === 'object'
+									? String((value as { placa?: unknown; nombre?: unknown; id?: unknown }).placa ?? (value as { nombre?: unknown }).nombre ?? (value as { id?: unknown }).id ?? '')
+									: 'Sin seleccionar'}
+							</span>
+						</div>
+					{/if}
 				{/snippet}
 			</FormRenderer>
 		</main>

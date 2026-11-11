@@ -19,10 +19,22 @@
 		field: FormFieldDto;
 		runner: RunnerState;
 		depth?: number;
+		lookup?: Snippet<[
+			{
+				field: FormFieldDto;
+				occurrenceId: string | null;
+				value: unknown;
+				inputId: string;
+				disabled: boolean;
+				onSelect: (vehicle: { id: string; placa: string }) => void;
+				onClear: () => void;
+				onBlur: () => void;
+			}
+		]>;
 		evidence?: Snippet<[{ field: FormFieldDto; occurrenceId: string | null }]>;
 	}
 
-	let { field, runner, depth = 0, evidence }: Props = $props();
+	let { field, runner, depth = 0, evidence, lookup }: Props = $props();
 
 	const filas = $derived(runner.occurrencesOf(field.id));
 	const errores = $derived(runner.errorsFor(field.id, null));
@@ -74,7 +86,7 @@
 
 				<div class="fila__celdas" class:fila__celdas--matriz={field.type === 'MATRIX'}>
 					{#each field.children as hijo (hijo.id)}
-						<FieldRenderer field={hijo} {runner} {occurrenceId} depth={depth + 1} {evidence} />
+						<FieldRenderer field={hijo} {runner} {occurrenceId} depth={depth + 1} {evidence} {lookup} />
 					{/each}
 				</div>
 			</li>

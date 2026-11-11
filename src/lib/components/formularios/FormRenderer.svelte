@@ -25,6 +25,19 @@
 		instructions?: string | null;
 		/** Muestra el resumen accesible de errores tras intentar enviar. */
 		showErrorSummary?: boolean;
+		/** Selector real para campos LOOKUP que dependen de catálogos de la página. */
+		lookup?: Snippet<[
+			{
+				field: FormFieldDto;
+				occurrenceId: string | null;
+				value: unknown;
+				inputId: string;
+				disabled: boolean;
+				onSelect: (vehicle: { id: string; placa: string }) => void;
+				onClear: () => void;
+				onBlur: () => void;
+			}
+		]>;
 		/** Captura de evidencia; solo la pasa el runner del portal. */
 		evidence?: Snippet<[{ field: FormFieldDto; occurrenceId: string | null }]>;
 	}
@@ -34,7 +47,8 @@
 		title = null,
 		instructions = null,
 		showErrorSummary = true,
-		evidence
+		evidence,
+		lookup
 	}: Props = $props();
 
 	/**
@@ -147,7 +161,7 @@
 
 			<div class="seccion__campos">
 				{#each section.fields as field (field.id)}
-					<FieldRenderer {field} {runner} {evidence} />
+					<FieldRenderer {field} {runner} {evidence} {lookup} />
 				{/each}
 			</div>
 		</section>
