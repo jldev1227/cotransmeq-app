@@ -87,7 +87,7 @@
 	$effect(() => {
 		if (
 			field.type === 'LOOKUP' &&
-			field.config.bindContext === 'vehicleId' &&
+			field.config.source === 'VEHICLE' &&
 			!fieldState.visible &&
 			!runner.readonly &&
 			valor != null

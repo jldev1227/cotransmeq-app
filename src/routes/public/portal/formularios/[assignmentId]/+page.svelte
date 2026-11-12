@@ -99,8 +99,7 @@
 			for (const field of fields) {
 				if (
 					field.type === 'LOOKUP' &&
-					field.config.source === 'VEHICLE' &&
-					field.config.bindContext === 'vehicleId'
+					field.config.source === 'VEHICLE'
 				) return field;
 				const nested = visitar(field.children ?? []);
 				if (nested) return nested;
@@ -769,7 +768,7 @@
 					/>
 				{/snippet}
 				{#snippet lookup({ field, value, disabled, inputId, onSelect, onClear })}
-					{#if field.config.source === 'VEHICLE' && field.config.bindContext === 'vehicleId'}
+					{#if field.config.source === 'VEHICLE'}
 						{#if vehiculos.length}
 							<Autocomplete
 								options={vehiculoOptions}
