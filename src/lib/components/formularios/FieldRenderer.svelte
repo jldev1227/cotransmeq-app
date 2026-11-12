@@ -25,6 +25,18 @@
 		occurrenceId?: string | null;
 		/** Nivel de anidación; solo afecta al espaciado. */
 		depth?: number;
+		lookup?: Snippet<[
+			{
+				field: FormFieldDto;
+				occurrenceId: string | null;
+				value: unknown;
+				inputId: string;
+				disabled: boolean;
+				onSelect: (vehicle: { id: string; placa: string }) => void;
+				onClear: () => void;
+				onBlur: () => void;
+			}
+		]>;
 		/**
 		 * Captura de evidencia. La inyecta el RUNNER del portal; el preview del
 		 * builder no la pasa, y así no hay forma de subir un archivo desde el
@@ -33,7 +45,7 @@
 		evidence?: Snippet<[{ field: FormFieldDto; occurrenceId: string | null }]>;
 	}
 
-	let { field, runner, occurrenceId = null, depth = 0, evidence }: Props = $props();
+	let { field, runner, occurrenceId = null, depth = 0, evidence, lookup }: Props = $props();
 
 	const cap = $derived(capabilitiesOf(field.type));
 	const fieldState = $derived(runner.stateOf(field.id, occurrenceId));
@@ -59,6 +71,30 @@
 	function onBlur() {
 		runner.markTouched(field.id, occurrenceId);
 	}
+
+	function onLookupSelect(vehicle: { id: string; placa: string }) {
+		onInput(vehicle);
+		onBlur();
+	}
+
+	function onLookupClear() {
+		onInput(null);
+		onBlur();
+	}
+
+	/// Al apagar la rama de vehículo se elimina también el id guardado: un
+	/// formulario diligenciado como sede no debe seguir ligado al vehículo anterior.
+	$effect(() => {
+		if (
+			field.type === 'LOOKUP' &&
+			field.config.source === 'VEHICLE' &&
+			!fieldState.visible &&
+			!runner.readonly &&
+			valor != null
+		) {
+			runner.set(field.id, null, occurrenceId);
+		}
+	});
 
 	/**
 	 * Captura la ubicación actual.
@@ -120,7 +156,7 @@
 				{#if field.helpText}<p class="info__cuerpo">{field.helpText}</p>{/if}
 			</div>
 		{:else if cap.children}
-			<RepeatableGroupRenderer {field} {runner} {depth} />
+			<RepeatableGroupRenderer {field} {runner} {depth} {evidence} {lookup} />
 		{:else}
 			<div class="campo__cabecera">
 				<label class="campo__label" for={inputId}>
@@ -332,17 +368,29 @@
 					{/if}
 				</div>
 			{:else if field.type === 'LOOKUP'}
-				<!-- El selector real (conductor/vehículo/servicio) lo inyecta la página
-				     que conoce esos catálogos. Aquí se muestra el snapshot guardado. -->
-				<div class="lookup">
-					{#if valor && typeof valor === 'object'}
-						<span class="lookup__valor">
-							{(valor as any).placa ?? (valor as any).nombre ?? (valor as any).id}
-						</span>
-					{:else}
-						<span class="lookup__vacio">Sin seleccionar</span>
-					{/if}
-				</div>
+				{#if lookup}
+					{@render lookup({
+						field,
+						occurrenceId,
+						value: valor,
+						inputId,
+						disabled,
+						onSelect: onLookupSelect,
+						onClear: onLookupClear,
+						onBlur
+					})}
+				{:else}
+					<!-- En preview y recibos se conserva el snapshot guardado. -->
+					<div class="lookup">
+						{#if valor && typeof valor === 'object'}
+							<span class="lookup__valor">
+								{(valor as any).placa ?? (valor as any).nombre ?? (valor as any).id}
+							</span>
+						{:else}
+							<span class="lookup__vacio">Sin seleccionar</span>
+						{/if}
+					</div>
+				{/if}
 			{/if}
 
 			{#if errores.length}

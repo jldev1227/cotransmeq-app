@@ -42,7 +42,7 @@
 		fechaLocalDe,
 		formatearFechaCorta
 	} from '$lib/formularios/fecha-diligenciamiento';
-	import type { FormVersionDto } from '$lib/formularios/types';
+	import type { FormFieldDto, FormVersionDto } from '$lib/formularios/types';
 	import type { PreparedMedia } from '$lib/offline/forms-media';
 	import { ordenarPorEtiqueta } from '$lib/utils/ordenarOpciones';
 	import FormRenderer from '$lib/components/formularios/FormRenderer.svelte';
@@ -100,6 +100,34 @@
 	let guardando = $state(false);
 	let vehiculos = $state<{ id: string; placa: string }[]>([]);
 
+	function encontrarLookupVehiculo(version: FormVersionDto | null): FormFieldDto | null {
+		const visitar = (fields: FormFieldDto[]): FormFieldDto | null => {
+			for (const field of fields) {
+				if (
+					field.type === 'LOOKUP' &&
+					field.config.source === 'VEHICLE' &&
+					field.config.bindContext === 'vehicleId'
+				) return field;
+				const nested = visitar(field.children ?? []);
+				if (nested) return nested;
+			}
+			return null;
+		};
+		for (const section of version?.sections ?? []) {
+			const found = visitar(section.fields);
+			if (found) return found;
+		}
+		return null;
+	}
+
+	const lookupVehiculo = $derived(encontrarLookupVehiculo(definicion));
+
+	function idDeLookup(value: unknown): string {
+		return value && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'string'
+			? (value as { id: string }).id
+			: '';
+	}
+
 	let timerLocal: ReturnType<typeof setTimeout> | null = null;
 	/// Se salta el primer disparo del `$effect`: sembrar el runner cuenta como
 	/// cambio, y sin esta guarda cada apertura mandaría un PUT redundante.
@@ -139,7 +167,7 @@
 		}
 
 		fijarUrl();
-		if (contextoRequerido.includes('vehicleId')) await cargarVehiculos();
+		if (contextoRequerido.includes('vehicleId') || lookupVehiculo) await cargarVehiculos();
 		listoParaAutoguardar = true;
 	}
 
@@ -324,6 +352,27 @@
 
 	// ── Contexto ─────────────────────────────────────────────────────────────
 
+	/// Mantiene el contexto técnico en sync con el LOOKUP condicional. Si la rama
+	/// de vehículo se oculta, se quita el vehículo del borrador también.
+	$effect(() => {
+		const field = lookupVehiculo;
+		const currentRunner = runner;
+		if (!field || !currentRunner) return;
+		const answer = currentRunner.valueOf(field.id, null);
+		const id = idDeLookup(answer);
+		const placa = answer && typeof answer === 'object'
+			? String((answer as { placa?: unknown }).placa ?? '')
+			: '';
+		if (id) {
+			if (contexto.vehicleId !== id || contexto.vehiclePlate !== placa) {
+				contexto = { ...contexto, vehicleId: id, vehiclePlate: placa };
+			}
+		} else if (contexto.vehicleId || contexto.vehiclePlate) {
+			const { vehicleId: _vehicleId, vehiclePlate: _vehiclePlate, ...rest } = contexto;
+			contexto = rest;
+		}
+	});
+
 	async function cambiarVehiculo(vehicleId: string, placa?: string) {
 		const anterior = contexto.vehicleId;
 		if (anterior && anterior !== vehicleId && runner && runner.answers.size > 0) {
@@ -485,7 +534,7 @@
 	// ── Envío ────────────────────────────────────────────────────────────────
 
 	function faltaContexto(): string[] {
-		return contextoRequerido.filter((clave) => {
+		return contextoRequerido.filter((clave) => !(clave === 'vehicleId' && lookupVehiculo)).filter((clave) => {
 			const valor = contexto[clave];
 			return valor === undefined || valor === null || valor === '';
 		});
@@ -603,7 +652,7 @@
 				</output>
 			</div>
 
-			{#if contextoRequerido.includes('vehicleId')}
+			{#if contextoRequerido.includes('vehicleId') && !lookupVehiculo}
 				<div class="contexto__campo">
 					<span class="contexto__label">Vehículo <span class="req">*</span></span>
 					{#if vehiculos.length}
@@ -648,6 +697,47 @@
 						onadd={(media) => agregarEvidencia(field, occurrenceId, media)}
 						onremove={quitarEvidencia}
 					/>
+				{/snippet}
+				{#snippet lookup({ field, value, disabled, inputId, onSelect, onClear })}
+					{#if field.config.source === 'VEHICLE' && field.config.bindContext === 'vehicleId'}
+						{#if vehiculos.length}
+							<Autocomplete
+								options={vehiculoOptions}
+								value={idDeLookup(value)}
+								placeholder={value && typeof value === 'object'
+									? String((value as { placa?: unknown }).placa ?? '🔍 Buscar placa...')
+									: '🔍 Buscar placa...'}
+								disabled={disabled}
+								{inputId}
+								ariaLabel={field.label}
+								on:select={(e) => {
+									const placa = e.detail.placa ?? e.detail.label;
+									onSelect({ id: e.detail.id, placa });
+									cambiarVehiculo(e.detail.id, placa).catch(reportar);
+								}}
+								on:clear={() => {
+									onClear();
+									cambiarVehiculo('', '').catch(reportar);
+								}}
+							/>
+						{:else}
+							<div class="lookup">
+								<span class="lookup__vacio">
+									{value && typeof value === 'object'
+										? String((value as { placa?: unknown }).placa ?? 'Vehículo seleccionado')
+										: 'No hay vehículos disponibles para seleccionar.'}
+								</span>
+							</div>
+						{/if}
+					{:else}
+						<div class="lookup">
+							<span class="lookup__valor">
+								{value && typeof value === 'object'
+									? String((value as { placa?: unknown; nombre?: unknown; id?: unknown }).placa ?? (value as { nombre?: unknown }).nombre ?? (value as { id?: unknown }).id ?? '')
+									: 'Sin seleccionar'}
+							</span>
+						</div>
+					{/if}
 				{/snippet}
 			</FormRenderer>
 		</main>
