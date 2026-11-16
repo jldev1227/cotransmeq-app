@@ -34,6 +34,7 @@
 	import { toast } from 'svelte-sonner';
 	import { misFormulariosAPI, MisFormulariosError } from '$lib/api/mis-formularios';
 	import { invalidarMisFormularios } from '$lib/formularios/mis-formularios-cache';
+	import { nombreAsignacionVisible } from '$lib/formularios/assignment-display';
 	import { vehiculosAPI } from '$lib/api/apiClient';
 	import { createRunnerState, type RunnerState } from '$lib/formularios/runner-state.svelte';
 	import { computeProgress, type DraftAnswer } from '$lib/formularios/validate-answers';
@@ -151,7 +152,7 @@
 		const respuesta = await misFormulariosAPI.definicion(assignmentId);
 		definicion = respuesta.definition;
 		titulo = respuesta.definition.title;
-		codigo = respuesta.assignment.name;
+		codigo = nombreAsignacionVisible(respuesta.assignment.name) ?? '';
 		contextoRequerido = Object.entries(respuesta.assignment.contextSchema ?? {})
 			.filter(([, v]) => v?.required)
 			.map(([k]) => k);

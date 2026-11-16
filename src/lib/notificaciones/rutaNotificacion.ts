@@ -61,8 +61,8 @@ export function rutaDeNotificacion(n: NotificacionNavegable): RutaNotificacion |
 	if (ref === 'viatico_fondo') return { url: '/dashboard/viaticos' };
 	if (ref === 'solicitud_web') return { url: `/dashboard/solicitudes?solicitud=${id}` };
 	if (ref === 'ACCION_CORRECTIVA') return { url: `/dashboard/acciones-correctivas/${id}` };
-	if (ref.startsWith('PLAN_TRABAJO_OCURRENCIA')) {
-		const planId = ref.split(':')[1];
+	if (ref.startsWith('PLAN_TRABAJO_OCURRENCIA') || ref.startsWith('PLAN:')) {
+		const planId = ref.startsWith('PLAN:') ? ref.slice('PLAN:'.length) : ref.split(':')[1];
 		const params = new URLSearchParams({ ocurrenciaId: id });
 		if (planId) params.set('planId', planId);
 		return { url: `/dashboard/plan-trabajo?${params.toString()}` };

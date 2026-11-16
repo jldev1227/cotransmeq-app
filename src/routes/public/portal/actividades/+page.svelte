@@ -104,7 +104,7 @@
   {:else}
     <section class="activity-list" aria-label="Actividades asignadas">
       {#each actividades as actividad (actividad.id)}
-        <article id="actividad-{actividad.id}" class="activity-card">
+        <article id="actividad-{actividad.ocurrencia_id ?? actividad.id}" class="activity-card">
           <div class="card-top">
             <span class="program">{actividad.unidad_programa}</span>
             <span class:late={actividad.estado === 'ATRASADA'} class:done={actividad.estado === 'COMPLETADA'} class="status">
@@ -113,6 +113,10 @@
           </div>
           <h2>{actividad.actividad}</h2>
           <p class="due">Vence el {fecha(actividad.fecha_vencimiento)}</p>
+          <p class="due">Tu avance: <strong>{actividad.realizados ?? actividad.evidencias?.length ?? 0}/{actividad.cuota ?? 1}</strong> registros</p>
+          {#if actividad.cortes?.find((_: string, indice: number) => !actividad.ventanas?.includes(indice))}
+            <p class="due">Próximo corte: {fecha(actividad.cortes.find((_: string, indice: number) => !actividad.ventanas?.includes(indice)))}</p>
+          {/if}
           {#if actividad.roles?.length}<p class="due">Tu rol: {actividad.roles.map((rol: string) => rol === 'RESPONSABLE' ? 'Responsable' : rol === 'COLABORADOR' ? 'Colaborador' : 'Suplente').join(', ')}</p>{/if}
           {#if actividad.metodo_seguimiento}<p>{actividad.metodo_seguimiento}</p>{/if}
           {#if actividad.alcance}<p class="muted">Público de la actividad: {actividad.alcance}</p>{/if}
@@ -128,13 +132,15 @@
 
           {#if actividad.estado !== 'COMPLETADA' && actividad.estado !== 'NO_APLICA'}
             <div class="actions">
-              {#if actividad.requiere_evidencia}
+              {#if actividad.form_assignment_id}
+                <a class="upload" href="/public/portal/formularios/{actividad.form_assignment_id}">Diligenciar formulario</a>
+              {:else if actividad.requiere_evidencia || actividad.cuota > 1}
                 <label class="upload">
                   <span>{actividad.evidencias?.length ? 'Adjuntar otro soporte' : 'Adjuntar soporte requerido'}</span>
                   <input type="file" accept="application/pdf,image/*,.docx,.xlsx,.txt" onchange={(event) => adjuntar(actividad, event)} />
                 </label>
               {/if}
-              <button type="button" class="complete" onclick={() => completar(actividad)}>
+              <button type="button" class="complete" disabled={(actividad.cuota > 1 || actividad.form_assignment_id || actividad.requiere_evidencia) && (actividad.realizados ?? 0) < actividad.cuota} onclick={() => completar(actividad)}>
                 Marcar como completada
               </button>
             </div>

@@ -34,6 +34,7 @@
 		type SubmissionSummaryDto,
 		type VersionStatus
 	} from '$lib/formularios/types';
+	import { nombreAsignacionVisible } from '$lib/formularios/assignment-display';
 	import AssignmentEditor from '$lib/components/formularios/AssignmentEditor.svelte';
 	import ModalDuplicarFormulario from '$lib/components/formularios/ModalDuplicarFormulario.svelte';
 	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
@@ -569,6 +570,7 @@
 				{:else}
 					<ul class="tarjetas">
 						{#each asignaciones as a (a.id)}
+							{@const nombre = nombreAsignacionVisible(a.name)}
 							<li class="tarjeta">
 								<div class="tarjeta__cuerpo">
 									<div class="tarjeta__chips">
@@ -577,7 +579,9 @@
 										</span>
 										<span class="chip chip--neutro">{FREQUENCY_LABELS[a.frequency]}</span>
 									</div>
-									<p class="tarjeta__titulo">{a.name}</p>
+									{#if nombre}
+										<p class="tarjeta__titulo">{nombre}</p>
+									{/if}
 									<p class="tarjeta__meta">
 										<span class="nw">Versión v{a.version?.versionNumber}</span> ·
 										<span class="nw">{LIMIT_POLICY_LABELS[a.limitPolicy]}</span> ·

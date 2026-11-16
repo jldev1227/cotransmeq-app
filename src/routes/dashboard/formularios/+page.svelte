@@ -33,6 +33,7 @@
 	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { listadoEnvios, listadoFormularios } from '$lib/stores/volverListado';
+	import { authStore } from '$lib/stores/auth';
 	import { toast } from 'svelte-sonner';
 	import {
 		asignacionesFormularioAPI,
@@ -47,10 +48,12 @@
 		type SubmissionStatus,
 		type SubmissionSummaryDto
 	} from '$lib/formularios/types';
+	import { nombreAsignacionVisible } from '$lib/formularios/assignment-display';
 	import CabeceraFormularios from '$lib/components/formularios/CabeceraFormularios.svelte';
 	import MisFormularios from '$lib/components/formularios/MisFormularios.svelte';
 	import TarjetasMetricas from '$lib/components/formularios/TarjetasMetricas.svelte';
 	import type { Metrica } from '$lib/components/formularios/TarjetasMetricas.svelte';
+	import ImportarEnviosModal from '$lib/components/formularios/ImportarEnviosModal.svelte';
 	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 
 	/**
@@ -90,12 +93,16 @@
 	let total = $state(0);
 
 	let modalCrear = $state(false);
+	let modalImportar = $state(false);
 	const referenciasModal = $derived<EstadoModalURL[]>([
-		{ key: 'crear-formulario', open: modalCrear }
+		{ key: 'crear-formulario', open: modalCrear },
+		{ key: 'importar-envios', open: modalImportar }
 	]);
 	function aplicarReferenciaModal(referencia: { key: string } | null) {
 		modalCrear = referencia?.key === 'crear-formulario';
+		modalImportar = referencia?.key === 'importar-envios';
 	}
+	const puedeImportar = $derived(!!$authStore.user && authStore.getAccessLevel('formularios') === 'full');
 	let creando = $state(false);
 	let nuevoCode = $state('');
 	let nuevoNombre = $state('');
@@ -363,14 +370,14 @@
 	});
 
 	/// El filtro por asignación llega como uuid desde el listado de asignaciones.
-	/// Un uuid crudo en un chip no le dice nada a nadie, así que se resuelve su
-	/// nombre; si falla, el chip enseña el uuid recortado y el filtro sigue vivo.
+	/// El identificador técnico nunca se muestra en el chip; si no se puede
+	/// resolver un nombre visible, se indica únicamente que el filtro sigue activo.
 	async function nombrarAsignacion(id: string) {
 		try {
 			const a = await asignacionesFormularioAPI.obtener(id);
-			filtroAssignmentNombre = a.name;
+			filtroAssignmentNombre = nombreAsignacionVisible(a.name) ?? '';
 		} catch {
-			filtroAssignmentNombre = `${id.slice(0, 8)}…`;
+			filtroAssignmentNombre = '';
 		}
 	}
 
@@ -1041,7 +1048,9 @@
 					     desde el listado de asignaciones. Sin este chip sería un filtro
 					     invisible, y la lista parecería vacía sin motivo. -->
 					<span class="chip-filtro">
-						Asignación: {filtroAssignmentNombre || filtroAssignmentId.slice(0, 8)}
+						{filtroAssignmentNombre
+							? `Asignación: ${filtroAssignmentNombre}`
+							: 'Asignación filtrada'}
 						<button
 							type="button"
 							class="chip-filtro__x"
@@ -1075,6 +1084,11 @@
 							Limpiar filtros
 						</button>
 					{/if}
+					{#if puedeImportar}
+						<button type="button" class="btn btn--mini" onclick={() => (modalImportar = true)}>
+							Importar desde Transmeralda
+						</button>
+					{/if}
 					<button type="button" class="btn btn--mini" disabled={exportando} onclick={exportar}>
 						{exportando ? 'Generando…' : 'Exportar CSV'}
 					</button>
@@ -1106,6 +1120,7 @@
 						</thead>
 						<tbody>
 							{#each envios as envio (envio.id)}
+								{@const nombreAsignacion = nombreAsignacionVisible(envio.assignment?.name)}
 								<tr
 									class:fila--anulada={envio.status === 'VOIDED'}
 									class:fila--descartada={Boolean(envio.deletedAt)}
@@ -1113,7 +1128,9 @@
 									<td>
 										<span class="mono">{envio.version?.code ?? '—'}</span>
 										<span class="sub">
-											v{envio.version?.versionNumber} · {envio.assignment?.name ?? ''}
+											v{envio.version?.versionNumber}{#if nombreAsignacion}
+												 · {nombreAsignacion}
+											{/if}
 										</span>
 									</td>
 									<td>
@@ -1258,6 +1275,16 @@
 			</div>
 		</div>
 	</div>
+{/if}
+
+{#if modalImportar}
+	<ImportarEnviosModal
+		empresaOrigen="TRANSMERALDA"
+		previsualizar={enviosFormularioAPI.previsualizarImportacionTransmeralda}
+		ejecutarImportacion={enviosFormularioAPI.importarDesdeTransmeralda}
+		onclose={() => (modalImportar = false)}
+		onimported={() => void cargarEnvios()}
+	/>
 {/if}
 
 <style>

@@ -43,6 +43,7 @@
 	`tabla` y a las firmas.
 -->
 <script lang="ts">
+	import { esAsignacionDeImportacion } from '$lib/formularios/assignment-display';
 	import { toast } from 'svelte-sonner';
 	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
 	import { progresoEtapas, resolverEtapas, type Etapa } from '$lib/formularios/etapas';
@@ -663,10 +664,12 @@
 					{envio.businessDate ? formatearFecha(envio.businessDate) : '—'}
 				</dd>
 			</div>
-			<div class="ficha__par">
-				<dt>Asignación</dt>
-				<dd>{envio.assignment?.name ?? '—'}</dd>
-			</div>
+			{#if !esAsignacionDeImportacion(envio.assignment?.name)}
+				<div class="ficha__par">
+					<dt>Asignación</dt>
+					<dd>{envio.assignment?.name ?? '—'}</dd>
+				</div>
+			{/if}
 			<div class="ficha__par">
 				<dt>Entregado</dt>
 				<dd class="ficha__id">

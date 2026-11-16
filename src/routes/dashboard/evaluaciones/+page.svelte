@@ -16,6 +16,7 @@
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import AccionesFila from '$lib/components/listing/AccionesFila.svelte';
 	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
 	import CeldaIdentidad from '$lib/components/listing/CeldaIdentidad.svelte';
 	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
 	import PastillaTipo from '$lib/components/evaluaciones/PastillaTipo.svelte';
@@ -28,14 +29,18 @@
 	import { numero, opcion, texto, type DefinicionesFiltros } from '$lib/listing/filtros';
 
 	/**
-	 * Filtros en la URL: búsqueda, orden y página.
+	 * Filtros en la URL: búsqueda, fecha de creación, orden y página.
 	 *
-	 * Todo se resuelve en servidor —el endpoint acepta `search`, `sortBy`,
-	 * `sortOrder`, `page`—, así que la búsqueda va con retardo para no lanzar
+	 * Todo se resuelve en servidor —el endpoint acepta `search`, `desde`,
+	 * `hasta`, `sortBy`, `sortOrder` y `page`—, así que la búsqueda va con retardo para no lanzar
 	 * una petición por tecla.
 	 */
 	interface FiltrosEvaluaciones {
 		q: string;
+		periodo: string;
+		mes: string;
+		desde: string;
+		hasta: string;
 		orden: string;
 		dir: string;
 		pagina: number;
@@ -45,6 +50,10 @@
 
 	const DEFS: DefinicionesFiltros<FiltrosEvaluaciones> = {
 		q: texto(),
+		periodo: opcion('todo'),
+		mes: texto(),
+		desde: texto(),
+		hasta: texto(),
 		orden: opcion('created_at'),
 		dir: opcion('desc'),
 		pagina: numero(1)
@@ -121,6 +130,54 @@
 		filtros = { ...filtros, [clave]: valor, pagina: 1 };
 	}
 
+	function ponerFiltros(cambios: Partial<FiltrosEvaluaciones>) {
+		filtros = { ...filtros, ...cambios, pagina: 1 };
+	}
+
+	const SEGMENTOS_PERIODO = [
+		{ valor: 'todo', etiqueta: 'Todo' },
+		{ valor: 'mes', etiqueta: 'Mes' },
+		{ valor: 'rango', etiqueta: 'Periodo' }
+	];
+
+	function hoyLocal(): string {
+		const d = new Date();
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	}
+
+	function elegirPeriodo(valor: string) {
+		const hoy = hoyLocal();
+		if (valor === 'mes') ponerFiltros({ periodo: valor, mes: filtros.mes || hoy.slice(0, 7) });
+		else if (valor === 'rango') {
+			ponerFiltros({
+				periodo: valor,
+				desde: filtros.desde || `${hoy.slice(0, 7)}-01`,
+				hasta: filtros.hasta || hoy
+			});
+		} else {
+			ponerFiltros({ periodo: 'todo', mes: '', desde: '', hasta: '' });
+		}
+	}
+
+	/// La API recibe límites de fecha, aunque la interfaz permita elegir mes o rango.
+	const rango = $derived.by((): { desde?: string; hasta?: string } => {
+		if (filtros.periodo === 'mes' && /^\d{4}-\d{2}$/.test(filtros.mes)) {
+			const [anio, mes] = filtros.mes.split('-').map(Number);
+			const ultimo = new Date(anio, mes, 0).getDate();
+			return { desde: `${filtros.mes}-01`, hasta: `${filtros.mes}-${String(ultimo).padStart(2, '0')}` };
+		}
+		if (filtros.periodo === 'rango') {
+			return { desde: filtros.desde || undefined, hasta: filtros.hasta || undefined };
+		}
+		return {};
+	});
+
+	const hayFiltros = $derived(!!filtros.q || filtros.periodo !== 'todo');
+
+	function limpiarFiltros() {
+		filtros = { ...filtros, q: '', periodo: 'todo', mes: '', desde: '', hasta: '', pagina: 1 };
+	}
+
 	/// Solo se pinta la respuesta de la última petición: al pasar rápido de
 	/// página, una respuesta lenta de la anterior pisaba a la buena.
 	let ultimaPeticion = 0;
@@ -134,6 +191,7 @@
 				page: filtros.pagina,
 				limit: POR_PAGINA,
 				search: filtros.q || undefined,
+				...rango,
 				sortBy: filtros.orden as 'titulo' | 'created_at',
 				sortOrder: filtros.dir as 'asc' | 'desc'
 			});
@@ -164,10 +222,6 @@
 
 	function handlePageChange(pagina: number) {
 		filtros = { ...filtros, pagina };
-	}
-
-	function clearSearch() {
-		ponerFiltro('q', '');
 	}
 
 	function navigateToCrear() {
@@ -278,8 +332,43 @@
 				etiqueta="Buscar evaluaciones"
 			/>
 		</div>
-		{#if filtros.q}
-			<button class="btn-secondary" onclick={clearSearch}>Limpiar</button>
+		<div class="eval-periodo">
+			<SegmentosFiltro
+				etiqueta="Fecha"
+				opciones={SEGMENTOS_PERIODO}
+				valor={filtros.periodo}
+				onCambiar={elegirPeriodo}
+			/>
+			{#if filtros.periodo === 'mes'}
+				<input
+					type="month"
+					class="eval-fecha"
+					aria-label="Mes de creación"
+					value={filtros.mes}
+					onchange={(e) => e.currentTarget.value && ponerFiltro('mes', e.currentTarget.value)}
+				/>
+			{:else if filtros.periodo === 'rango'}
+				<input
+					type="date"
+					class="eval-fecha"
+					aria-label="Desde"
+					value={filtros.desde}
+					max={filtros.hasta || undefined}
+					onchange={(e) => ponerFiltro('desde', e.currentTarget.value)}
+				/>
+				<span class="eval-fecha-sep" aria-hidden="true">–</span>
+				<input
+					type="date"
+					class="eval-fecha"
+					aria-label="Hasta"
+					value={filtros.hasta}
+					min={filtros.desde || undefined}
+					onchange={(e) => ponerFiltro('hasta', e.currentTarget.value)}
+				/>
+			{/if}
+		</div>
+		{#if hayFiltros}
+			<button class="btn-secondary" onclick={limpiarFiltros}>Limpiar filtros</button>
 		{/if}
 	</div>
 
@@ -376,14 +465,14 @@
 						{@const img = mascota('vacio')}
 						<div class="dir-vacio">
 							<img src={img.src} alt={img.alt} width="418" height="418" />
-							<h3>{filtros.q ? 'Sin resultados' : 'No hay evaluaciones creadas'}</h3>
+							<h3>{hayFiltros ? 'Sin resultados' : 'No hay evaluaciones creadas'}</h3>
 							<p>
-								{filtros.q
-									? 'Ninguna evaluación coincide con la búsqueda.'
+								{hayFiltros
+									? 'Ninguna evaluación coincide con la búsqueda o el periodo elegido.'
 									: 'Crea la primera evaluación para aplicarla al personal.'}
 							</p>
-							{#if filtros.q}
-								<button class="btn-secondary" onclick={clearSearch}>Limpiar búsqueda</button>
+							{#if hayFiltros}
+								<button class="btn-secondary" onclick={limpiarFiltros}>Limpiar filtros</button>
 							{:else}
 								<button class="btn-primary" onclick={navigateToCrear}
 									>Crear primera evaluación</button
@@ -426,6 +515,29 @@
 />
 
 <style>
+	.eval-periodo {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.eval-fecha {
+		min-height: 40px;
+		padding: 0 0.7rem;
+		border: 1.5px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		font-family: inherit;
+		font-size: 0.85rem;
+		color: var(--text-primary);
+	}
+	.eval-fecha:focus-visible {
+		outline: none;
+		border-color: var(--au-dark);
+	}
+	.eval-fecha-sep {
+		color: var(--text-very-muted);
+	}
 	.eval-identidad {
 		/* Ancho fijo con tope: el título va en `nowrap`, y sin un ancho propio
 		   el mínimo de la columna sería el texto entero, que empuja la tabla

@@ -23,6 +23,7 @@
 		type SubmissionDetailDto
 	} from '$lib/formularios/types';
 	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
+	import { esAsignacionDeImportacion } from '$lib/formularios/assignment-display';
 	import { progresoEtapas, resolverEtapas } from '$lib/formularios/etapas';
 	import FormRenderer from '$lib/components/formularios/FormRenderer.svelte';
 	import PreviewEnvioPDF from '$lib/components/formularios/PreviewEnvioPDF.svelte';
@@ -447,98 +448,102 @@
 			</section>
 		{/if}
 
-		<!-- Auditoría al final: quien abre un envío viene a leer lo que se
-		     diligenció, no a comprobar identificadores. Los metadatos y la
-		     trazabilidad quedan disponibles pero fuera del camino. -->
-		<section class="ficha">
-			<dl class="ficha__lista">
-				<div class="ficha__par">
-					<dt>{envio.actor?.kind === 'USER' ? 'Diligenciado por' : 'Conductor'}</dt>
-					<dd>
-						{envio.actor?.nombre ?? '—'}
-						{#if envio.conductor?.numeroIdentificacion}
-							<span class="mono">({envio.conductor.numeroIdentificacion})</span>
-						{:else if envio.usuario?.correo}
-							<span class="mono">({envio.usuario.correo})</span>
-						{/if}
-					</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Vehículo</dt>
-					<dd class="mono">{envio.vehiculo?.placa ?? '—'}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Asignación</dt>
-					<dd>{envio.assignment?.name ?? '—'}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Fecha operativa</dt>
-					<dd class="mono">{envio.businessDate ?? '—'}</dd>
-				</div>
-				<div class="ficha__par">
-					<!-- Cuándo se EMPEZÓ, al lado de la fecha con la que cuenta el
-					     servidor. Difieren en el turno que cruza la medianoche y en el
-					     formulario diligenciado sin señal que se entrega días después. -->
-					<dt>Fecha formulario</dt>
-					<dd class="mono">{fechaDelFormulario ?? '—'}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Período</dt>
-					<dd class="mono">{envio.periodKey ?? '—'}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Iniciado</dt>
-					<dd class="mono">{fechaHora(envio.startedAt)}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Entregado</dt>
-					<dd class="mono">{fechaHora(envio.submittedAt)}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Dispositivo</dt>
-					<dd class="mono">{String(envio.device?.installationId ?? '—')}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Diligenciado sin conexión</dt>
-					<dd>{envio.device?.offlineCreated ? 'Sí' : 'No'}</dd>
-				</div>
-				{#if envio.supersedesSubmissionId}
+		<!-- Ficha y auditoría se agrupan al cierre; en escritorio ancho comparten
+		     la fila y en tablet/móvil conservan el apilado. -->
+		<div class="cierre">
+			<section class="ficha" aria-label="Detalles del envío">
+				<h2 class="bloque__titulo ficha__titulo">Ficha del envío</h2>
+				<dl class="ficha__lista">
 					<div class="ficha__par">
-						<dt>Corrige el envío</dt>
+						<dt>{envio.actor?.kind === 'USER' ? 'Diligenciado por' : 'Conductor'}</dt>
 						<dd>
-							<a href={`/dashboard/formularios/envios/${envio.supersedesSubmissionId}`}>
-								Ver el envío anterior
-							</a>
+							{envio.actor?.nombre ?? '—'}
+							{#if envio.conductor?.numeroIdentificacion}
+								<span class="mono">({envio.conductor.numeroIdentificacion})</span>
+							{:else if envio.usuario?.correo}
+								<span class="mono">({envio.usuario.correo})</span>
+							{/if}
 						</dd>
 					</div>
-				{/if}
-			</dl>
-		</section>
+					<div class="ficha__par">
+						<dt>Vehículo</dt>
+						<dd class="mono">{envio.vehiculo?.placa ?? '—'}</dd>
+					</div>
+					{#if !esAsignacionDeImportacion(envio.assignment?.name)}
+						<div class="ficha__par">
+							<dt>Asignación</dt>
+							<dd>{envio.assignment?.name ?? '—'}</dd>
+						</div>
+					{/if}
+					<div class="ficha__par">
+						<dt>Fecha operativa</dt>
+						<dd class="mono">{envio.businessDate ?? '—'}</dd>
+					</div>
+					<div class="ficha__par">
+						<!-- Cuándo se EMPEZÓ, al lado de la fecha con la que cuenta el
+						     servidor. Difieren en el turno que cruza la medianoche y en el
+						     formulario diligenciado sin señal que se entrega días después. -->
+						<dt>Fecha formulario</dt>
+						<dd class="mono">{fechaDelFormulario ?? '—'}</dd>
+					</div>
+					<div class="ficha__par">
+						<dt>Período</dt>
+						<dd class="mono">{envio.periodKey ?? '—'}</dd>
+					</div>
+					<div class="ficha__par">
+						<dt>Iniciado</dt>
+						<dd class="mono">{fechaHora(envio.startedAt)}</dd>
+					</div>
+					<div class="ficha__par">
+						<dt>Entregado</dt>
+						<dd class="mono">{fechaHora(envio.submittedAt)}</dd>
+					</div>
+					<div class="ficha__par">
+						<dt>Dispositivo</dt>
+						<dd class="mono">{String(envio.device?.installationId ?? '—')}</dd>
+					</div>
+					<div class="ficha__par">
+						<dt>Diligenciado sin conexión</dt>
+						<dd>{envio.device?.offlineCreated ? 'Sí' : 'No'}</dd>
+					</div>
+					{#if envio.supersedesSubmissionId}
+						<div class="ficha__par">
+							<dt>Corrige el envío</dt>
+							<dd>
+								<a href={`/dashboard/formularios/envios/${envio.supersedesSubmissionId}`}>
+									Ver el envío anterior
+								</a>
+							</dd>
+						</div>
+					{/if}
+				</dl>
+			</section>
 
-		<section class="bloque">
-			<h2 class="bloque__titulo">Auditoría</h2>
-			<!-- Rejilla de tres columnas y no una fila con `flex-wrap`: los eventos se
-			     leen en vertical («cuándo pasó cada cosa»), y con envoltura libre la
-			     fecha caía en una posición distinta en cada fila. -->
-			<ol class="eventos">
-				{#each envio.events as evento (evento.id)}
-					{@const detalle = resumenEvento(evento.payload)}
-					<li class="evento">
-						<span class="evento__tipo" title={evento.eventType}>
-							{EVENTOS[evento.eventType] ?? evento.eventType}
-						</span>
-						<span class="evento__actor">{ACTORES[evento.actorType] ?? evento.actorType}</span>
-						<span class="evento__fecha mono">{fechaHora(evento.createdAt)}</span>
-						{#if detalle}
-							<span class="evento__detalle">{detalle}</span>
-						{/if}
-					</li>
-				{/each}
-			</ol>
-			{#if envio.events.length === 0}
-				<p class="bloque__nota">Sin eventos registrados.</p>
-			{/if}
-		</section>
+			<section class="bloque">
+				<h2 class="bloque__titulo">Auditoría</h2>
+				<!-- Rejilla de tres columnas y no una fila con `flex-wrap`: los eventos se
+				     leen en vertical («cuándo pasó cada cosa»), y con envoltura libre la
+				     fecha caía en una posición distinta en cada fila. -->
+				<ol class="eventos">
+					{#each envio.events as evento (evento.id)}
+						{@const detalle = resumenEvento(evento.payload)}
+						<li class="evento">
+							<span class="evento__tipo" title={evento.eventType}>
+								{EVENTOS[evento.eventType] ?? evento.eventType}
+							</span>
+							<span class="evento__actor">{ACTORES[evento.actorType] ?? evento.actorType}</span>
+							<span class="evento__fecha mono">{fechaHora(evento.createdAt)}</span>
+							{#if detalle}
+								<span class="evento__detalle">{detalle}</span>
+							{/if}
+						</li>
+					{/each}
+				</ol>
+				{#if envio.events.length === 0}
+					<p class="bloque__nota">Sin eventos registrados.</p>
+				{/if}
+			</section>
+		</div>
 	{/if}
 </div>
 
@@ -799,10 +804,61 @@
 		border-radius: 14px;
 	}
 
+	.cierre {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.875rem;
+		align-items: start;
+	}
+
 	.ficha__lista {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 		gap: 0.625rem 1rem;
+	}
+
+	.ficha__titulo {
+		display: none;
+	}
+
+	@media (min-width: 1120px) and (hover: hover) and (pointer: fine) {
+		.ficha {
+			padding: 1rem 1.125rem;
+		}
+
+		.ficha__titulo {
+			display: block;
+			margin: 0 0 0.75rem;
+			font-size: 0.875rem;
+			font-weight: 750;
+			letter-spacing: -0.015em;
+			color: var(--text-primary, #0f172a);
+		}
+
+		.ficha__lista {
+			grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+			column-gap: 1.5rem;
+			row-gap: 0.875rem;
+		}
+
+		.ficha__par {
+			min-width: 0;
+		}
+
+		.ficha__par dd {
+			line-height: 1.4;
+			overflow-wrap: anywhere;
+		}
+	}
+
+	@media (min-width: 1280px) and (hover: hover) and (pointer: fine) {
+		.cierre {
+			grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+		}
+
+		.ficha__lista {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
 	}
 
 	.ficha__par dt {

@@ -1,9 +1,33 @@
 import { apiClient } from './apiClient';
+import type { Area } from '$lib/config/permissions';
 
 export type DestinatarioRol = 'RESPONSABLE' | 'COLABORADOR' | 'SUPLENTE';
+export type DestinatarioTipo = 'ADMIN' | 'CONDUCTOR';
 const ruta = (path = '') => `/api/plan-trabajo${path}`;
 
 export const planTrabajoApi = {
+	async misActividades() {
+		const { data } = await apiClient.get(ruta('/mis-actividades'));
+		return data.data as any[];
+	},
+	async participaciones(ocurrenciaId: string) {
+		const { data } = await apiClient.get(ruta(`/ocurrencias/${encodeURIComponent(ocurrenciaId)}/participaciones`));
+		return data.data as any[];
+	},
+	async configurarParticipacion(id: string, cuota: number, form_assignment_id: string | null) {
+		const { data } = await apiClient.patch(ruta(`/participaciones/${encodeURIComponent(id)}`), { cuota, form_assignment_id });
+		return data.data;
+	},
+	async completarPropia(id: string) {
+		const { data } = await apiClient.post(ruta(`/participaciones/${encodeURIComponent(id)}/completar`));
+		return data.data;
+	},
+	async subirEvidenciaPropia(id: string, archivo: File) {
+		const form = new FormData();
+		form.append('archivo', archivo);
+		const { data } = await apiClient.post(ruta(`/participaciones/${encodeURIComponent(id)}/evidencias`), form);
+		return data.data;
+	},
 	async listar() {
 		const { data } = await apiClient.get(ruta());
 		return data.data as any[];
@@ -42,6 +66,18 @@ export const planTrabajoApi = {
 			asignaciones
 		});
 	},
+	async asignarCargos(
+		planId: string,
+		configuraciones: {
+			cargo: string;
+			area: Area | null;
+			asignaciones: { usuario_id: string; rol: Exclude<DestinatarioRol, 'RESPONSABLE'> }[];
+		}[]
+	) {
+		await apiClient.put(ruta(`/${encodeURIComponent(planId)}/cargos/lote`), {
+			configuraciones
+		});
+	},
 	async activar(planId: string) {
 		await apiClient.post(ruta(`/${encodeURIComponent(planId)}/activar`));
 	},
@@ -56,6 +92,22 @@ export const planTrabajoApi = {
 		await apiClient.put(ruta(`/ocurrencias/${encodeURIComponent(ocurrenciaId)}/conductores`), {
 			asignaciones
 		});
+	},
+	async asignarDestinatarios(
+		ocurrenciaId: string,
+		asignaciones: { destinatario_tipo: DestinatarioTipo; destinatario_id: string; rol: DestinatarioRol }[]
+	) {
+		const { data } = await apiClient.put(
+			ruta(`/ocurrencias/${encodeURIComponent(ocurrenciaId)}/asignaciones`),
+			{ asignaciones }
+		);
+		return data.data as {
+			asignados: number;
+			asignaciones: number;
+			administradoresNotificados: number;
+			conductoresNotificados: number;
+			notificados: number;
+		};
 	},
 	async completar(ocurrenciaId: string) {
 		await apiClient.patch(ruta(`/ocurrencias/${encodeURIComponent(ocurrenciaId)}/completar`));

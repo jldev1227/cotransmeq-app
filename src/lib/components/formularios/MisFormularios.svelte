@@ -35,7 +35,6 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
-	import { authStore } from '$lib/stores/auth';
 	import { mascota } from '$lib/mascot';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { Search, ChevronRight, RefreshCw, Trash2 } from 'lucide-svelte';
@@ -68,7 +67,7 @@
 		 */
 		sincronizarUrl?: boolean;
 		/**
-		 * Pintar la cabecera de bienvenida (saludo, mascota y cifras) encima de la
+		 * Pintar la cabecera de la página y sus cifras encima de la
 		 * lista. La enciende la ruta propia; la pestaña de `/dashboard/formularios`
 		 * ya tiene su propia cabecera y solo quiere la lista.
 		 */
@@ -314,9 +313,6 @@
 	const disponibles = $derived(visibles.filter((a) => a.dueState === 'AVAILABLE'));
 	const completados = $derived(visibles.filter((a) => a.dueState !== 'AVAILABLE'));
 
-	/** Primer nombre para el saludo, como en la app móvil. */
-	const primerNombre = $derived(($authStore.user?.nombre ?? '').trim().split(/\s+/)[0] || '');
-
 	/// Cifras de la cabecera. Las de `meta` las calcula el servidor sobre todo
 	/// lo asignado; si aún no llegaron se cuenta sobre lo cargado.
 	const cifras = $derived({
@@ -353,14 +349,15 @@
 <section class="mis">
 	{#if conCabecera}
 		{@const saludo = mascota('procesando')}
-		<!-- Cabecera de la app móvil: bloque oscuro con el saludo y la mascota,
-		     y debajo las tres cifras del día. -->
+		<!-- La cabecera identifica la tarea; el nombre de la persona ya está en el
+		     encabezado global del dashboard. En escritorio se compacta y deja el
+		     espacio para la lista; en móvil conserva la ilustración. -->
 		<header class="mis-hero">
 			<div class="mis-hero-glow" aria-hidden="true"></div>
 			<div class="mis-hero-texto">
 				<span class="mis-hero-eyebrow">Centro de operaciones</span>
-				<h1 class="mis-hero-titulo">Hola{primerNombre ? `, ${primerNombre}` : ''}</h1>
-				<p class="mis-hero-sub">Tus formatos, borradores y tareas de hoy en un solo lugar.</p>
+				<h1 class="mis-hero-titulo">Mis formularios</h1>
+				<p class="mis-hero-sub">Asignaciones, borradores y formatos listos para diligenciar.</p>
 			</div>
 			<img class="mis-hero-mascota" src={saludo.src} alt={saludo.alt} width="418" height="418" />
 		</header>
@@ -630,6 +627,11 @@
 		flex-direction: column;
 		gap: 0.9rem;
 	}
+	@media (min-width: 900px) {
+		.mis {
+			gap: 1.2rem;
+		}
+	}
 
 	/* ── Cabecera: el hero de la app ── */
 	.mis-hero {
@@ -687,6 +689,60 @@
 		font-size: 0.92rem;
 		line-height: 1.5;
 		color: var(--au-hero-text);
+	}
+	@media (min-width: 900px) {
+		.mis-hero {
+			align-items: center;
+			min-height: 0;
+			padding: 0 0 1.15rem;
+			border: 0;
+			border-bottom: 1px solid var(--border-subtle);
+			border-radius: 0;
+			background: transparent;
+			color: var(--text-primary);
+			isolation: auto;
+		}
+		.mis-hero-glow,
+		.mis-hero-mascota {
+			display: none;
+		}
+		.mis-hero-texto {
+			max-width: none;
+			gap: 0.3rem;
+		}
+		.mis-hero-eyebrow {
+			color: var(--text-muted);
+		}
+		.mis-hero-titulo {
+			font-size: clamp(1.8rem, 2.2vw, 2.35rem);
+			color: var(--text-primary);
+		}
+		.mis-hero-sub {
+			font-size: 0.95rem;
+			color: var(--text-muted);
+		}
+		.mis-cifras {
+			grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+			gap: 0.75rem;
+			margin-top: 0;
+			padding: 0;
+		}
+		.mis-cifra {
+			flex-direction: row;
+			align-items: baseline;
+			justify-content: flex-start;
+			gap: 0.75rem;
+			padding: 1rem 1.15rem;
+			border-radius: 16px;
+			box-shadow: none;
+			text-align: left;
+		}
+		.mis-cifra-valor {
+			font-size: 1.75rem;
+		}
+		.mis-cifra-label {
+			font-size: 0.82rem;
+		}
 	}
 	.mis-hero-mascota {
 		position: absolute;
@@ -797,6 +853,15 @@
 		align-items: center;
 		gap: 0.6rem;
 	}
+	@media (min-width: 900px) {
+		.mis-controles {
+			gap: 0.55rem;
+			padding: 0.65rem;
+			background: var(--bg-surface);
+			border: 1px solid var(--border-subtle);
+			border-radius: 16px;
+		}
+	}
 	.mis-buscador {
 		display: flex;
 		align-items: center;
@@ -828,6 +893,14 @@
 	}
 	.mis-buscador input::placeholder {
 		color: var(--text-very-muted);
+	}
+	@media (min-width: 900px) {
+		.mis-buscador {
+			flex: 1 1 18rem;
+			max-width: none;
+			min-height: 44px;
+			border-radius: 12px;
+		}
 	}
 	.mis-segmentos {
 		display: inline-flex;
@@ -911,20 +984,15 @@
 	/* ── Tarjetas: la lista de la app ── */
 	.mis-lista {
 		display: grid;
-		grid-template-columns: 1fr;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
 		gap: 0.75rem;
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
-	@media (min-width: 1024px) {
+	@media (min-width: 900px) {
 		.mis-lista {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
-	}
-	@media (min-width: 1536px) {
-		.mis-lista {
-			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: 0.85rem;
 		}
 	}
 	.mis-tarjeta {
@@ -941,6 +1009,14 @@
 			box-shadow 0.15s ease;
 		content-visibility: auto;
 		contain-intrinsic-size: auto 9rem;
+	}
+	@media (min-width: 900px) {
+		.mis-tarjeta {
+			gap: 0.55rem;
+			padding: 0.85rem;
+			border-radius: 16px;
+			box-shadow: 0 2px 12px rgba(0, 0, 0, 0.035);
+		}
 	}
 	.mis-tarjeta:hover {
 		border-color: rgba(var(--au-primary-rgb), 0.35);
@@ -1124,6 +1200,41 @@
 	}
 	.mis-tarjeta-accion--otro:hover {
 		background: var(--au-tint);
+	}
+	@media (min-width: 900px) {
+		.mis-tarjeta-cabeza {
+			gap: 0.65rem;
+		}
+		.mis-insignia {
+			width: 40px;
+			height: 40px;
+			border-radius: 11px;
+			font-size: 0.9rem;
+		}
+		.mis-tarjeta-titulo {
+			font-size: 0.92rem;
+		}
+		.mis-tarjeta-meta {
+			font-size: 0.68rem;
+		}
+		.mis-tarjeta-pie {
+			gap: 0.35rem;
+		}
+		.mis-pill {
+			padding: 0.25rem 0.55rem;
+			font-size: 0.68rem;
+		}
+		.mis-tarjeta-estado {
+			font-size: 0.72rem;
+		}
+		.mis-tarjeta-accion {
+			align-self: flex-end;
+			min-height: 36px;
+			padding: 0 0.85rem;
+			border-radius: 10px;
+			font-size: 0.8rem;
+			box-shadow: none;
+		}
 	}
 
 	.mis-mas {

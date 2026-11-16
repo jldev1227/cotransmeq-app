@@ -25,6 +25,7 @@
 		type AssignmentDto,
 		type AssignmentStatus
 	} from '$lib/formularios/types';
+	import { nombreAsignacionVisible } from '$lib/formularios/assignment-display';
 	import { AREA_LABELS, type Area } from '$lib/config/permissions';
 
 	let asignaciones = $state<AssignmentDto[]>([]);
@@ -92,7 +93,7 @@
 		if (
 			accion === 'cerrar' &&
 			!(await confirmar({
-				title: `¿Cerrar «${a.name}»?`,
+				title: `¿Cerrar «${nombreAsignacionVisible(a.name) ?? 'la asignación'}»?`,
 				message: 'Es definitivo: no se puede reabrir y los conductores dejan de verla.',
 				tone: 'warning',
 				confirmText: 'Cerrar asignación'
@@ -230,11 +231,14 @@
 	{:else}
 		<ul class="lista">
 			{#each asignaciones as a (a.id)}
+				{@const nombre = nombreAsignacionVisible(a.name)}
 				<li class="item">
 					<div class="item__cuerpo">
 						<div class="item__titulos">
 							<span class="item__code">{a.version?.code ?? '—'} v{a.version?.versionNumber}</span>
-							<p class="item__nombre">{a.name}</p>
+							{#if nombre}
+								<p class="item__nombre">{nombre}</p>
+							{/if}
 						</div>
 						<p class="item__meta">
 							{FREQUENCY_LABELS[a.frequency]} · {LIMIT_POLICY_LABELS[a.limitPolicy]} · {audiencia(a)}

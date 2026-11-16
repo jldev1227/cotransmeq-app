@@ -18,13 +18,19 @@
 	import { numero, opcion, texto, type DefinicionesFiltros } from '$lib/listing/filtros';
 	import { coincide } from '$lib/listing/texto';
 	import { toast } from '$lib/stores/toast';
-	import { planTrabajoApi, type DestinatarioRol } from '$lib/api/plan-trabajo';
-	import type { Area } from '$lib/config/permissions';
+	import { asignacionesFormularioAPI } from '$lib/api/formularios';
+	import {
+		planTrabajoApi,
+		type DestinatarioRol,
+		type DestinatarioTipo
+	} from '$lib/api/plan-trabajo';
+	import { AREA_LABELS, type Area } from '$lib/config/permissions';
 
 	let planes = $state<any[]>([]);
 	let planId = $state('');
 	let gestion = $state<any>(null);
 	let indicadores = $state<any[]>([]);
+	let formulariosActivos = $state<{ id: string; name: string }[]>([]);
 	let cargando = $state(true);
 	let ocupada = $state(false);
 	let error = $state('');
@@ -32,13 +38,31 @@
 	interface FiltrosActividades {
 		q: string;
 		estado: 'TODAS' | 'PENDIENTES' | 'ATRASADAS' | 'COMPLETADAS' | 'NO_APLICA';
+		enfoque: 'TODOS' | 'HSEQ' | 'PESV';
+		mes: number;
 		pagina: number;
 		porPagina: number;
 		actividad: string;
 	}
+	const MESES_PLAN = [
+		'Ene',
+		'Feb',
+		'Mar',
+		'Abr',
+		'May',
+		'Jun',
+		'Jul',
+		'Ago',
+		'Sep',
+		'Oct',
+		'Nov',
+		'Dic'
+	];
 	const DEFS_ACTIVIDADES: DefinicionesFiltros<FiltrosActividades> = {
 		q: texto(),
 		estado: opcion<FiltrosActividades['estado']>('TODAS'),
+		enfoque: opcion<FiltrosActividades['enfoque']>('TODOS'),
+		mes: numero(0),
 		pagina: numero(1),
 		porPagina: numero(20),
 		actividad: texto()
@@ -49,29 +73,79 @@
 	$effect(() => estadoUrlActividades.escribir(page.url, filtrosActividades));
 	let selectorCargoActivo = $state('');
 	let cargoExpandido = $state('');
-	let configuracionAreasAbierta = $state(false);
+	let configuracionAreasAbierta = $state(true);
+	let busquedaCargos = $state('');
+	let filtroCargos = $state<'TODOS' | 'PENDIENTES' | 'LISTOS'>('TODOS');
+	let areaFiltroCargo = $state<Area | ''>('');
+	let areaMasiva = $state<Area | ''>('');
+	let cargosSeleccionados = $state<string[]>([]);
+	let guardandoCargos = $state(false);
 	let busquedaUsuariosCargo = $state<Record<string, string>>({});
 	let areasPorCargo = $state<Record<string, Area | ''>>({});
 	let rolesSeleccionados = $state<Record<string, Record<DestinatarioRol, string[]>>>({});
 	let conductoresSeleccionados = $state<Record<string, Record<DestinatarioRol, string[]>>>({});
+	let usuariosSeleccionadosOcurrencia = $state<Record<string, Record<DestinatarioRol, string[]>>>({});
 	let rolActivoPorOcurrencia = $state<Record<string, DestinatarioRol>>({});
+	let tipoDestinatarioActivo = $state<Record<string, DestinatarioTipo>>({});
+	let busquedaDestinatarios = $state<Record<string, string>>({});
+	let guardandoAsignaciones = $state('');
 	let trimestre = $state<number | null>(Math.ceil((new Date().getMonth() + 1) / 3));
 	let bandas = $state<Record<number, { adecuado: string; riesgo: string; critico: string }>>({});
 	let manual = $state<Record<number, { cumple: boolean; observacion: string; id?: string }>>({
 		1: { cumple: false, observacion: '' },
 		2: { cumple: false, observacion: '' }
 	});
+	const roles: DestinatarioRol[] = ['RESPONSABLE', 'COLABORADOR', 'SUPLENTE'];
+	const rolesConfigurables: DestinatarioRol[] = ['COLABORADOR', 'SUPLENTE'];
 	let areasSinResponsable = $derived(
-		(gestion?.areas ?? []).filter(
-			(area: any) => !area.responsable?.activo || !area.responsable.area?.includes(area.area)
-		)
+		(gestion?.areas ?? []).filter((area: any) => !responsableValido(area))
 	);
 	let cargosSinArea = $derived(
 		(gestion?.cargos ?? []).filter((grupo: any) => !areasPorCargo[grupo.cargo])
 	);
+	let cargosListos = $derived(
+		(gestion?.cargos ?? []).filter((grupo: any) => {
+			const area = gestion.areas.find((item: any) => item.area === areasPorCargo[grupo.cargo]);
+			return Boolean(area && responsableValido(area));
+		})
+	);
+	let cargosPendientes = $derived((gestion?.cargos ?? []).length - cargosListos.length);
+	let cargosConCambios = $derived(
+		(gestion?.cargos ?? []).filter((grupo: any) => {
+			if ((grupo.area ?? '') !== (areasPorCargo[grupo.cargo] ?? '')) return true;
+			return rolesConfigurables.some((rol) => {
+				const guardadas = grupo.asignaciones
+					.filter((asignacion: any) => asignacion.rol === rol)
+					.map((asignacion: any) => asignacion.usuario_id)
+					.sort();
+				const borrador = [...(rolesSeleccionados[grupo.cargo]?.[rol] ?? [])].sort();
+				return (
+					guardadas.length !== borrador.length ||
+					guardadas.some((id: string, indice: number) => id !== borrador[indice])
+				);
+			});
+		})
+	);
+	let cargosVisibles = $derived(
+		(gestion?.cargos ?? []).filter((grupo: any) => {
+			const area = gestion.areas.find((item: any) => item.area === areasPorCargo[grupo.cargo]);
+			const listo = Boolean(area && responsableValido(area));
+			if (filtroCargos === 'PENDIENTES' && listo) return false;
+			if (filtroCargos === 'LISTOS' && !listo) return false;
+			if (areaFiltroCargo && area?.area !== areaFiltroCargo) return false;
+			return coincide(busquedaCargos, [grupo.cargo, area?.etiqueta, area?.responsable?.nombre]);
+		})
+	);
+	let todosLosVisiblesSeleccionados = $derived(
+		cargosVisibles.length > 0 &&
+			cargosVisibles.every((grupo: any) => cargosSeleccionados.includes(grupo.cargo))
+	);
 
-	const roles: DestinatarioRol[] = ['RESPONSABLE', 'COLABORADOR', 'SUPLENTE'];
-	const rolesConfigurables: DestinatarioRol[] = ['COLABORADOR', 'SUPLENTE'];
+	const filtrosCargos = [
+		{ id: 'TODOS', label: 'Todos' },
+		{ id: 'PENDIENTES', label: 'Pendientes' },
+		{ id: 'LISTOS', label: 'Listos' }
+	] as const;
 	const filtrosActividad = [
 		{ id: 'TODAS', label: 'Todas' },
 		{ id: 'PENDIENTES', label: 'Pendientes' },
@@ -79,21 +153,200 @@
 		{ id: 'COMPLETADAS', label: 'Completadas' },
 		{ id: 'NO_APLICA', label: 'No aplica' }
 	] as const;
+	let resumenPanorama = $derived.by(() => {
+		const actividades = gestion?.plan.actividades ?? [];
+		return (['HSEQ', 'PESV'] as const).map((enfoque) => {
+			const grupo = actividades.filter((actividad: any) =>
+				enfoque === 'PESV' ? actividad.es_pesv : !actividad.es_pesv
+			);
+			const meses = MESES_PLAN.map((nombre, indice) => {
+				const ocurrencias = grupo.flatMap((actividad: any) =>
+					actividad.ocurrencias.filter((ocurrencia: any) => Number(ocurrencia.mes) === indice + 1)
+				);
+				const completadas = ocurrencias.filter(
+					(ocurrencia: any) => ocurrencia.estado === 'COMPLETADA'
+				).length;
+				return {
+					numero: indice + 1,
+					nombre,
+					total: ocurrencias.length,
+					completadas,
+					atrasadas: ocurrencias.filter((ocurrencia: any) => estaAtrasada(ocurrencia)).length,
+					avance: ocurrencias.length ? Math.round((completadas / ocurrencias.length) * 100) : 0
+				};
+			});
+			return {
+				enfoque,
+				actividades: grupo.length,
+				ocurrencias: meses.reduce((total, mes) => total + mes.total, 0),
+				completadas: meses.reduce((total, mes) => total + mes.completadas, 0),
+				meses
+			};
+		});
+	});
+	let totalesPanorama = $derived.by(() =>
+		resumenPanorama.reduce(
+			(total, fila) => ({
+				actividades: total.actividades + fila.actividades,
+				ocurrencias: total.ocurrencias + fila.ocurrencias,
+				completadas: total.completadas + fila.completadas
+			}),
+			{ actividades: 0, ocurrencias: 0, completadas: 0 }
+		)
+	);
+
+	function fechaPlanSegura(valor: unknown): Date | null {
+		const fecha = valor instanceof Date ? valor.toISOString().slice(0, 10) : String(valor ?? '').slice(0, 10);
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return null;
+		const resultado = new Date(`${fecha}T12:00:00`);
+		return Number.isNaN(resultado.getTime()) ? null : resultado;
+	}
+
+	function etiquetaVencimiento(valor: unknown) {
+		const fecha = fechaPlanSegura(valor);
+		return fecha ? `Vence ${fecha.toLocaleDateString('es-CO')}` : 'Vencimiento pendiente';
+	}
 
 	function estaAtrasada(ocurrencia: any) {
 		if (ocurrencia.estado !== 'PENDIENTE') return false;
-		const vencimiento = new Date(`${ocurrencia.fecha_vencimiento}T00:00:00`);
+		const vencimiento = fechaPlanSegura(ocurrencia.fecha_vencimiento);
+		if (!vencimiento) return false;
 		const hoy = new Date();
 		hoy.setHours(0, 0, 0, 0);
 		return vencimiento < hoy;
+	}
+
+	function personasDisponibles(ocurrenciaId: string, tipo: DestinatarioTipo) {
+		const busqueda = busquedaDestinatarios[ocurrenciaId] ?? '';
+		if (tipo === 'ADMIN') {
+			return (gestion?.usuarios ?? [])
+				.filter((usuario: any) =>
+					coincide(busqueda, [usuario.nombre, usuario.cargo, usuario.correo, usuario.area])
+				)
+				.map((usuario: any) => {
+					const areas = Array.isArray(usuario.area)
+						? usuario.area
+						: usuario.area
+							? [usuario.area]
+							: [];
+					const detalle = [
+						usuario.cargo,
+						areas.map((area: string) => AREA_LABELS[area as Area] ?? area).join(' · '),
+						usuario.correo
+					]
+						.filter(Boolean)
+						.join(' · ');
+					return { id: usuario.id, nombre: usuario.nombre, detalle: detalle || 'Equipo administrativo' };
+				});
+		}
+		return (gestion?.conductores ?? [])
+			.filter((conductor: any) =>
+				coincide(busqueda, [conductor.nombre, conductor.apellido, conductor.numero_identificacion])
+			)
+			.map((conductor: any) => ({
+				id: conductor.id,
+				nombre: `${conductor.nombre} ${conductor.apellido}`.trim(),
+				detalle: conductor.numero_identificacion || 'Conductor'
+			}));
+	}
+
+	function cantidadAsignada(ocurrenciaId: string, rol: DestinatarioRol) {
+		return (
+			(usuariosSeleccionadosOcurrencia[ocurrenciaId]?.[rol]?.length ?? 0) +
+			(conductoresSeleccionados[ocurrenciaId]?.[rol]?.length ?? 0)
+		);
+	}
+
+	function cambiarDestinatario(
+		ocurrenciaId: string,
+		rol: DestinatarioRol,
+		tipo: DestinatarioTipo,
+		destinatarioId: string,
+		event: Event
+	) {
+		const destino = tipo === 'ADMIN' ? usuariosSeleccionadosOcurrencia : conductoresSeleccionados;
+		const actuales = destino[ocurrenciaId]?.[rol] ?? [];
+		const marcado = (event.currentTarget as HTMLInputElement).checked;
+		destino[ocurrenciaId][rol] = marcado
+			? [...new Set([...actuales, destinatarioId])]
+			: actuales.filter((id) => id !== destinatarioId);
+	}
+
+	function cambiarTipoDestinatario(ocurrenciaId: string, tipo: DestinatarioTipo) {
+		tipoDestinatarioActivo[ocurrenciaId] = tipo;
+		busquedaDestinatarios[ocurrenciaId] = '';
+	}
+
+	async function irAConfiguracionCargo(cargo: string) {
+		if (!cargo) return;
+		configuracionAreasAbierta = true;
+		filtroCargos = 'TODOS';
+		areaFiltroCargo = '';
+		busquedaCargos = '';
+		cargoExpandido = cargo.trim();
+		await tick();
+		document
+			.getElementById(`cargo-grupo-${encodeURIComponent(cargo.trim())}`)
+			?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+	}
+
+	function responsableValido(area: any) {
+		return Boolean(area?.responsable?.activo && area.responsable.area?.includes(area.area));
+	}
+
+	function iniciarBorradoresCargos(cargos: any[]) {
+		const cargosBorrador: typeof rolesSeleccionados = {};
+		const areasSeleccionadas: Record<string, Area | ''> = {};
+		for (const grupo of cargos) {
+			cargosBorrador[grupo.cargo] = { RESPONSABLE: [], COLABORADOR: [], SUPLENTE: [] };
+			areasSeleccionadas[grupo.cargo] = grupo.area ?? '';
+			for (const asignacion of grupo.asignaciones)
+				cargosBorrador[grupo.cargo][asignacion.rol as DestinatarioRol]?.push(asignacion.usuario_id);
+		}
+		rolesSeleccionados = cargosBorrador;
+		areasPorCargo = areasSeleccionadas;
+	}
+
+	function seleccionarCargosVisibles() {
+		const visibles = new Set<string>(cargosVisibles.map((grupo: any) => String(grupo.cargo)));
+		cargosSeleccionados = todosLosVisiblesSeleccionados
+			? cargosSeleccionados.filter((cargo) => !visibles.has(cargo))
+			: [...new Set([...cargosSeleccionados, ...visibles])];
+	}
+
+	function alternarSeleccionCargo(cargo: string, event: Event) {
+		const seleccionados = new Set(cargosSeleccionados);
+		const marcado = (event.currentTarget as HTMLInputElement).checked;
+		if (marcado) seleccionados.add(cargo);
+		else seleccionados.delete(cargo);
+		cargosSeleccionados = [...seleccionados];
+	}
+
+	function aplicarAreaMasiva() {
+		if (!areaMasiva || !cargosSeleccionados.length) return;
+		areasPorCargo = {
+			...areasPorCargo,
+			...Object.fromEntries(cargosSeleccionados.map((cargo) => [cargo, areaMasiva]))
+		};
 	}
 
 	function porcentajeVisual(valor: number | null | undefined) {
 		return Math.min(100, Math.max(0, valor ?? 0));
 	}
 
+	function enlaceHttp(value: string | null | undefined) {
+		if (!value) return '';
+		try {
+			const url = new URL(value.trim());
+			return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : '';
+		} catch {
+			return '';
+		}
+	}
+
 	function ocurrenciasVisibles(actividad: any) {
 		return actividad.ocurrencias.filter((ocurrencia: any) => {
+			if (filtrosActividades.mes && Number(ocurrencia.mes) !== filtrosActividades.mes) return false;
 			switch (filtrosActividades.estado) {
 				case 'PENDIENTES':
 					return ocurrencia.estado === 'PENDIENTE' && !estaAtrasada(ocurrencia);
@@ -110,6 +363,8 @@
 	}
 
 	function coincideActividad(actividad: any) {
+		if (filtrosActividades.enfoque === 'PESV' && !actividad.es_pesv) return false;
+		if (filtrosActividades.enfoque === 'HSEQ' && actividad.es_pesv) return false;
 		const campos = [
 			actividad.actividad,
 			actividad.responsable_cargos,
@@ -122,12 +377,39 @@
 					`${ocurrencia.mes} ${ocurrencia.estado} ${ocurrencia.fecha_vencimiento}`
 			)
 		];
-		return coincide(filtrosActividades.q, campos) && ocurrenciasVisibles(actividad).length > 0;
+		const filtraOcurrencias = filtrosActividades.estado !== 'TODAS' || filtrosActividades.mes > 0;
+		return (
+			coincide(filtrosActividades.q, campos) &&
+			(!filtraOcurrencias || ocurrenciasVisibles(actividad).length > 0)
+		);
 	}
 
 	let actividadesFiltradas = $derived.by(
 		() => gestion?.plan.actividades.filter(coincideActividad) ?? []
 	);
+
+	async function abrirMesPanorama(enfoque: 'HSEQ' | 'PESV', mes: number) {
+		filtrosActividades = {
+			...filtrosActividades,
+			q: '',
+			estado: 'TODAS',
+			enfoque,
+			mes,
+			pagina: 1,
+			actividad: ''
+		};
+		busquedaActividades = '';
+		await tick();
+		document.getElementById('actividades')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	function cambiarFiltroEnfoque(enfoque: FiltrosActividades['enfoque']) {
+		filtrosActividades = { ...filtrosActividades, enfoque, pagina: 1, actividad: '' };
+	}
+
+	function cambiarFiltroMes(mes: number) {
+		filtrosActividades = { ...filtrosActividades, mes, pagina: 1, actividad: '' };
+	}
 	let totalPaginasActividades = $derived(
 		Math.max(
 			1,
@@ -285,30 +567,30 @@
 					critico: indicador.bandas_referencia?.critico ?? ''
 				};
 			bandas = referencias;
-			const cargos: typeof rolesSeleccionados = {};
-			const areasSeleccionadas: Record<string, Area | ''> = {};
-			for (const grupo of gestion.cargos) {
-				cargos[grupo.cargo] = { RESPONSABLE: [], COLABORADOR: [], SUPLENTE: [] };
-				areasSeleccionadas[grupo.cargo] = grupo.area ?? '';
-				for (const asignacion of grupo.asignaciones)
-					cargos[grupo.cargo][asignacion.rol as DestinatarioRol]?.push(asignacion.usuario_id);
-			}
-			rolesSeleccionados = cargos;
-			areasPorCargo = areasSeleccionadas;
+			iniciarBorradoresCargos(gestion.cargos);
 			const drivers: Record<string, Record<DestinatarioRol, string[]>> = {};
+			const admins: Record<string, Record<DestinatarioRol, string[]>> = {};
+			const tipoActivo: Record<string, DestinatarioTipo> = {};
 			for (const actividad of gestion.plan.actividades) {
 				for (const ocurrencia of actividad.ocurrencias) {
 					drivers[ocurrencia.id] = { RESPONSABLE: [], COLABORADOR: [], SUPLENTE: [] };
-					for (const asignacion of ocurrencia.asignaciones.filter(
-						(a: any) => a.destinatario_tipo === 'CONDUCTOR'
-					)) {
-						drivers[ocurrencia.id][asignacion.rol as DestinatarioRol]?.push(
+					admins[ocurrencia.id] = { RESPONSABLE: [], COLABORADOR: [], SUPLENTE: [] };
+					for (const asignacion of ocurrencia.asignaciones) {
+						const destino = asignacion.destinatario_tipo === 'ADMIN' ? admins : drivers;
+						destino[ocurrencia.id][asignacion.rol as DestinatarioRol]?.push(
 							asignacion.destinatario_id
 						);
 					}
+					tipoActivo[ocurrencia.id] = admins[ocurrencia.id].RESPONSABLE.length
+						? 'ADMIN'
+						: drivers[ocurrencia.id].RESPONSABLE.length
+							? 'CONDUCTOR'
+							: 'ADMIN';
 				}
 			}
 			conductoresSeleccionados = drivers;
+			usuariosSeleccionadosOcurrencia = admins;
+			tipoDestinatarioActivo = tipoActivo;
 			manual = { 1: { cumple: false, observacion: '' }, 2: { cumple: false, observacion: '' } };
 			for (const indicador of indicadores.filter((i) => i.fuente === 'MANUAL')) {
 				manual[indicador.numero] = {
@@ -325,6 +607,9 @@
 	}
 
 	onMount(() => {
+		void asignacionesFormularioAPI.listar({ status: 'ACTIVE', limit: 100 }).then(
+			({ data }) => { formulariosActivos = data.map(({ id, name }) => ({ id, name })); }
+		).catch(() => undefined);
 		const params = new URLSearchParams(window.location.search);
 		planId = params.get('planId') ?? '';
 		ocurrenciaFoco = params.get('ocurrenciaId') ?? '';
@@ -348,6 +633,8 @@
 			...filtrosActividades,
 			q: '',
 			estado: 'TODAS',
+			enfoque: 'TODOS',
+			mes: 0,
 			pagina: 1,
 			actividad: ''
 		};
@@ -372,23 +659,40 @@
 		}
 	}
 
-	async function guardarCargo(cargo: string) {
+	async function guardarCargos() {
+		if (guardandoCargos || !cargosConCambios.length) return;
+		guardandoCargos = true;
 		try {
-			const seleccion = rolesSeleccionados[cargo] ?? {
-				RESPONSABLE: [],
-				COLABORADOR: [],
-				SUPLENTE: []
-			};
-			const asignaciones = rolesConfigurables.flatMap((rol) =>
-				seleccion[rol].map((usuario_id) => ({ usuario_id, rol }))
-			);
-			await planTrabajoApi.asignarCargo(planId, cargo, areasPorCargo[cargo] || null, asignaciones);
+			const configuraciones = cargosConCambios.map((grupo: any) => ({
+				cargo: grupo.cargo,
+				area: areasPorCargo[grupo.cargo] || null,
+				asignaciones: rolesConfigurables.flatMap((rol) =>
+					(rolesSeleccionados[grupo.cargo]?.[rol] ?? []).map((usuario_id) => ({
+						usuario_id,
+						rol
+					}))
+				)
+			}));
+			await planTrabajoApi.asignarCargos(planId, configuraciones);
 			selectorCargoActivo = '';
-			toast.success('Área, colaboradores y suplentes guardados.');
+			cargoExpandido = '';
+			cargosSeleccionados = [];
+			toast.success(
+				`${configuraciones.length} ${configuraciones.length === 1 ? 'cargo guardado' : 'cargos guardados'}.`
+			);
 			await cargar();
 		} catch (cause) {
-			toast.error(cause instanceof Error ? cause.message : 'No se pudo guardar el cargo.');
+			toast.error(cause instanceof Error ? cause.message : 'No se pudo guardar la configuración.');
+		} finally {
+			guardandoCargos = false;
 		}
+	}
+
+	function descartarCambiosCargos() {
+		iniciarBorradoresCargos(gestion?.cargos ?? []);
+		selectorCargoActivo = '';
+		cargoExpandido = '';
+		cargosSeleccionados = [];
 	}
 
 	async function activar() {
@@ -404,18 +708,53 @@
 		}
 	}
 
-	async function asignarConductores(id: string) {
+	async function guardarAsignacionesOcurrencia(id: string) {
+		if (guardandoAsignaciones) return;
+		guardandoAsignaciones = id;
 		try {
-			const asignaciones = roles.flatMap((rol) =>
-				(conductoresSeleccionados[id]?.[rol] ?? []).map((conductor_id) => ({ conductor_id, rol }))
+			const asignaciones = roles.flatMap((rol) => [
+				...(usuariosSeleccionadosOcurrencia[id]?.[rol] ?? []).map((destinatario_id) => ({
+					destinatario_tipo: 'ADMIN' as const,
+					destinatario_id,
+					rol
+				})),
+				...(conductoresSeleccionados[id]?.[rol] ?? []).map((destinatario_id) => ({
+					destinatario_tipo: 'CONDUCTOR' as const,
+					destinatario_id,
+					rol
+				}))
+			]);
+			const resultado = await planTrabajoApi.asignarDestinatarios(id, asignaciones);
+			const avisos = [
+				resultado.administradoresNotificados
+					? `${resultado.administradoresNotificados} ${resultado.administradoresNotificados === 1 ? 'persona del equipo avisada' : 'personas del equipo avisadas'}`
+					: '',
+				resultado.conductoresNotificados
+					? `${resultado.conductoresNotificados} ${resultado.conductoresNotificados === 1 ? 'conductor avisado' : 'conductores avisados'}`
+					: ''
+			].filter(Boolean);
+			toast.success(
+				`Asignación guardada${avisos.length ? ` · ${avisos.join(' y ')}` : ' · sin avisos nuevos'}.`
 			);
-			await planTrabajoApi.asignarConductores(id, asignaciones);
-			toast.success('Conductores asignados y avisados.');
 			await cargar();
 		} catch (cause) {
-			toast.error(
-				cause instanceof Error ? cause.message : 'No se pudieron asignar los conductores.'
+			toast.error(cause instanceof Error ? cause.message : 'No se pudo guardar la asignación.');
+		} finally {
+			guardandoAsignaciones = '';
+		}
+	}
+
+	async function guardarConfiguracionParticipante(participante: any) {
+		try {
+			await planTrabajoApi.configurarParticipacion(
+				participante.id,
+				Number(participante.cuota),
+				participante.form_assignment_id?.trim() || null
 			);
+			toast.success('Cuota individual guardada.');
+			await cargar();
+		} catch (cause) {
+			toast.error(cause instanceof Error ? cause.message : 'No se pudo guardar la cuota.');
 		}
 	}
 
@@ -512,13 +851,6 @@
 		}
 	}
 
-	function cambiarConductores(id: string, rol: DestinatarioRol, event: Event) {
-		const select = event.currentTarget as HTMLSelectElement;
-		conductoresSeleccionados[id][rol] = Array.from(
-			select.selectedOptions,
-			(option) => option.value
-		);
-	}
 </script>
 
 <svelte:head><title>Plan anual HSEQ/PESV</title></svelte:head>
@@ -531,6 +863,7 @@
 			<p>Una vista común para anticipar vencimientos, medir resultados y seguir cada compromiso.</p>
 		</div>
 		<div class="plan-header-actions">
+			<a href="/dashboard/mis-actividades">Mis actividades</a>
 			{#if gestion}
 				<span class="plan-status" class:plan-status-active={gestion.plan.recordatorios_activos}>
 					<span aria-hidden="true"></span>{gestion.plan.recordatorios_activos
@@ -559,13 +892,14 @@
 	{:else if !gestion}
 		<section class="panel empty">
 			<h2>No hay un plan cargado</h2>
-			<p>Importa el Excel 2026 con el comando documentado del backend.</p>
+			<p>Importa la planeación anual vigente para cargar sus actividades, fechas e indicadores.</p>
 		</section>
 	{:else}
 		<nav class="plan-tabs" aria-label="Secciones del plan">
+			<a href="#panorama">Panorama</a>
 			<a href="#indicadores">Indicadores</a>
 			<a href="#responsables">Responsables</a>
-			<a href="#actividades">Actividades y ocurrencias</a>
+			<a href="#actividades">Tareas y seguimiento</a>
 		</nav>
 		{@const resumen = planes.find((p) => p.id === planId)?.resumen}
 		<section class="summary-grid">
@@ -578,7 +912,7 @@
 			</article>
 			<article class="stat-card">
 				<span class="stat-icon"><Target size={17} /></span><span class="stat-label"
-					>Ocurrencias</span
+					>Meses programados</span
 				><strong class="stat-value">{resumen?.ocurrencias ?? 0}</strong><span class="stat-note"
 					>Compromisos programados</span
 				>
@@ -599,6 +933,75 @@
 			</article>
 		</section>
 
+		<section id="panorama" class="page-card section-panel annual-canvas">
+			<div class="section-head">
+				<div>
+					<p class="section-kicker">VISTA GENERAL · {gestion.plan.anio}</p>
+					<h2>Panorama de ejecución</h2>
+					<p>
+						La programación y el avance del año, agrupados por enfoque. Selecciona un mes para abrir
+						sus tareas.
+					</p>
+				</div>
+				<a class="canvas-detail-link" href="#actividades">Ir al detalle <ChevronDown size={14} /></a
+				>
+			</div>
+			<div class="canvas-summary" aria-label="Resumen del plan">
+				<span><strong>{totalesPanorama.actividades}</strong> tareas</span>
+				<span><strong>{totalesPanorama.ocurrencias}</strong> compromisos programados</span>
+				<span><strong>{totalesPanorama.completadas}</strong> completados</span>
+			</div>
+			<div class="canvas-legend" aria-label="Leyenda del cronograma">
+				<span><i class="canvas-legend-done"></i>Completadas</span>
+				<span><i class="canvas-legend-open"></i>Pendientes del mes</span>
+			</div>
+			<div class="canvas-scroll">
+				<table
+					class="plan-canvas-grid"
+					aria-label={`Programación mensual del plan ${gestion.plan.anio}`}
+				>
+					<thead
+						><tr
+							><th scope="col">Enfoque</th>{#each MESES_PLAN as mes (mes)}<th scope="col">{mes}</th
+								>{/each}</tr
+						></thead
+					>
+					<tbody>
+						{#each resumenPanorama as fila (fila.enfoque)}
+							<tr>
+								<th scope="row"
+									><strong>{fila.enfoque === 'PESV' ? 'PESV' : 'HSEQ general'}</strong><small
+										>{fila.actividades} tareas · {fila.completadas}/{fila.ocurrencias} cerradas</small
+									></th
+								>
+								{#each fila.meses as periodo (periodo.numero)}
+									<td
+										><button
+											type="button"
+											class="canvas-month-cell"
+											class:canvas-month-empty={!periodo.total}
+											style={`--avance:${periodo.avance}%`}
+											disabled={!periodo.total}
+											aria-label={`${fila.enfoque}, ${periodo.nombre}: ${periodo.total} programadas, ${periodo.completadas} completadas${periodo.atrasadas ? `, ${periodo.atrasadas} atrasadas` : ''}`}
+											title={`${periodo.nombre}: ${periodo.total} tareas programadas · ${periodo.avance}% completadas${periodo.atrasadas ? ` · ${periodo.atrasadas} atrasadas` : ''}`}
+											onclick={() => void abrirMesPanorama(fila.enfoque, periodo.numero)}
+										>
+											<strong>{periodo.total || '—'}</strong>
+											<small>{periodo.total ? `${periodo.avance}%` : 'Sin tareas'}</small>
+										</button></td
+									>
+								{/each}
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<p class="canvas-footnote">
+				Cada celda cuenta una tarea programada para ese mes. Las cuotas individuales de evidencias o
+				formularios se configuran en el detalle de cada tarea.
+			</p>
+		</section>
+
 		<section id="indicadores" class="page-card section-panel">
 			<div class="section-head">
 				<div>
@@ -612,8 +1015,8 @@
 					>Periodo<select
 						bind:value={trimestre}
 						onchange={(event) => cambiarTrimestre(event.currentTarget.value)}
-						><option value={null}>Anual</option><option value={1}>Trimestre 1</option><option value={2}
-							>Trimestre 2</option
+						><option value={null}>Anual</option><option value={1}>Trimestre 1</option><option
+							value={2}>Trimestre 2</option
 						><option value={3}>Trimestre 3</option><option value={4}>Trimestre 4</option></select
 					></label
 				>
@@ -699,7 +1102,7 @@
 									</div>
 								{/if}
 								<div class="reference-bands">
-									<strong>Bandas de referencia del Excel</strong><label
+									<strong>Bandas de referencia del plan</strong><label
 										>Adecuado<input
 											class="text-input"
 											bind:value={bandas[indicador.numero].adecuado}
@@ -727,30 +1130,40 @@
 
 		<section id="responsables" class="page-card section-panel">
 			<div class="section-head config-head">
-				<div>
+				<div class="config-heading">
 					<p class="section-kicker">CONFIGURACIÓN DEL PLAN</p>
-					<h2>Áreas responsables</h2>
+					<h2>Asignación por área</h2>
 					<p>
-						Relaciona cada cargo del Excel con un área. El responsable se define en Personal; aquí
-						puedes añadir colaboradores y suplentes.
+						Las actividades indican cargos o equipos. Relaciónalos con un área para que su
+						responsable, definido en Personal, reciba las tareas. Aquí agregas colaboradores y
+						suplentes opcionales.
 					</p>
 					<a class="area-owners-link" href="/dashboard/personal?tipo=responsables"
-						>Administrar responsables por área <ChevronDown size={14} /></a
+						>Administrar responsables por área en Personal <ChevronDown size={14} /></a
 					>
 					<div class="config-overview" aria-live="polite">
-						<span>{gestion.cargos.length - cargosSinArea.length} de {gestion.cargos.length} cargos vinculados</span>
-						<span>{gestion.areas.length - areasSinResponsable.length} de {gestion.areas.length} áreas con responsable</span>
+						<div class="config-metric">
+							<strong>{gestion.cargos.length - cargosSinArea.length}/{gestion.cargos.length}</strong
+							><span>Grupos relacionados</span>
+						</div>
+						<div class="config-metric">
+							<strong
+								>{gestion.areas.length - areasSinResponsable.length}/{gestion.areas.length}</strong
+							><span>Áreas con responsable</span>
+						</div>
+						<div class="config-metric" class:config-metric-pending={cargosPendientes > 0}>
+							<strong>{cargosPendientes}</strong><span>Grupos pendientes</span>
+						</div>
 					</div>
 					{#if cargosSinArea.length || areasSinResponsable.length}
-						<p class="config-incomplete">
-							{#if cargosSinArea.length && areasSinResponsable.length}
-								{cargosSinArea.length} cargos sin área · {areasSinResponsable.length} áreas sin responsable
-							{:else if cargosSinArea.length}
-								{cargosSinArea.length} cargos sin área
-							{:else}
-								{areasSinResponsable.length} áreas sin responsable en Personal
-							{/if}
-						</p>
+						<div class="config-incomplete" role="status">
+							{#if cargosSinArea.length}<span
+									>{cargosSinArea.length} grupos de cargos necesitan un área.</span
+								>{/if}
+							{#if areasSinResponsable.length}<span
+									>{areasSinResponsable.length} áreas necesitan responsable en Personal.</span
+								>{/if}
+						</div>
 					{/if}
 				</div>
 				<div class="config-actions">
@@ -760,7 +1173,7 @@
 						aria-expanded={configuracionAreasAbierta}
 						aria-controls="cargo-area-config"
 						onclick={() => (configuracionAreasAbierta = !configuracionAreasAbierta)}
-						>{configuracionAreasAbierta ? 'Ocultar cargos' : 'Editar cargos'}
+						>{configuracionAreasAbierta ? 'Ocultar lista' : 'Relacionar cargos'}
 						<ChevronDown
 							size={15}
 							class={configuracionAreasAbierta ? 'compact-chevron-open' : ''}
@@ -770,225 +1183,340 @@
 						class="primary"
 						disabled={ocupada ||
 							gestion.plan.recordatorios_activos ||
+							guardandoCargos ||
+							cargosConCambios.length > 0 ||
 							cargosSinArea.length > 0 ||
 							areasSinResponsable.length > 0}
 						onclick={activar}
 						>{gestion.plan.recordatorios_activos
 							? 'Recordatorios activos'
 							: cargosSinArea.length || areasSinResponsable.length
-								? 'Completa la configuración'
-								: 'Activar plan y recordatorios'}</button
+								? 'Configuración incompleta'
+								: cargosConCambios.length
+									? 'Guarda los cambios pendientes'
+									: 'Activar plan y recordatorios'}</button
 					>
 				</div>
 			</div>
-			<div
-				id="cargo-area-config"
-				class="cargo-grid"
-				class:config-grid-hidden={!configuracionAreasAbierta}
-			>
-				{#each gestion.cargos as grupo, indice (grupo.cargo)}
-					{@const areaSeleccionada = gestion.areas.find(
-						(item: any) => item.area === areasPorCargo[grupo.cargo]
-					)}
-					{@const responsableValido = Boolean(
-						areaSeleccionada?.responsable?.activo &&
-						areaSeleccionada.responsable.area?.includes(areaSeleccionada.area)
-					)}
-					{@const totalExtras =
-						(rolesSeleccionados[grupo.cargo]?.COLABORADOR?.length ?? 0) +
-						(rolesSeleccionados[grupo.cargo]?.SUPLENTE?.length ?? 0)}
-					<article class="cargo-card" class:cargo-card-expanded={cargoExpandido === grupo.cargo}>
-						<div class="cargo-compact-row">
-							<div class="cargo-title">
-								<span class="cargo-index">{String(indice + 1).padStart(2, '0')}</span>
-								<div><small>CARGO</small><strong>{grupo.cargo}</strong></div>
-							</div>
-							<label class="cargo-area-select">
-								<span class="sr-only">Área responsable para {grupo.cargo}</span>
-								<select
-									id={`area-cargo-${indice}`}
-									aria-label={`Área responsable para ${grupo.cargo}`}
-									bind:value={areasPorCargo[grupo.cargo]}
-								>
-									<option value="" disabled={gestion.plan.estado === 'ACTIVO'}
-										>Seleccionar área</option
-									>
-									{#each gestion.areas as area (area.area)}
-										<option value={area.area}>{area.etiqueta}</option>
-									{/each}
-								</select>
-							</label>
-							<span
-								class="cargo-manager"
-								class:cargo-manager-pending={!responsableValido}
-								title={responsableValido
-									? `Responsable del área ${areaSeleccionada.etiqueta}`
-									: 'Asigna un responsable desde Personal'}
-							>
-								<span class="owner-status"></span>
-								{responsableValido ? areaSeleccionada.responsable.nombre : 'Responsable pendiente'}
-							</span>
+			<div id="cargo-area-config" class:config-grid-hidden={!configuracionAreasAbierta}>
+				<div class="cargo-toolbar">
+					<label class="cargo-search">
+						<Search size={16} aria-hidden="true" />
+						<span class="sr-only">Buscar cargos y áreas</span>
+						<input
+							type="search"
+							aria-label="Buscar cargos y áreas"
+							placeholder="Buscar cargo o responsable"
+							bind:value={busquedaCargos}
+						/>
+					</label>
+					<div class="cargo-filters" role="group" aria-label="Filtrar cargos por estado">
+						{#each filtrosCargos as filtro (filtro.id)}
 							<button
 								type="button"
-								class="cargo-extras-toggle"
-								aria-expanded={cargoExpandido === grupo.cargo}
-								aria-controls={`extras-${indice}`}
-								aria-label={`${cargoExpandido === grupo.cargo ? 'Ocultar' : 'Editar'} colaboradores y suplentes de ${grupo.cargo}`}
-								onclick={() => alternarDetalleCargo(grupo.cargo)}
+								class:filter-active={filtroCargos === filtro.id}
+								aria-pressed={filtroCargos === filtro.id}
+								onclick={() => (filtroCargos = filtro.id)}
 							>
-								<UsersRound size={15} />
-								{totalExtras ? `${totalExtras} extras` : 'Añadir extras'}
-								<ChevronDown
-									size={14}
-									class={cargoExpandido === grupo.cargo ? 'compact-chevron-open' : ''}
-								/>
+								{filtro.label}<span
+									>{filtro.id === 'TODOS'
+										? gestion.cargos.length
+										: filtro.id === 'LISTOS'
+											? cargosListos.length
+											: cargosPendientes}</span
+								>
 							</button>
-							<button
-								class="secondary save-cargo"
-								disabled={ocupada}
-								onclick={() => guardarCargo(grupo.cargo)}>Guardar</button
-							>
-						</div>
-						{#if cargoExpandido === grupo.cargo}
-							<div class="cargo-details" id={`extras-${indice}`}>
-								{#if !areasPorCargo[grupo.cargo]}
-									<p class="cargo-area-owner cargo-area-owner-pending">
-										Selecciona el área que recibirá las actividades.
-									</p>
-								{:else if !responsableValido}
-									<p class="cargo-area-owner cargo-area-owner-pending">
-										Asigna un responsable activo a {areaSeleccionada?.etiqueta} desde Personal.
-									</p>
-								{:else}
-									<p class="cargo-area-owner">
-										<span class="owner-status"></span>Las tareas llegarán a
-										<strong>{areaSeleccionada.responsable.nombre}</strong>
-										· {areaSeleccionada.etiqueta}
-									</p>
-								{/if}
-								<div class="cargo-roles">
-									{#each rolesConfigurables as rol (rol)}
-										{@const clave = claveRolCargo(grupo.cargo, rol)}
-										{@const idsAsignados = rolesSeleccionados[grupo.cargo]?.[rol] ?? []}
-										<div
-											class="cargo-role-card"
-											class:cargo-role-card-open={selectorCargoActivo === clave}
+						{/each}
+					</div>
+					<label class="cargo-area-filter">
+						<span>Área</span>
+						<select aria-label="Filtrar cargos por área" bind:value={areaFiltroCargo}>
+							<option value="">Todas</option>
+							{#each gestion.areas as area (area.area)}<option value={area.area}
+									>{area.etiqueta}</option
+								>{/each}
+						</select>
+					</label>
+					<span class="cargo-visible-count"
+						>{cargosVisibles.length} de {gestion.cargos.length} grupos</span
+					>
+				</div>
+				<div class="cargo-bulk-toolbar">
+					<button
+						type="button"
+						class="quiet"
+						aria-pressed={todosLosVisiblesSeleccionados}
+						onclick={seleccionarCargosVisibles}
+					>
+						{todosLosVisiblesSeleccionados
+							? 'Quitar selección visible'
+							: `Seleccionar ${cargosVisibles.length} visibles`}
+					</button>
+					<span class="cargo-selection-count">{cargosSeleccionados.length} seleccionados</span>
+					<label>
+						<span>Asignar la misma área</span>
+						<select
+							aria-label="Área para aplicar a los cargos seleccionados"
+							bind:value={areaMasiva}
+						>
+							<option value="">Selecciona un área</option>
+							{#each gestion.areas as area (area.area)}<option value={area.area}
+									>{area.etiqueta}</option
+								>{/each}
+						</select>
+					</label>
+					<button
+						type="button"
+						class="secondary"
+						disabled={!cargosSeleccionados.length || !areaMasiva}
+						onclick={aplicarAreaMasiva}>Aplicar área</button
+					>
+				</div>
+				<div class="cargo-list-header" aria-hidden="true">
+					<span>Cargos que indica el plan</span><span>Área responsable</span><span
+						>Responsable en Personal</span
+					><span>Equipo adicional</span>
+				</div>
+				<div class="cargo-grid">
+					{#each cargosVisibles as grupo, indice (grupo.cargo)}
+						{@const areaSeleccionada = gestion.areas.find(
+							(item: any) => item.area === areasPorCargo[grupo.cargo]
+						)}
+						{@const responsableEstaActivo = responsableValido(areaSeleccionada)}
+						{@const totalExtras =
+							(rolesSeleccionados[grupo.cargo]?.COLABORADOR?.length ?? 0) +
+							(rolesSeleccionados[grupo.cargo]?.SUPLENTE?.length ?? 0)}
+						<article
+							id={`cargo-grupo-${encodeURIComponent(grupo.cargo)}`}
+							class="cargo-card"
+							class:cargo-card-expanded={cargoExpandido === grupo.cargo}
+							class:cargo-card-pending={!areasPorCargo[grupo.cargo] || !responsableEstaActivo}
+						>
+							<div class="cargo-compact-row">
+								<div class="cargo-title">
+									<input
+										type="checkbox"
+										class="cargo-select-checkbox"
+										aria-label={`Seleccionar ${grupo.cargo}`}
+										checked={cargosSeleccionados.includes(grupo.cargo)}
+										onchange={(event) => alternarSeleccionCargo(grupo.cargo, event)}
+									/>
+									<span class="cargo-index">{String(indice + 1).padStart(2, '0')}</span>
+									<div>
+										<small>CARGOS INDICADOS EN EL PLAN</small><strong>{grupo.cargo}</strong>
+									</div>
+								</div>
+								<label class="cargo-area-select">
+									<span>Área responsable</span>
+									<select
+										id={`area-cargo-${indice}`}
+										aria-label={`Área responsable para ${grupo.cargo}`}
+										bind:value={areasPorCargo[grupo.cargo]}
+									>
+										<option value="" disabled={gestion.plan.estado === 'ACTIVO'}
+											>Seleccionar área</option
 										>
-											<div class="cargo-role-heading">
-												<span>{etiquetaRol(rol)}</span>
-												<span
-													class="role-count"
-													aria-label={`${idsAsignados.length} personas asignadas`}
-													>{idsAsignados.length}</span
-												>
-											</div>
-											<div class="role-assignees">
-												{#if idsAsignados.length}
-													{#each idsAsignados as usuarioId (usuarioId)}
-														{@const usuario = usuarioPorId(usuarioId)}
-														{#if usuario}
-															<div
-																class="assigned-person"
-																title={`${usuario.nombre} · ${usuario.correo}`}
-															>
-																<span class="person-avatar">{iniciales(usuario.nombre)}</span>
-																<span class="person-name">{usuario.nombre}</span>
-																<button
-																	type="button"
-																	class="person-remove"
-																	aria-label={`Quitar a ${usuario.nombre} como ${etiquetaRol(rol)} del cargo ${grupo.cargo}`}
-																	onclick={() => quitarAsignacionCargo(grupo.cargo, rol, usuarioId)}
-																	><X size={13} /></button
-																>
-															</div>
-														{/if}
-													{/each}
-												{:else}
-													<span class="role-empty">Aún sin asignar</span>
-												{/if}
-											</div>
-											<button
-												type="button"
-												class="role-add"
-												aria-label={`${selectorCargoActivo === clave ? 'Cerrar selector de' : 'Asignar'} ${etiquetaRol(rol)} para ${grupo.cargo}`}
-												aria-expanded={selectorCargoActivo === clave}
-												onclick={() => abrirSelectorCargo(grupo.cargo, rol)}
-												><UserPlus size={15} />{selectorCargoActivo === clave
-													? 'Cerrar selector'
-													: 'Asignar persona'}</button
+										{#each gestion.areas as area (area.area)}
+											<option value={area.area}>{area.etiqueta}</option>
+										{/each}
+									</select>
+								</label>
+								<span
+									class="cargo-manager"
+									class:cargo-manager-pending={!responsableEstaActivo}
+									title={responsableEstaActivo
+										? `Responsable del área ${areaSeleccionada.etiqueta}`
+										: 'Asigna un responsable desde Personal'}
+								>
+									<span class="owner-status"></span>
+									{!areaSeleccionada
+										? 'Selecciona un área'
+										: responsableEstaActivo
+											? areaSeleccionada.responsable.nombre
+											: 'Responsable pendiente'}
+								</span>
+								<button
+									type="button"
+									class="cargo-extras-toggle"
+									aria-expanded={cargoExpandido === grupo.cargo}
+									aria-controls={`extras-${indice}`}
+									aria-label={`${cargoExpandido === grupo.cargo ? 'Ocultar' : 'Editar'} colaboradores y suplentes de ${grupo.cargo}`}
+									onclick={() => alternarDetalleCargo(grupo.cargo)}
+								>
+									<UsersRound size={15} />
+									{totalExtras ? `${totalExtras} extras` : 'Añadir extras'}
+									<ChevronDown
+										size={14}
+										class={cargoExpandido === grupo.cargo ? 'compact-chevron-open' : ''}
+									/>
+								</button>
+							</div>
+							{#if cargoExpandido === grupo.cargo}
+								<div class="cargo-details" id={`extras-${indice}`}>
+									{#if !areasPorCargo[grupo.cargo]}
+										<p class="cargo-area-owner cargo-area-owner-pending">
+											Selecciona el área que recibirá las actividades.
+										</p>
+									{:else if !responsableEstaActivo}
+										<p class="cargo-area-owner cargo-area-owner-pending">
+											Asigna un responsable activo a {areaSeleccionada?.etiqueta} desde Personal.
+										</p>
+									{:else}
+										<p class="cargo-area-owner">
+											<span class="owner-status"></span>Las tareas llegarán a
+											<strong>{areaSeleccionada.responsable.nombre}</strong>
+											· {areaSeleccionada.etiqueta}
+										</p>
+									{/if}
+									<div class="cargo-roles">
+										{#each rolesConfigurables as rol (rol)}
+											{@const clave = claveRolCargo(grupo.cargo, rol)}
+											{@const idsAsignados = rolesSeleccionados[grupo.cargo]?.[rol] ?? []}
+											<div
+												class="cargo-role-card"
+												class:cargo-role-card-open={selectorCargoActivo === clave}
 											>
-											{#if selectorCargoActivo === clave}
-												{@const usuarios = usuariosDisponibles(grupo.cargo, rol)}
-												<div class="cargo-picker-panel">
-													<label class="cargo-picker-search">
-														<Search size={15} aria-hidden="true" />
-														<span class="sr-only">Buscar usuarios</span>
-														<input
-															type="search"
-															aria-label={`Buscar personas para ${etiquetaRol(rol)} en ${grupo.cargo}`}
-															value={busquedaUsuariosCargo[clave] ?? ''}
-															placeholder="Filtrar por nombre o correo"
-															oninput={(event) => buscarUsuarioCargo(grupo.cargo, rol, event)}
-														/>
-													</label>
-													<div
-														class="cargo-picker-results"
-														role="group"
-														aria-label={`Usuarios disponibles para ${etiquetaRol(rol)} en ${grupo.cargo}`}
+												<div class="cargo-role-heading">
+													<span>{etiquetaRol(rol)}</span>
+													<span
+														class="role-count"
+														aria-label={`${idsAsignados.length} personas asignadas`}
+														>{idsAsignados.length}</span
 													>
-														{#each usuarios as usuario (usuario.id)}
-															<label class="cargo-user-option">
-																<input
-																	type="checkbox"
-																	checked={idsAsignados.includes(usuario.id)}
-																	onchange={(event) =>
-																		cambiarAsignacionCargo(
-																			grupo.cargo,
-																			rol,
-																			usuario.id,
-																			event.currentTarget.checked
-																		)}
-																/>
-																<span class="person-avatar">{iniciales(usuario.nombre)}</span>
-																<span class="cargo-user-copy"
-																	><strong>{usuario.nombre}</strong><small>{usuario.correo}</small
-																	></span
+												</div>
+												<div class="role-assignees">
+													{#if idsAsignados.length}
+														{#each idsAsignados as usuarioId (usuarioId)}
+															{@const usuario = usuarioPorId(usuarioId)}
+															{#if usuario}
+																<div
+																	class="assigned-person"
+																	title={`${usuario.nombre} · ${usuario.correo}`}
 																>
-																{#if idsAsignados.includes(usuario.id)}<span
-																		class="user-selected-icon"
-																		aria-hidden="true"><Check size={15} /></span
-																	>{/if}
-															</label>
-														{:else}
-															<p class="cargo-users-empty">
-																No hay usuarios con ese nombre o correo.
-															</p>
+																	<span class="person-avatar">{iniciales(usuario.nombre)}</span>
+																	<span class="person-name">{usuario.nombre}</span>
+																	<button
+																		type="button"
+																		class="person-remove"
+																		aria-label={`Quitar a ${usuario.nombre} como ${etiquetaRol(rol)} del cargo ${grupo.cargo}`}
+																		onclick={() =>
+																			quitarAsignacionCargo(grupo.cargo, rol, usuarioId)}
+																		><X size={13} /></button
+																	>
+																</div>
+															{/if}
 														{/each}
-													</div>
-													{#if usuarios.length === 30}
-														<p class="cargo-picker-hint">
-															Mostrando hasta 30 coincidencias. Refina la búsqueda para encontrar
-															otra persona.
-														</p>
+													{:else}
+														<span class="role-empty">Aún sin asignar</span>
 													{/if}
 												</div>
-											{/if}
-										</div>
-									{/each}
+												<button
+													type="button"
+													class="role-add"
+													aria-label={`${selectorCargoActivo === clave ? 'Cerrar selector de' : 'Asignar'} ${etiquetaRol(rol)} para ${grupo.cargo}`}
+													aria-expanded={selectorCargoActivo === clave}
+													onclick={() => abrirSelectorCargo(grupo.cargo, rol)}
+													><UserPlus size={15} />{selectorCargoActivo === clave
+														? 'Cerrar selector'
+														: 'Asignar persona'}</button
+												>
+												{#if selectorCargoActivo === clave}
+													{@const usuarios = usuariosDisponibles(grupo.cargo, rol)}
+													<div class="cargo-picker-panel">
+														<label class="cargo-picker-search">
+															<Search size={15} aria-hidden="true" />
+															<span class="sr-only">Buscar usuarios</span>
+															<input
+																type="search"
+																aria-label={`Buscar personas para ${etiquetaRol(rol)} en ${grupo.cargo}`}
+																value={busquedaUsuariosCargo[clave] ?? ''}
+																placeholder="Filtrar por nombre o correo"
+																oninput={(event) => buscarUsuarioCargo(grupo.cargo, rol, event)}
+															/>
+														</label>
+														<div
+															class="cargo-picker-results"
+															role="group"
+															aria-label={`Usuarios disponibles para ${etiquetaRol(rol)} en ${grupo.cargo}`}
+														>
+															{#each usuarios as usuario (usuario.id)}
+																<label class="cargo-user-option">
+																	<input
+																		type="checkbox"
+																		checked={idsAsignados.includes(usuario.id)}
+																		onchange={(event) =>
+																			cambiarAsignacionCargo(
+																				grupo.cargo,
+																				rol,
+																				usuario.id,
+																				event.currentTarget.checked
+																			)}
+																	/>
+																	<span class="person-avatar">{iniciales(usuario.nombre)}</span>
+																	<span class="cargo-user-copy"
+																		><strong>{usuario.nombre}</strong><small>{usuario.correo}</small
+																		></span
+																	>
+																	{#if idsAsignados.includes(usuario.id)}<span
+																			class="user-selected-icon"
+																			aria-hidden="true"><Check size={15} /></span
+																		>{/if}
+																</label>
+															{:else}
+																<p class="cargo-users-empty">
+																	No hay usuarios con ese nombre o correo.
+																</p>
+															{/each}
+														</div>
+														{#if usuarios.length === 30}
+															<p class="cargo-picker-hint">
+																Mostrando hasta 30 coincidencias. Refina la búsqueda para encontrar
+																otra persona.
+															</p>
+														{/if}
+													</div>
+												{/if}
+											</div>
+										{/each}
+									</div>
 								</div>
-							</div>
-						{/if}
-					</article>
-				{/each}
+							{/if}
+						</article>
+					{:else}
+						<div class="cargo-empty">No encontramos cargos con esos filtros.</div>
+					{/each}
+				</div>
+				{#if cargosConCambios.length}
+					<div class="config-savebar" role="status">
+						<div class="config-save-copy">
+							<strong
+								>{cargosConCambios.length}
+								{cargosConCambios.length === 1 ? 'cargo pendiente' : 'cargos pendientes'}</strong
+							>
+							<span>Áreas, colaboradores y suplentes se guardarán juntos.</span>
+						</div>
+						<button
+							type="button"
+							class="quiet"
+							disabled={guardandoCargos}
+							onclick={descartarCambiosCargos}>Descartar</button
+						>
+						<button type="button" class="primary" disabled={guardandoCargos} onclick={guardarCargos}
+							>{guardandoCargos ? 'Guardando…' : 'Guardar cambios'}</button
+						>
+					</div>
+				{:else}
+					<div class="config-saved" role="status"><Check size={15} />Sin cambios pendientes</div>
+				{/if}
 			</div>
 		</section>
 
 		<section id="actividades" class="page-card section-panel">
 			<div class="section-head">
 				<div>
-					<p class="section-kicker">EJECUCIÓN Y SOPORTES</p>
-					<h2>Actividades y ocurrencias</h2>
-					<p>Encuentra una actividad por nombre, cargo o alcance; filtra los meses por estado.</p>
+					<p class="section-kicker">TAREAS · FRECUENCIA · SEGUIMIENTO</p>
+					<h2>Actividades del plan</h2>
+					<p>Consulta su frecuencia, público, responsable de área, calendario y soportes.</p>
 				</div>
 				<span class="activity-count"
 					>{actividadesFiltradas.length} de {gestion.plan.actividades.length} actividades</span
@@ -1001,6 +1529,30 @@
 					placeholder="Buscar actividad, cargo, público…"
 					etiqueta="Buscar actividades por nombre, cargo o alcance"
 				/>
+				<label class="activity-select-filter">
+					<span>Enfoque</span>
+					<select
+						aria-label="Filtrar actividades por enfoque"
+						value={filtrosActividades.enfoque}
+						onchange={(event) =>
+							cambiarFiltroEnfoque(event.currentTarget.value as FiltrosActividades['enfoque'])}
+					>
+						<option value="TODOS">HSEQ y PESV</option>
+						<option value="HSEQ">HSEQ general</option>
+						<option value="PESV">PESV</option>
+					</select>
+				</label>
+				<label class="activity-select-filter">
+					<span>Mes</span>
+					<select
+						aria-label="Filtrar actividades por mes"
+						value={filtrosActividades.mes}
+						onchange={(event) => cambiarFiltroMes(Number(event.currentTarget.value))}
+					>
+						<option value={0}>Todo el año</option>
+						{#each MESES_PLAN as mes, indice (mes)}<option value={indice + 1}>{mes}</option>{/each}
+					</select>
+				</label>
 				<div class="activity-filters" role="group" aria-label="Filtrar ocurrencias">
 					{#each filtrosActividad as filtro (filtro.id)}
 						<button
@@ -1025,15 +1577,21 @@
 						<thead>
 							<tr>
 								<th scope="col">Actividad</th>
-								<th scope="col">Responsables</th>
+								<th scope="col">Responsable del área</th>
 								<th scope="col">Alcance</th>
-								<th scope="col">Ocurrencias</th>
+								<th scope="col">Meses programados</th>
 								<th scope="col"><span class="sr-only">Detalle</span></th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each actividadesPaginadas as actividad (actividad.id)}
 								{@const resumen = resumenOcurrenciasVisibles(actividad)}
+								{@const grupoCargo = gestion.cargos.find(
+									(grupo: any) => grupo.cargo === actividad.responsable_cargos?.trim()
+								)}
+								{@const areaCargo = gestion.areas.find(
+									(area: any) => area.area === grupoCargo?.area
+								)}
 								{@const abierta = filtrosActividades.actividad === actividad.id}
 								<tr class:activity-row-open={abierta}>
 									<td>
@@ -1043,15 +1601,42 @@
 										</div>
 										<small>{actividad.unidad_programa || 'Actividad del plan anual'}</small>
 									</td>
-									<td class="activity-cargo" title={actividad.responsable_cargos || 'Sin cargo definido'}>
-										<div class="activity-cell-clamp">{actividad.responsable_cargos || 'Sin cargo definido'}</div>
+									<td
+										class="activity-cargo"
+										title={actividad.responsable_cargos || 'Sin cargo indicado'}
+									>
+										<div class="activity-owner-cell">
+											<strong
+												>{responsableValido(areaCargo)
+													? areaCargo.responsable.nombre
+													: areaCargo
+														? 'Responsable pendiente'
+														: 'Área pendiente'}</strong
+											>
+											<small
+												>{areaCargo?.etiqueta ?? 'Relaciona los cargos con un área'} · {actividad.responsable_cargos ||
+													'Sin cargos indicados'}</small
+											>
+							{#if !areaCargo && actividad.responsable_cargos}
+								<button
+									type="button"
+									class="activity-owner-link"
+									onclick={() => void irAConfiguracionCargo(actividad.responsable_cargos)}
+								>Definir área para este grupo</button
+								>
+							{:else if areaCargo && !responsableValido(areaCargo)}
+								<a class="activity-owner-link" href="/dashboard/personal?tipo=responsables"
+									>Asignar responsable en Personal</a
+								>
+							{/if}
+										</div>
 									</td>
 									<td class="activity-scope" title={actividad.alcance || 'Sin alcance definido'}>
 										<div class="activity-cell-clamp">{actividad.alcance || '—'}</div>
 									</td>
 									<td>
 										<div class="occurrence-summary">
-											<strong>{resumen.total} {resumen.total === 1 ? 'mes' : 'meses'}</strong>
+											<strong>{resumen.total ? `${resumen.total} ${resumen.total === 1 ? 'mes' : 'meses'}` : 'Sin programación'}</strong>
 											<div class="occurrence-summary-meta">
 												<span>{resumen.completadas} completadas</span>
 												{#if resumen.atrasadas}<span class="late-count"
@@ -1085,20 +1670,44 @@
 															onchange={(event) => cambiarEvidencia(actividad, event)}
 														/> Requiere soporte para cerrar</label
 													>
+													<div class="activity-meta-grid">
+														<div>
+															<small>Frecuencia declarada</small><strong
+																>{actividad.frecuencia_fuente || 'Sin definir'}</strong
+															>
+														</div>
+														<div>
+															<small>Método de seguimiento</small><strong
+																>{actividad.metodo_seguimiento || 'Sin definir'}</strong
+															>
+														</div>
+														<div>
+															<small>Registro o evidencia esperada</small><strong
+																>{actividad.registro_fuente ||
+																	actividad.evidencia_fuente ||
+																	'Sin definir'}</strong
+															>
+														</div>
+														{#if enlaceHttp(actividad.metodo_seguimiento)}<a
+																href={enlaceHttp(actividad.metodo_seguimiento)}
+																target="_blank"
+																rel="noopener noreferrer">Abrir formato fuente</a
+															>{/if}
+													</div>
 													{#if actividad.alcance}<p class="muted">
 															Público: {actividad.alcance}
 														</p>{/if}
 													{#each ocurrenciasVisibles(actividad) as ocurrencia (ocurrencia.id)}
+					{@const rolActivo = rolActivoPorOcurrencia[ocurrencia.id] ?? 'RESPONSABLE'}
+					{@const tipoActivo = tipoDestinatarioActivo[ocurrencia.id] ?? 'ADMIN'}
+					{@const opciones = personasDisponibles(ocurrencia.id, tipoActivo)}
 														<div id="ocurrencia-{ocurrencia.id}" class="occurrence-row">
 															<div class="occurrence-info">
 																<span class="occurrence-month"
 																	><CalendarDays size={16} />{new Date(
 																		`${gestion.plan.anio}-${String(ocurrencia.mes).padStart(2, '0')}-01T12:00:00`
 																	).toLocaleDateString('es-CO', { month: 'long' })}</span
-																><strong
-																	>Vence {new Date(
-																		`${ocurrencia.fecha_vencimiento}T12:00:00`
-																	).toLocaleDateString('es-CO')}</strong
+											><strong>{etiquetaVencimiento(ocurrencia.fecha_vencimiento)}</strong
 																><span
 																	class="occurrence-state"
 																	class:occurrence-state-late={estaAtrasada(ocurrencia)}
@@ -1112,47 +1721,102 @@
 																		>{evidencia.nombre_archivo}</button
 																	>{/each}
 															</div>
-															<div class="driver-assignment">
-																<div class="role-tabs" aria-label="Rol de conductores asignados">
-																	{#each roles as rol}<button
-																			type="button"
-																			class:role-active={(rolActivoPorOcurrencia[ocurrencia.id] ??
-																				'RESPONSABLE') === rol}
-																			onclick={() => (rolActivoPorOcurrencia[ocurrencia.id] = rol)}
-																			>{etiquetaRol(rol)}</button
-																		>{/each}
+															<div class="assignment-editor">
+																<div class="assignment-heading">
+																	<div>
+																		<strong>Personas responsables de esta ejecución</strong>
+										<small>El responsable general se define por área. Aquí ajustas quién participa en este mes.</small>
+																	</div>
+																	<div class="role-tabs" aria-label="Rol de las personas asignadas">
+																		{#each roles as rol (rol)}
+																			{@const activo = (rolActivoPorOcurrencia[ocurrencia.id] ?? 'RESPONSABLE') === rol}
+																			<button
+																				type="button"
+																				class:role-active={activo}
+																				aria-pressed={activo}
+																				onclick={() => (rolActivoPorOcurrencia[ocurrencia.id] = rol)}
+																			>{etiquetaRol(rol)}<span>{cantidadAsignada(ocurrencia.id, rol)}</span></button>
+																		{/each}
+																	</div>
 																</div>
-																<label class="driver-select"
-																	>Conductores · {etiquetaRol(
-																		rolActivoPorOcurrencia[ocurrencia.id] ?? 'RESPONSABLE'
-																	)}
-																	<select
-																		multiple
-																		size="3"
-																		aria-label="Conductores asignados"
-																		onchange={(event) =>
-																			cambiarConductores(
-																				ocurrencia.id,
-																				rolActivoPorOcurrencia[ocurrencia.id] ?? 'RESPONSABLE',
-																				event
-																			)}
-																	>
-																		{#each gestion.conductores as conductor}<option
-																				value={conductor.id}
-																				selected={conductoresSeleccionados[ocurrencia.id]?.[
-																					rolActivoPorOcurrencia[ocurrencia.id] ?? 'RESPONSABLE'
-																				]?.includes(conductor.id)}
-																				>{conductor.nombre}
-																				{conductor.apellido} · {conductor.numero_identificacion}</option
-																			>{/each}
-																	</select>
-																</label>
-																<button
-																	class="secondary"
-																	onclick={() => asignarConductores(ocurrencia.id)}
-																	><UsersRound size={15} />Guardar conductores</button
+																<div class="recipient-toolbar">
+																	<div class="recipient-type-tabs" role="group" aria-label="Tipo de persona">
+																		<button
+																			type="button"
+																			class:recipient-type-active={tipoActivo === 'ADMIN'}
+																			aria-pressed={tipoActivo === 'ADMIN'}
+					onclick={() => cambiarTipoDestinatario(ocurrencia.id, 'ADMIN')}
+																		>Equipo administrativo</button>
+																		<button
+																			type="button"
+																			class:recipient-type-active={tipoActivo === 'CONDUCTOR'}
+																			aria-pressed={tipoActivo === 'CONDUCTOR'}
+					onclick={() => cambiarTipoDestinatario(ocurrencia.id, 'CONDUCTOR')}
+																		>Conductores</button>
+																	</div>
+																	<label class="recipient-search">
+																		<Search size={15} aria-hidden="true" />
+																		<span class="sr-only">Buscar personas asignables</span>
+																		<input
+																			type="search"
+																			placeholder={tipoActivo === 'ADMIN' ? 'Buscar por nombre, cargo o área' : 'Buscar por nombre o identificación'}
+																			value={busquedaDestinatarios[ocurrencia.id] ?? ''}
+																			oninput={(event) => (busquedaDestinatarios[ocurrencia.id] = event.currentTarget.value)}
+																		/>
+																	</label>
+																</div>
+																<div
+																	class="recipient-list"
+																	aria-label={tipoActivo === 'ADMIN' ? 'Equipo administrativo · ' + etiquetaRol(rolActivo) : 'Conductores · ' + etiquetaRol(rolActivo)}
 																>
+																	{#if opciones.length}
+																		{#each opciones as persona (persona.id)}
+																			{@const seleccionada = tipoActivo === 'ADMIN'
+																				? usuariosSeleccionadosOcurrencia[ocurrencia.id]?.[rolActivo]?.includes(persona.id)
+																				: conductoresSeleccionados[ocurrencia.id]?.[rolActivo]?.includes(persona.id)}
+																			<label class="recipient-option" class:recipient-option-selected={seleccionada}>
+																				<input
+																					type="checkbox"
+																					checked={seleccionada}
+																					onchange={(event) =>
+																						cambiarDestinatario(ocurrencia.id, rolActivo, tipoActivo, persona.id, event)}
+																				/>
+																				<span><strong>{persona.nombre}</strong><small>{persona.detalle}</small></span>
+													{#if seleccionada}<Check size={15} class="recipient-check" aria-hidden="true" />{/if}
+																			</label>
+																		{/each}
+																	{:else}
+																		<p class="recipient-empty">
+																			{busquedaDestinatarios[ocurrencia.id]
+																				? 'No hay personas que coincidan con la búsqueda.'
+																				: tipoActivo === 'ADMIN'
+																					? 'No hay personal administrativo activo para asignar.'
+																					: 'No hay conductores activos para asignar.'}
+																		</p>
+																	{/if}
+																</div>
+																<div class="recipient-footer">
+																	<span>{cantidadAsignada(ocurrencia.id, rolActivo)} asignados en {etiquetaRol(rolActivo).toLowerCase()}</span>
+																	<button
+																		class="secondary"
+																		disabled={guardandoAsignaciones !== ''}
+																		onclick={() => void guardarAsignacionesOcurrencia(ocurrencia.id)}
+																	><Check size={15} />{guardandoAsignaciones === ocurrencia.id ? 'Guardando…' : 'Guardar asignación'}</button>
+																</div>
 															</div>
+													{#each (gestion.participaciones ?? []).filter((p: any) => p.ocurrencia_id === ocurrencia.id) as participante (participante.id)}
+														<div class="recipient-footer">
+															<strong>{participante.destinatario_tipo === 'ADMIN'
+																? gestion.usuarios.find((u: any) => u.id === participante.destinatario_id)?.nombre ?? 'Usuario'
+																: gestion.conductores.find((c: any) => c.id === participante.destinatario_id)?.nombre ?? 'Conductor'}</strong>
+															<label>Cuota mensual <input type="number" min="1" max="31" value={participante.cuota} onchange={(e) => participante.cuota = Number(e.currentTarget.value)} /></label>
+											<label>Formulario <select value={participante.form_assignment_id ?? ''} onchange={(e) => participante.form_assignment_id = e.currentTarget.value}>
+												<option value="">Solo evidencias</option>
+												{#each formulariosActivos as formulario (formulario.id)}<option value={formulario.id}>{formulario.name}</option>{/each}
+											</select></label>
+															<button class="secondary" onclick={() => guardarConfiguracionParticipante(participante)}>Guardar cuota</button>
+														</div>
+													{/each}
 															<div class="occurrence-actions">
 																<label class="upload-control"
 																	>Añadir soporte<input
@@ -1165,9 +1829,9 @@
 																{#if ocurrencia.estado === 'PENDIENTE'}<div
 																		class="occurrence-action-buttons"
 																	>
-																		<button class="primary" onclick={() => completar(ocurrencia.id)}
+																				{#if !(gestion.participaciones ?? []).some((p: any) => p.ocurrencia_id === ocurrencia.id)}<button class="primary" onclick={() => completar(ocurrencia.id)}
 																			><Check size={15} />Completar</button
-																		><button class="quiet" onclick={() => noAplica(ocurrencia.id)}
+																			>{/if}<button class="quiet" onclick={() => noAplica(ocurrencia.id)}
 																			>No aplica…</button
 																		>
 																	</div>{/if}
@@ -1425,6 +2089,172 @@
 		font-weight: 850;
 		line-height: 1.15;
 	}
+	.annual-canvas {
+		gap: 0.9rem;
+	}
+	.canvas-detail-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		color: var(--au-primary-strong);
+		font-size: 0.75rem;
+		font-weight: 800;
+		text-decoration: none;
+	}
+	.canvas-detail-link :global(svg) {
+		transform: rotate(-90deg);
+	}
+	.canvas-summary,
+	.canvas-legend {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 1rem;
+	}
+	.canvas-summary span {
+		padding: 0.5rem 0.7rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 10px;
+		color: var(--text-muted);
+		background: var(--bg-base);
+		font-size: 0.72rem;
+	}
+	.canvas-summary strong {
+		margin-right: 0.25rem;
+		color: var(--text-primary);
+		font-size: 0.95rem;
+		font-weight: 850;
+	}
+	.canvas-legend {
+		gap: 0.85rem;
+		color: var(--text-muted);
+		font-size: 0.67rem;
+	}
+	.canvas-legend span {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+	}
+	.canvas-legend i {
+		width: 0.65rem;
+		height: 0.65rem;
+		border-radius: 3px;
+	}
+	.canvas-legend-done {
+		background: var(--au-primary-strong);
+	}
+	.canvas-legend-open {
+		border: 1px solid var(--border-default);
+		background: var(--bg-base);
+	}
+	.canvas-scroll {
+		width: 100%;
+		min-width: 0;
+		overflow-x: auto;
+		border: 1px solid var(--border-subtle);
+		border-radius: 14px;
+	}
+	.plan-canvas-grid {
+		width: 100%;
+		min-width: 930px;
+		table-layout: fixed;
+		border-collapse: separate;
+		border-spacing: 0;
+		background: var(--bg-surface);
+	}
+	.plan-canvas-grid th,
+	.plan-canvas-grid td {
+		padding: 0.45rem;
+		border-right: 1px solid var(--border-subtle);
+		border-bottom: 1px solid var(--border-subtle);
+		text-align: center;
+	}
+	.plan-canvas-grid th:first-child {
+		width: 14rem;
+		text-align: left;
+	}
+	.plan-canvas-grid thead th {
+		padding-block: 0.7rem;
+		color: var(--text-muted);
+		background: var(--bg-base);
+		font-size: 0.64rem;
+		font-weight: 850;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+	.plan-canvas-grid tbody th {
+		background: color-mix(in srgb, var(--au-primary-strong) 3%, var(--bg-surface));
+	}
+	.plan-canvas-grid tbody th strong,
+	.plan-canvas-grid tbody th small {
+		display: block;
+	}
+	.plan-canvas-grid tbody th strong {
+		color: var(--text-primary);
+		font-size: 0.78rem;
+	}
+	.plan-canvas-grid tbody th small {
+		margin-top: 0.22rem;
+		color: var(--text-muted);
+		font-size: 0.63rem;
+		font-weight: 600;
+	}
+	.plan-canvas-grid tr:last-child th,
+	.plan-canvas-grid tr:last-child td {
+		border-bottom: 0;
+	}
+	.plan-canvas-grid th:last-child,
+	.plan-canvas-grid td:last-child {
+		border-right: 0;
+	}
+	.canvas-month-cell {
+		display: grid;
+		place-items: center;
+		gap: 0.15rem;
+		width: 100%;
+		min-height: 3.2rem;
+		padding: 0.3rem 0.1rem;
+		border: 1px solid color-mix(in srgb, var(--au-primary-strong) 24%, var(--border-subtle));
+		border-radius: 9px;
+		color: var(--text-primary);
+		background: linear-gradient(
+			90deg,
+			color-mix(in srgb, var(--au-primary-strong) 18%, var(--bg-surface)) var(--avance),
+			var(--bg-base) var(--avance)
+		);
+		font: inherit;
+		cursor: pointer;
+		transition:
+			transform 0.15s ease,
+			border-color 0.15s ease;
+	}
+	.canvas-month-cell:hover:not(:disabled) {
+		transform: translateY(-1px);
+		border-color: var(--au-primary-strong);
+	}
+	.canvas-month-cell:disabled {
+		border-style: dashed;
+		border-color: var(--border-subtle);
+		color: var(--text-very-muted);
+		background: var(--bg-base);
+		cursor: default;
+	}
+	.canvas-month-cell strong {
+		font-size: 0.82rem;
+		font-weight: 850;
+		line-height: 1;
+	}
+	.canvas-month-cell small {
+		color: var(--text-muted);
+		font-size: 0.58rem;
+		font-weight: 750;
+	}
+	.canvas-footnote {
+		margin: 0;
+		color: var(--text-muted);
+		font-size: 0.7rem;
+		line-height: 1.5;
+	}
 	.stat-note {
 		grid-area: note;
 		margin-top: 0.45rem;
@@ -1474,20 +2304,252 @@
 		transform: rotate(180deg);
 	}
 	.config-overview {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(9rem, 1fr));
+		gap: 0.55rem;
+		margin-top: 0.25rem;
+	}
+	.config-metric {
+		display: flex;
+		align-items: baseline;
+		gap: 0.45rem;
+		min-width: 0;
+		padding: 0.55rem 0.7rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 10px;
+		background: var(--bg-base);
+	}
+	.config-metric strong {
+		color: var(--au-primary-strong);
+		font-size: 1rem;
+		font-weight: 850;
+		white-space: nowrap;
+	}
+	.config-metric span {
+		color: var(--text-muted);
+		font-size: 0.68rem;
+		font-weight: 700;
+	}
+	.config-metric-pending strong {
+		color: #a16207;
+	}
+	.config-incomplete {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.3rem 1rem;
-		color: var(--text-muted);
+		gap: 0.35rem 1rem;
+		width: fit-content;
+		margin: 0.05rem 0 0;
+		padding: 0.45rem 0.65rem;
+		border: 1px solid color-mix(in srgb, #d97706 24%, var(--border-subtle));
+		border-radius: 9px;
+		color: #a16207;
+		background: color-mix(in srgb, #f59e0b 7%, var(--bg-surface));
 		font-size: 0.72rem;
 		font-weight: 700;
 	}
-	.config-incomplete {
-		width: fit-content;
-		margin: 0.05rem 0 0;
-		padding: 0.32rem 0.55rem;
-	}
 	.config-grid-hidden {
 		display: none;
+	}
+	.cargo-toolbar {
+		display: grid;
+		grid-template-columns: minmax(14rem, 1fr) auto minmax(9rem, 0.35fr) auto;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.7rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 13px;
+		background: var(--bg-base);
+	}
+	.cargo-search {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+		min-height: 40px;
+		padding: 0 0.7rem;
+		border: 1px solid var(--border-default);
+		border-radius: 9px;
+		color: var(--text-muted);
+		background: var(--bg-surface);
+	}
+	.cargo-search input {
+		width: 100%;
+		min-width: 0;
+		border: 0;
+		outline: 0;
+		color: var(--text-primary);
+		background: transparent;
+		font: inherit;
+		font-size: 0.77rem;
+	}
+	.cargo-search:focus-within {
+		border-color: var(--au-primary-strong);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--au-primary-strong) 12%, transparent);
+	}
+	.cargo-filters {
+		display: flex;
+		align-items: center;
+		gap: 0.15rem;
+		padding: 0.2rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 10px;
+		background: var(--bg-surface);
+	}
+	.cargo-filters button {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-height: 32px;
+		padding: 0.35rem 0.5rem;
+		border: 0;
+		border-radius: 7px;
+		color: var(--text-muted);
+		background: transparent;
+		font: inherit;
+		font-size: 0.68rem;
+		font-weight: 750;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.cargo-filters button span {
+		color: inherit;
+		opacity: 0.72;
+	}
+	.cargo-filters button.filter-active {
+		color: var(--au-primary-strong);
+		background: color-mix(in srgb, var(--au-primary-strong) 9%, var(--bg-surface));
+	}
+	.cargo-area-filter {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		align-items: center;
+		gap: 0.4rem;
+		color: var(--text-muted);
+		font-size: 0.7rem;
+		font-weight: 750;
+	}
+	.cargo-area-filter select {
+		min-width: 0;
+		min-height: 38px;
+		padding: 0.4rem 0.55rem;
+		border: 1px solid var(--border-default);
+		border-radius: 9px;
+		color: var(--text-primary);
+		background: var(--bg-surface);
+		font: inherit;
+		font-size: 0.72rem;
+	}
+	.cargo-visible-count {
+		color: var(--text-muted);
+		font-size: 0.7rem;
+		font-weight: 750;
+		text-align: right;
+		white-space: nowrap;
+	}
+	.cargo-list-header {
+		display: grid;
+		grid-template-columns: minmax(240px, 1.4fr) minmax(180px, 0.8fr) minmax(160px, 0.75fr) auto;
+		gap: 0.65rem;
+		padding: 0.15rem 0.75rem;
+		color: var(--text-very-muted);
+		font-size: 0.58rem;
+		font-weight: 850;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+	.cargo-bulk-toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 0.7rem;
+		padding: 0.55rem 0.7rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 11px;
+		background: color-mix(in srgb, var(--au-primary-strong) 3%, var(--bg-surface));
+	}
+	.cargo-bulk-toolbar > button {
+		min-height: 36px;
+		white-space: nowrap;
+	}
+	.cargo-bulk-toolbar label {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		margin-left: auto;
+		color: var(--text-muted);
+		font-size: 0.68rem;
+		font-weight: 750;
+	}
+	.cargo-bulk-toolbar select {
+		min-width: 10rem;
+		min-height: 36px;
+		padding: 0.35rem 0.5rem;
+		border: 1px solid var(--border-default);
+		border-radius: 8px;
+		color: var(--text-primary);
+		background: var(--bg-surface);
+		font: inherit;
+		font-size: 0.72rem;
+	}
+	.cargo-selection-count {
+		color: var(--text-secondary);
+		font-size: 0.7rem;
+		font-weight: 750;
+		white-space: nowrap;
+	}
+	.cargo-empty {
+		padding: 2rem 1rem;
+		border: 1px dashed var(--border-default);
+		border-radius: 12px;
+		color: var(--text-muted);
+		font-size: 0.82rem;
+		text-align: center;
+	}
+	.config-savebar {
+		position: sticky;
+		bottom: 0.75rem;
+		z-index: 4;
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		margin-top: 0.65rem;
+		padding: 0.7rem 0.8rem;
+		border: 1px solid color-mix(in srgb, var(--au-primary-strong) 24%, var(--border-subtle));
+		border-radius: 13px;
+		background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+		box-shadow: 0 8px 24px color-mix(in srgb, #10211b 12%, transparent);
+		backdrop-filter: blur(12px);
+	}
+	.config-save-copy {
+		display: grid;
+		gap: 0.15rem;
+		min-width: 0;
+		margin-right: auto;
+	}
+	.config-save-copy strong {
+		color: var(--text-primary);
+		font-size: 0.8rem;
+		font-weight: 800;
+	}
+	.config-save-copy span,
+	.config-saved {
+		color: var(--text-muted);
+		font-size: 0.7rem;
+	}
+	.config-savebar .primary,
+	.config-savebar .quiet {
+		min-height: 38px;
+		white-space: nowrap;
+	}
+	.config-saved {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.35rem;
+		padding: 0.25rem 0.15rem;
+	}
+	.config-saved :global(svg) {
+		color: var(--au-primary-strong);
 	}
 	.section-head {
 		align-items: flex-end;
@@ -1521,16 +2583,6 @@
 	}
 	.area-owners-link :global(svg) {
 		transform: rotate(-90deg);
-	}
-	.config-incomplete {
-		margin: 0.1rem 0 0;
-		padding: 0.55rem 0.7rem;
-		border: 1px solid color-mix(in srgb, #d97706 24%, var(--border-subtle));
-		border-radius: 9px;
-		color: #a16207;
-		background: color-mix(in srgb, #f59e0b 7%, var(--bg-surface));
-		font-size: 0.7rem;
-		font-weight: 650;
 	}
 	.activity-count {
 		flex: 0 0 auto;
@@ -1786,7 +2838,7 @@
 	}
 	.cargo-grid {
 		display: grid;
-		gap: 0.35rem;
+		gap: 0.45rem;
 		width: 100%;
 	}
 	.cargo-card {
@@ -1805,14 +2857,15 @@
 		border-color: color-mix(in srgb, var(--au-primary-strong) 34%, var(--border-subtle));
 		background: color-mix(in srgb, var(--au-primary-strong) 1.5%, var(--bg-surface));
 	}
+	.cargo-card-pending {
+		border-left: 3px solid color-mix(in srgb, #d97706 60%, var(--border-subtle));
+	}
 	.cargo-compact-row {
 		display: grid;
-		grid-template-columns:
-			minmax(220px, 1.35fr) minmax(190px, 0.8fr) minmax(130px, 0.65fr)
-			auto auto;
+		grid-template-columns: minmax(240px, 1.4fr) minmax(180px, 0.8fr) minmax(160px, 0.75fr) auto;
 		align-items: center;
 		gap: 0.65rem;
-		min-height: 62px;
+		min-height: 70px;
 		padding: 0.5rem 0.7rem;
 	}
 	.cargo-title {
@@ -1833,6 +2886,13 @@
 		font-size: 0.65rem;
 		font-weight: 850;
 	}
+	.cargo-select-checkbox {
+		width: 1rem;
+		height: 1rem;
+		flex: 0 0 auto;
+		accent-color: var(--au-primary-strong);
+		cursor: pointer;
+	}
 	.cargo-title > div {
 		display: grid;
 		gap: 0.08rem;
@@ -1840,7 +2900,7 @@
 	}
 	.cargo-title small {
 		color: var(--text-very-muted);
-		font-size: 0.55rem;
+		font-size: 0.58rem;
 		font-weight: 850;
 		letter-spacing: 0.09em;
 	}
@@ -1848,18 +2908,27 @@
 		display: -webkit-box;
 		overflow: hidden;
 		color: var(--text-primary);
-		font-size: 0.78rem;
-		line-height: 1.25;
+		font-size: 0.82rem;
+		line-height: 1.35;
 		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		-webkit-line-clamp: 2;
 	}
 	.cargo-area-select {
-		display: block;
+		display: grid;
+		gap: 0.15rem;
 		min-width: 0;
 	}
+	.cargo-area-select > span:not(.sr-only) {
+		color: var(--text-very-muted);
+		font-size: 0.58rem;
+		font-weight: 800;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
 	.cargo-area-select select {
-		min-height: 36px;
+		width: 100%;
+		min-height: 39px;
 		padding: 0.42rem 0.6rem;
 		border-radius: 9px;
 		font-size: 0.72rem;
@@ -1869,7 +2938,7 @@
 		align-items: center;
 		gap: 0.38rem;
 		min-width: 0;
-		max-width: 180px;
+		max-width: 240px;
 		overflow: hidden;
 		color: var(--text-secondary);
 		font-size: 0.68rem;
@@ -1926,12 +2995,6 @@
 	}
 	.cargo-extras-toggle :global(.compact-chevron-open) {
 		transform: rotate(180deg);
-	}
-	.save-cargo {
-		min-height: 34px;
-		padding: 0.4rem 0.65rem;
-		font-size: 0.68rem;
-		white-space: nowrap;
 	}
 	.cargo-details {
 		display: grid;
@@ -2188,31 +3251,193 @@
 			opacity: 1;
 		}
 	}
-	.driver-select select {
-		width: 100%;
-		min-height: 5.8rem;
-		padding: 0.4rem;
-		font-size: 0.72rem;
+	.activity-owner-link {
+		display: inline-flex;
+		margin-top: 0.28rem;
+		padding: 0;
+		border: 0;
+		color: var(--au-primary-strong);
+		background: transparent;
+		font: inherit;
+		font-size: 0.65rem;
+		font-weight: 800;
+		text-align: left;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		cursor: pointer;
 	}
-	.save-cargo {
-		white-space: nowrap;
+	.activity-owner-link:focus-visible {
+		outline: 2px solid var(--au-primary-strong);
+		outline-offset: 3px;
 	}
-	.driver-assignment {
+	.assignment-editor {
 		display: grid;
 		align-content: start;
-		gap: 0.65rem;
+		gap: 0.6rem;
+		min-width: 0;
+		padding: 0.8rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 13px;
+		background: var(--bg-surface);
+	}
+	.assignment-heading {
+		display: grid;
+		gap: 0.55rem;
+	}
+	.assignment-heading > div:first-child {
+		display: grid;
+		gap: 0.15rem;
+	}
+	.assignment-heading > div:first-child strong {
+		color: var(--text-primary);
+		font-size: 0.76rem;
+		font-weight: 800;
+	}
+	.assignment-heading > div:first-child small {
+		color: var(--text-muted);
+		font-size: 0.65rem;
+		line-height: 1.4;
+	}
+	.recipient-toolbar {
+		display: grid;
+		grid-template-columns: auto minmax(10rem, 1fr);
+		align-items: center;
+		gap: 0.5rem;
 		min-width: 0;
 	}
-	.driver-assignment .secondary {
-		justify-self: start;
+	.recipient-type-tabs {
+		display: inline-grid;
+		grid-template-columns: repeat(2, auto);
+		gap: 0.2rem;
+		padding: 0.2rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 10px;
+		background: var(--bg-base);
 	}
-	.driver-select {
-		display: grid;
+	.recipient-type-tabs button {
+		min-height: 34px;
+		padding: 0.42rem 0.6rem;
+		border: 1px solid transparent;
+		border-radius: 7px;
+		color: var(--text-muted);
+		background: transparent;
+		font: inherit;
+		font-size: 0.65rem;
+		font-weight: 750;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+	.recipient-type-tabs .recipient-type-active {
+		border-color: var(--border-subtle);
+		color: var(--au-primary-strong);
+		background: var(--bg-surface);
+		box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+	}
+	.recipient-search {
+		display: flex;
+		align-items: center;
 		gap: 0.4rem;
 		min-width: 0;
-		color: var(--text-secondary);
-		font-size: 0.76rem;
-		font-weight: 750;
+		min-height: 38px;
+		padding: 0 0.6rem;
+		border: 1px solid var(--border-default);
+		border-radius: 9px;
+		color: var(--text-muted);
+		background: var(--bg-base);
+	}
+	.recipient-search:focus-within {
+		border-color: var(--au-primary-strong);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--au-primary-strong) 10%, transparent);
+	}
+	.recipient-search input {
+		width: 100%;
+		min-width: 0;
+		border: 0;
+		outline: 0;
+		color: var(--text-primary);
+		background: transparent;
+		font: inherit;
+		font-size: 0.68rem;
+	}
+	.recipient-list {
+		display: grid;
+		align-content: start;
+		gap: 0.2rem;
+		max-height: 13rem;
+		min-width: 0;
+		padding: 0.3rem;
+		overflow-y: auto;
+		border: 1px solid var(--border-subtle);
+		border-radius: 10px;
+		background: var(--bg-base);
+	}
+	.recipient-option {
+		display: grid;
+		grid-template-columns: 1rem minmax(0, 1fr) 1rem;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+		padding: 0.42rem 0.5rem;
+		border: 1px solid transparent;
+		border-radius: 8px;
+		cursor: pointer;
+	}
+	.recipient-option:hover,
+	.recipient-option-selected {
+		border-color: color-mix(in srgb, var(--au-primary-strong) 15%, transparent);
+		background: color-mix(in srgb, var(--au-primary-strong) 6%, var(--bg-surface));
+	}
+	.recipient-option input {
+		width: 0.95rem;
+		height: 0.95rem;
+		margin: 0;
+		accent-color: var(--au-primary-strong);
+	}
+	.recipient-option > span {
+		display: grid;
+		gap: 0.08rem;
+		min-width: 0;
+	}
+	.recipient-option strong,
+	.recipient-option small {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.recipient-option strong {
+		color: var(--text-primary);
+		font-size: 0.68rem;
+		font-weight: 760;
+	}
+	.recipient-option small {
+		color: var(--text-muted);
+		font-size: 0.61rem;
+	}
+	:global(.recipient-check) {
+		color: var(--au-primary-strong);
+	}
+	.recipient-empty {
+		margin: 0;
+		padding: 0.75rem;
+		color: var(--text-muted);
+		font-size: 0.68rem;
+		text-align: center;
+	}
+	.recipient-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.6rem;
+		color: var(--text-muted);
+		font-size: 0.65rem;
+	}
+	.recipient-footer .secondary {
+		flex: 0 0 auto;
+	}
+	.role-tabs button {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 	}
 	.role-tabs {
 		display: flex;
@@ -2238,6 +3463,14 @@
 		border-color: var(--au-primary-strong);
 		background: color-mix(in srgb, var(--au-primary-strong) 9%, white);
 		color: var(--au-dark);
+	}
+	.role-tabs button > span {
+		min-width: 1rem;
+		padding: 0.08rem 0.24rem;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--au-primary-strong) 10%, white);
+		font-size: 0.6rem;
+		text-align: center;
 	}
 	.primary,
 	.secondary,
@@ -2297,6 +3530,24 @@
 		flex: 1 1 24rem;
 		max-width: 32rem;
 		min-width: 16rem;
+	}
+	.activity-select-filter {
+		display: grid;
+		gap: 0.24rem;
+		min-width: 8rem;
+		color: var(--text-muted);
+		font-size: 0.64rem;
+		font-weight: 800;
+	}
+	.activity-select-filter select {
+		min-height: 38px;
+		padding: 0.4rem 0.55rem;
+		border: 1px solid var(--border-default);
+		border-radius: 9px;
+		color: var(--text-primary);
+		background: var(--bg-surface);
+		font: inherit;
+		font-size: 0.72rem;
 	}
 	.activity-filters {
 		display: flex;
@@ -2428,6 +3679,26 @@
 		color: var(--text-secondary);
 		font-weight: 650;
 	}
+	.activity-owner-cell {
+		display: grid;
+		gap: 0.2rem;
+		min-width: 0;
+	}
+	.activity-owner-cell strong {
+		color: var(--text-primary);
+		font-size: 0.74rem;
+	}
+	.activity-owner-cell small {
+		display: -webkit-box;
+		overflow: hidden;
+		color: var(--text-muted);
+		font-size: 0.64rem;
+		font-weight: 550;
+		line-height: 1.4;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+	}
 	.occurrence-summary {
 		display: grid;
 		gap: 0.22rem;
@@ -2496,6 +3767,42 @@
 		display: grid;
 		gap: 0.8rem;
 		padding: 0.15rem;
+	}
+	.activity-meta-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+		gap: 0.55rem;
+	}
+	.activity-meta-grid > div,
+	.activity-meta-grid > a {
+		display: grid;
+		align-content: start;
+		gap: 0.25rem;
+		min-width: 0;
+		padding: 0.7rem 0.8rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 11px;
+		background: var(--bg-surface);
+	}
+	.activity-meta-grid small {
+		color: var(--text-muted);
+		font-size: 0.63rem;
+		font-weight: 800;
+		text-transform: uppercase;
+	}
+	.activity-meta-grid strong {
+		color: var(--text-primary);
+		font-size: 0.73rem;
+		font-weight: 650;
+		line-height: 1.45;
+		overflow-wrap: anywhere;
+	}
+	.activity-meta-grid > a {
+		align-content: center;
+		color: var(--au-primary-strong);
+		font-size: 0.72rem;
+		font-weight: 800;
+		text-decoration: none;
 	}
 	.activity-body > .check-row,
 	.activity-body > .muted {
@@ -2629,6 +3936,9 @@
 		}
 	}
 	@media (max-width: 1250px) {
+		.recipient-toolbar {
+			grid-template-columns: 1fr;
+		}
 		.cargo-roles {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
@@ -2637,6 +3947,31 @@
 		}
 	}
 	@media (max-width: 1050px) {
+		.cargo-list-header {
+			display: none;
+		}
+		.cargo-toolbar {
+			grid-template-columns: minmax(0, 1fr) minmax(11rem, 0.6fr);
+		}
+		.cargo-search,
+		.cargo-visible-count {
+			grid-column: 1/-1;
+		}
+		.cargo-visible-count {
+			text-align: right;
+		}
+		.cargo-compact-row {
+			grid-template-columns: minmax(0, 1.4fr) minmax(10rem, 0.8fr) auto;
+		}
+		.cargo-manager {
+			grid-column: 1/3;
+			grid-row: 2;
+			margin-left: 2.45rem;
+		}
+		.cargo-extras-toggle {
+			grid-column: 3;
+			grid-row: 1/3;
+		}
 		.summary-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
@@ -2656,9 +3991,53 @@
 		}
 		.config-actions {
 			width: 100%;
+			justify-content: stretch;
+		}
+		.config-actions > * {
+			flex: 1;
 		}
 		.config-actions .primary {
 			flex: 1;
+		}
+		.config-overview {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.config-metric:last-child {
+			grid-column: 1/-1;
+		}
+		.cargo-toolbar {
+			grid-template-columns: 1fr;
+		}
+		.cargo-search,
+		.cargo-filters,
+		.cargo-area-filter,
+		.cargo-visible-count {
+			grid-column: 1;
+		}
+		.cargo-filters {
+			width: fit-content;
+			max-width: 100%;
+			overflow-x: auto;
+		}
+		.cargo-area-filter {
+			grid-template-columns: auto minmax(0, 1fr);
+		}
+		.cargo-area-filter select {
+			width: 100%;
+		}
+		.cargo-visible-count {
+			text-align: left;
+		}
+		.cargo-bulk-toolbar {
+			align-items: stretch;
+		}
+		.cargo-bulk-toolbar label {
+			flex: 1 1 100%;
+			margin-left: 0;
+		}
+		.cargo-bulk-toolbar label select {
+			flex: 1;
+			min-width: 0;
 		}
 		.plan-page {
 			padding: 1rem;
@@ -2729,7 +4108,7 @@
 			padding: 0;
 		}
 		.cargo-compact-row {
-			grid-template-columns: minmax(0, 1fr) auto auto;
+			grid-template-columns: minmax(0, 1fr) auto;
 			gap: 0.35rem;
 			padding: 0.5rem;
 		}
@@ -2738,24 +4117,28 @@
 			grid-row: 1;
 		}
 		.cargo-area-select {
-			grid-column: 1 / 3;
+			grid-column: 1/-1;
 			grid-row: 2;
 		}
 		.cargo-manager {
-			grid-column: 3;
-			grid-row: 2;
-			max-width: 112px;
-			justify-self: end;
+			grid-column: 1/-1;
+			grid-row: 3;
+			max-width: none;
+			justify-self: start;
+			margin-left: 2.45rem;
 		}
 		.cargo-extras-toggle {
 			grid-column: 2;
 			grid-row: 1;
 		}
-		.save-cargo {
-			grid-column: 3;
-			grid-row: 1;
-			width: auto;
-			padding: 0.4rem 0.5rem;
+		.config-savebar {
+			flex-wrap: wrap;
+		}
+		.config-save-copy {
+			flex: 1 0 100%;
+		}
+		.config-savebar .quiet {
+			margin-left: auto;
 		}
 		.cargo-roles {
 			grid-template-columns: 1fr;
