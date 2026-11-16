@@ -24,6 +24,7 @@
 		type SubmissionStatus,
 		type SubmissionSummaryDto
 	} from '$lib/formularios/types';
+	import { nombreAsignacionVisible } from '$lib/formularios/assignment-display';
 
 	let envios = $state<SubmissionSummaryDto[]>([]);
 	let formularios = $state<FormDefinitionDto[]>([]);
@@ -266,10 +267,15 @@
 				</thead>
 				<tbody>
 					{#each envios as envio (envio.id)}
+						{@const nombreAsignacion = nombreAsignacionVisible(envio.assignment?.name)}
 						<tr class:fila--anulada={envio.status === 'VOIDED'}>
 							<td>
 								<span class="mono">{envio.version?.code ?? '—'}</span>
-								<span class="sub">v{envio.version?.versionNumber} · {envio.assignment?.name ?? ''}</span>
+								<span class="sub">
+									v{envio.version?.versionNumber}{#if nombreAsignacion}
+										 · {nombreAsignacion}
+									{/if}
+								</span>
 							</td>
 							<td>
 								<!--

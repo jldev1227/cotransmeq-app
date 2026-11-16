@@ -61,7 +61,9 @@
 	</header>
 
 	{#if tipoActivo === 'responsables' && esAdmin}
-		<ResponsablesArea />
+		<div class="personal-route__tab-content">
+			<ResponsablesArea />
+		</div>
 	{:else if tipoActivo === 'administrativo' && esAdmin}
 		<ListadoAdministrativos />
 	{:else}
@@ -71,6 +73,7 @@
 
 <style>
 	.personal-route { display: grid; gap: 1rem; }
+	.personal-route__tab-content { min-width: 0; padding: clamp(.75rem, 2vw, 1.5rem); }
 	.personal-route__header {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto;
