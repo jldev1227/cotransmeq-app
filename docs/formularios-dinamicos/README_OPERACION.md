@@ -253,3 +253,9 @@ control de acceso, no un extra.
   archivo. Para más, acotar por fechas.
 - **Sin `versionId` el CSV solo trae la cabecera** de cada envío. Formularios
   distintos no comparten preguntas, y mezclarlas produciría un archivo ilegible.
+
+## Formatos diligenciados en papel
+
+En **Formularios → Envíos**, la sección «Formatos físicos escaneados» permite a usuarios con `formularios:full` seleccionar la asignación y versión, conductor, placa, rango de días y PDF. La explicación describe por qué el documento cubre el rango; los datos adicionales sirven para actas de entrega u otros formatos. El navegador comprueba la firma PDF y calcula SHA-256 antes de subir el archivo directamente al bucket. La lista se busca por formulario, conductor, cédula o placa y se filtra por cualquier día cubierto. Solo muestra documentos verificados y el enlace de lectura se firma al abrirlo.
+
+Estos documentos se muestran aparte de los envíos digitales porque no contienen respuestas individuales ni crean automáticamente un preoperacional por cada día del rango. Para usar el rango en indicadores futuros hay que definir explícitamente la regla de negocio de cada formulario.

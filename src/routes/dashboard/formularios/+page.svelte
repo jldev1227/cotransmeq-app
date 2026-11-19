@@ -51,6 +51,7 @@
 	import MisFormularios from '$lib/components/formularios/MisFormularios.svelte';
 	import TarjetasMetricas from '$lib/components/formularios/TarjetasMetricas.svelte';
 	import type { Metrica } from '$lib/components/formularios/TarjetasMetricas.svelte';
+	import Escaneados from '$lib/components/formularios/Escaneados.svelte';
 	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 
 	/**
@@ -1032,7 +1033,7 @@
 
 			<div class="barra-envios">
 				<p class="conteo">
-					{totalEnvios} envío{totalEnvios === 1 ? '' : 's'}
+					{totalEnvios} envío{totalEnvios === 1 ? '' : 's'} digital{totalEnvios === 1 ? '' : 'es'}
 					{#if hayFiltrosEnvios}<span class="conteo__nota">con los filtros puestos</span>{/if}
 				</p>
 
@@ -1081,10 +1082,11 @@
 				</div>
 			</div>
 
+			<Escaneados />
 			{#if cargandoEnvios}
 				<div class="estado" aria-busy="true">Cargando envíos…</div>
 			{:else if envios.length === 0}
-				<div class="estado">Sin envíos que coincidan con los filtros.</div>
+				<div class="estado">Sin envíos digitales que coincidan con los filtros.</div>
 			{:else}
 				<!-- La tabla scrollea en su propio contenedor: la página nunca desborda en
 				     horizontal, ni en un portátil de 13". -->
