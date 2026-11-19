@@ -135,6 +135,7 @@ const EDITABLE_FIELDS: Set<string> = new Set([
 	// EXCLUIR se retiró porque la fila marcada desaparecía y no había forma
 	// de devolverla.
 	'item:aplica_impuestos',
+	'item:factura_fisica',
 	// Porcentaje de administración del item. OJO: no se guarda en el pivote
 	// sino en `liquidacion_tercero`, la fila de la liquidación de servicio,
 	// así que el cambio se ve también fuera de este cierre. ADMON $ y
