@@ -22,6 +22,7 @@ import {
 	buildCierresFinalesPeriodoWorkbook,
 	buildCierreFinalSheet,
 	COL_APLICA_IMP,
+	COL_FACTURA_FISICA,
 	type CierreFinalCompleto,
 	type AnclasHoja
 } from '../builders/cierres-finales.builder';
@@ -151,11 +152,8 @@ export function createCierresFinalesEngine(
 	 * La mecánica y el porqué viven en `checkbox-si-no.ts`, compartido con
 	 * el canvas de ingresos.
 	 *
-	 * ── Solo en hojas EDITABLES ──
-	 * Una hoja que ya no es BORRADOR no registra bindings (ver `bind` en el
-	 * builder), así que el permiso rechaza la escritura. Un checkbox ahí se
-	 * vería clicable y no haría nada: peor que el texto SÍ/NO, que al menos
-	 * se lee como un dato y no como un control. Se deja el texto.
+	 * APLICA IMP. solo se puede editar en borrador. El control FACTURA FÍSICA
+	 * es documental y permanece disponible después de cerrar la liquidación.
 	 *
 	 * Se llama tanto para las hojas del montaje inicial como para las que
 	 * entran después por `insertarCierre`: una placa que llega por socket a
@@ -167,11 +165,12 @@ export function createCierresFinalesEngine(
 		anclas: AnclasHoja | undefined,
 		estado: string
 	) => {
-		if (!esEditable(estado)) return;
+		const columnas = [COL_FACTURA_FISICA];
+		if (esEditable(estado)) columnas.push(COL_APLICA_IMP);
 		colgarCheckboxSiNo(
 			ctx.fUniver,
 			sheetId,
-			[COL_APLICA_IMP],
+			columnas,
 			anclas?.rangoItems ?? null
 		);
 	};

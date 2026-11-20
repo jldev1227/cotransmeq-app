@@ -58,6 +58,7 @@
 	import type { CierreFinalCompleto } from '$lib/editor/builders/cierres-finales.builder';
 	import {
 		estiloAplicaImpuestos,
+		estiloFacturaFisica,
 		estiloCeldaFactura
 	} from '$lib/editor/builders/cierres-finales.builder';
 	import { aCierreCompleto, conHojaDelIndice } from '$lib/editor/builders/cierres-finales-mapper';
@@ -86,6 +87,7 @@
 	import PropietariosCierreModal from '$lib/components/liquidaciones-terceros/PropietariosCierreModal.svelte';
 	import ConceptosCierreModal from '$lib/components/liquidaciones-terceros/ConceptosCierreModal.svelte';
 	import ItemsDisponiblesModal from '$lib/components/liquidaciones-terceros/ItemsDisponiblesModal.svelte';
+	import BuscarFacturaFisicaModal from '$lib/components/liquidaciones-terceros/BuscarFacturaFisicaModal.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
 	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 	import SnapshotPanel from '$lib/components/univer/SnapshotPanel.svelte';
@@ -760,6 +762,8 @@
 			if (!upd) return it;
 			return {
 				...it,
+				factura_fisica:
+					upd.factura_fisica == null ? it.factura_fisica : upd.factura_fisica === true,
 				aplica_impuestos:
 					upd.aplica_impuestos == null ? it.aplica_impuestos : upd.aplica_impuestos !== false,
 				excluido: upd.excluido == null ? it.excluido : !!upd.excluido,
@@ -790,6 +794,17 @@
 
 		if (!ctx) return;
 		for (const upd of items) {
+			if (upd.factura_fisica != null) {
+				const celda = getCierreCellFor(ctx.unitId, upd.id, 'factura_fisica');
+				if (celda) {
+					aplicarCeldaRemota(
+						ctx,
+						celda,
+						upd.factura_fisica ? 'SÍ' : 'NO',
+						estiloFacturaFisica(!!upd.factura_fisica)
+					);
+				}
+			}
 			for (const campo of ['aplica_impuestos', 'excluido'] as const) {
 				if (upd[campo] == null) continue;
 				const celda = getCierreCellFor(ctx.unitId, upd.id, campo);
@@ -932,6 +947,17 @@
 					celda,
 					fila.aplica_impuestos ? 'SÍ' : 'NO',
 					estiloAplicaImpuestos(!!fila.aplica_impuestos)
+				);
+			}
+		}
+		if (fila.factura_fisica != null) {
+			const celda = getCierreCellFor(ctx.unitId, fila.id, 'factura_fisica');
+			if (celda) {
+				aplicarCeldaRemota(
+					ctx,
+					celda,
+					fila.factura_fisica ? 'SÍ' : 'NO',
+					estiloFacturaFisica(!!fila.factura_fisica)
 				);
 			}
 		}
@@ -1316,6 +1342,7 @@
 	let modalConceptos = $state(false);
 	let modalConfiguracion = $state(false);
 	let modalTraerItems = $state(false);
+	let modalBuscarFacturaFisica = $state(false);
 	const referenciasModal = $derived<EstadoModalURL[]>([
 		{ key: 'borradores-cierre', open: modalBorradores },
 		{ key: 'agrupar-cierres', open: modalAgrupar },
@@ -1329,6 +1356,7 @@
 		{ key: 'conceptos-cierre', id: cierreActivo ?? undefined, open: modalConceptos },
 		{ key: 'configuracion-cierre-terceros', open: modalConfiguracion },
 		{ key: 'traer-items-cierre', id: cierreActivo ?? undefined, open: modalTraerItems },
+		{ key: 'buscar-factura-fisica', open: modalBuscarFacturaFisica },
 		{ key: 'eliminar-cierre', id: cierreAEliminar?.id, open: !!cierreAEliminar }
 	]);
 
@@ -1345,6 +1373,7 @@
 		modalConceptos = referencia?.key === 'conceptos-cierre';
 		modalConfiguracion = referencia?.key === 'configuracion-cierre-terceros';
 		modalTraerItems = referencia?.key === 'traer-items-cierre';
+		modalBuscarFacturaFisica = referencia?.key === 'buscar-factura-fisica';
 		cierreAEliminar = referencia?.key === 'eliminar-cierre' ? cierreActivoObj : null;
 	}
 	/// Hubo altas o bajas mientras el modal de conceptos estuvo abierto, así que
@@ -2178,6 +2207,23 @@
 	</svg>
 {/snippet}
 
+{#snippet icoBuscarFactura()}
+	<!-- La lupa distingue la consulta documental de la acción que trae filas al cierre. -->
+	<svg
+		width="15"
+		height="15"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.8"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<circle cx="10.75" cy="10.75" r="6.75" />
+		<path d="m16 16 4.5 4.5" />
+	</svg>
+{/snippet}
+
 {#snippet icoImpuestos()}
 	<!-- Un porcentaje pelado y no el recibo-con-%: a 19px la silueta del
 	     recibo se lee como un rectángulo vacío y el % interior se pierde. -->
@@ -2379,6 +2425,14 @@
 				// La configuración se puede revisar antes de generar el primer cierre.
 				disabled: !!accionEnCurso,
 				onSelect: () => (modalConfiguracion = true)
+			},
+			{
+				id: 'buscar-factura-fisica',
+				label: 'Buscar factura física',
+				hint: 'Buscar por número de factura y mes para ver el recorrido, la placa, fechas, valor liquidado y tercero asociado.',
+				icon: icoBuscarFactura,
+				disabled: !!accionEnCurso,
+				onSelect: () => (modalBuscarFacturaFisica = true)
 			},
 			{
 				id: 'traer-items',
@@ -2740,6 +2794,14 @@
 		hojas={indice}
 		oncerrar={() => (modalAgrupar = false)}
 		onagrupado={() => void loadInicial()}
+	/>
+{/if}
+
+{#if modalBuscarFacturaFisica}
+	<BuscarFacturaFisicaModal
+		onClose={() => (modalBuscarFacturaFisica = false)}
+		onFacturaFisicaActualizada={({ cierre_id, pivote_id, factura_fisica }) =>
+			pintarItems(cierre_id, [{ id: pivote_id, factura_fisica }])}
 	/>
 {/if}
 

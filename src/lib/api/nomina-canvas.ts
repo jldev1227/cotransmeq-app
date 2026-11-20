@@ -108,6 +108,7 @@ export interface LiquidacionAnalisis {
 		placa: string | null;
 		empresa_id: string;
 		empresa: string;
+		paga_cliente: boolean;
 		mes: string;
 		valor: number;
 	}[];

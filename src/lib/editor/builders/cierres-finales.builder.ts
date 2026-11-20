@@ -142,10 +142,11 @@ const COL = {
 	ING_EXTRAS_AVAL: 15,
 	ING_TRANSMERALDA: 16,
 	FACTURA: 17,
-	APLICA_IMP: 18
+	APLICA_IMP: 18,
+	FACTURA_FISICA: 19
 } as const;
 
-export const TOTAL_COLS = 19;
+export const TOTAL_COLS = 20;
 
 /**
  * Columnas de ACCIÓN, para que el engine les cuelgue el checkbox de
@@ -153,6 +154,7 @@ export const TOTAL_COLS = 19;
  * del builder nadie tiene por qué saber dónde cae el resto.
  */
 export const COL_APLICA_IMP: number = COL.APLICA_IMP;
+export const COL_FACTURA_FISICA: number = COL.FACTURA_FISICA;
 
 /// Filas anotables que se abren bajo el bloque estructurado de cada hoja.
 export const FILAS_ANOTABLES = 40;
@@ -177,12 +179,12 @@ const COLUMN_HEADERS = [
 	'#', 'CLIENTE', '# LIQ', 'PLACA', 'NOMBRE 3°', 'RECORRIDO', 'FECHAS',
 	'V/UNIDAD', 'CANT', 'ADMON %', 'ADMON $', 'TOTAL', 'V/LIQUIDAR',
 	'# PLANILLA', 'ING. EXTRA GLOBAL', 'ING. EXTRAS AVAL', 'ING. COTRANSMEQ',
-	'# FACTURA', 'APLICA IMP.'
+	'# FACTURA', 'APLICA IMP.', 'FACTURA FÍSICA'
 ];
 
 const COLUMN_WIDTHS = [
 	28, 250, 100, 86, 230, 250, 150, 91, 82, 82, 91, 98, 98, 140, 150, 150,
-	150, 81, 92
+	150, 81, 92, 112
 ];
 
 /** Columnas cuyo pie es una fórmula `=SUM()` sobre las filas de items. */
@@ -192,7 +194,7 @@ const COLS_SUMADAS = [
 ];
 
 /** Columnas del pie que solo llevan estilo, sin valor ni fórmula. */
-const COLS_PIE_VACIAS = [COL.PLANILLA, COL.FACTURA, COL.APLICA_IMP];
+const COLS_PIE_VACIAS = [COL.PLANILLA, COL.FACTURA, COL.APLICA_IMP, COL.FACTURA_FISICA];
 
 /** Orden canónico de los impuestos. Coincide con el del backend. */
 const ORDEN_IMPUESTOS: Record<string, number> = {
@@ -242,6 +244,7 @@ export interface ItemCierre {
 	 * no. No es una incoherencia, es cómo funciona esa retención.
 	 */
 	aplica_impuestos: boolean;
+	factura_fisica: boolean;
 	/** Soft-deleted del pivote. Se sigue mostrando, tachado y sin sumar. */
 	excluido: boolean;
 }
@@ -428,6 +431,18 @@ export function estiloAplicaImpuestos(aplica: boolean): IStyleData {
 	} as any;
 }
 
+/** Estilo de FACTURA FÍSICA: verde = recibida; ámbar = pendiente. */
+export function estiloFacturaFisica(recibida: boolean): IStyleData {
+	return {
+		fs: 10,
+		bl: 1,
+		ht: HorizontalAlign.CENTER,
+		bd: bordesCompletos(),
+		cl: { rgb: recibida ? GREEN_DARK : '#92400E' },
+		bg: { rgb: recibida ? ADIC_BG : '#FEF3C7' }
+	} as any;
+}
+
 /** Estilo reutilizable al repintar números de factura desde el socket. */
 export function estiloCeldaFactura(
 	zebra: boolean,
@@ -501,6 +516,15 @@ export function buildCierreFinalSheet(
 		binding: Omit<CierreBinding, 'cierreId'>
 	) => {
 		if (!editable && hoja.estado !== 'LIQUIDADA') return;
+		bindings.push({ r, c, binding: { ...binding, cierreId: hoja.id } });
+	};
+
+	/** El control físico también se puede marcar después de liquidar el cierre. */
+	const bindFacturaFisica = (
+		r: number,
+		c: number,
+		binding: Omit<CierreBinding, 'cierreId'>
+	) => {
 		bindings.push({ r, c, binding: { ...binding, cierreId: hoja.id } });
 	};
 
@@ -859,6 +883,12 @@ export function buildCierreFinalSheet(
 			entityType: 'item', entityId: it.pivoteId,
 			field: 'aplica_impuestos', section: 'items'
 		});
+		set(row, COL.FACTURA_FISICA, it.factura_fisica ? 'SÍ' : 'NO',
+			estiloFacturaFisica(!!it.factura_fisica));
+		bindFacturaFisica(row, COL.FACTURA_FISICA, {
+			entityType: 'item', entityId: it.pivoteId,
+			field: 'factura_fisica', section: 'items'
+		});
 
 		sums[COL.ADMON] += n(it.valor_admin);
 		sums[COL.TOTAL] += n(it.total_facturado);
@@ -934,6 +964,8 @@ export function buildCierreFinalSheet(
 				estiloCeldaFactura(false, it.factura_anulada, true)
 			);
 			setReadOnly(row, COL.APLICA_IMP, '—', eliminado);
+			setReadOnly(row, COL.FACTURA_FISICA, it.factura_fisica ? 'SÍ' : 'NO',
+				estiloFacturaFisica(!!it.factura_fisica));
 			rowData[row] = { h: 22 };
 			row++;
 		});

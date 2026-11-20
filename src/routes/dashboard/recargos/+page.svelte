@@ -345,6 +345,12 @@
 
 	// Store data
 	const recargos = $derived($recargosStore.recargos);
+	let recargosBusquedaRemota = $state<CanvasRecargo[]>([]);
+	let buscandoRecargosEnBackend = $state(false);
+	let recargosBusquedaGlobal = $state<CanvasRecargo[]>([]);
+	let buscandoEnHistorialGlobal = $state(false);
+	let busquedaGlobalCompleta = $state(false);
+	let errorBusquedaGlobal = $state(false);
 	const loading = $derived($recargosStore.loading);
 	const error = $derived($recargosStore.error);
 	const pagination = $derived($recargosStore.pagination);
@@ -500,49 +506,67 @@
 	// Todas las columnas
 	const columns: any[] = $derived([...fixedColumns, ...dayColumns, ...totalColumns]);
 
-	// Filtered data
-	const filteredRecargos = $derived(
-		recargos.filter((recargo) => {
-			/// `coincide` exige todas las palabras en cualquiera de los campos y
-			/// pasa por alto las tildes, así que «munoz alaskan» encuentra a Muñoz
-			/// con esa placa. El `includes` anterior era de una sola palabra y
-			/// literal: teclear el nombre y el apellido no encontraba nada.
-			if (
-				!coincide(filtros.search, [
-					`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`,
-					recargo.vehiculo?.placa,
-					recargo.empresa?.nombre,
-					recargo.numero_planilla
-				])
-			) {
-				return false;
-			}
+	/// Combina la búsqueda completa del servidor con las filas ya cargadas;
+	/// conserva los resultados locales inmediatos y quita duplicados por ID.
+	const recargosParaFiltrar = $derived.by(() => {
+		if (!filtros.search.trim() || recargosBusquedaRemota.length === 0) return recargos;
+		const porId = new Map<string, CanvasRecargo>();
+		for (const recargo of recargosBusquedaRemota) porId.set(recargo.id, recargo);
+		for (const recargo of recargos) {
+			if (!porId.has(recargo.id)) porId.set(recargo.id, recargo);
+		}
+		return [...porId.values()];
+	});
 
-			// Filtros específicos
-			if (filtros.conductor.length > 0) {
-				const nombre =
-					`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim();
-				if (!filtros.conductor.includes(nombre)) return false;
-			}
+	// Reutiliza exactamente los filtros de la tabla para las búsquedas de otros meses.
+	function pasaFiltrosLocales(recargo: CanvasRecargo): boolean {
+		/// `coincide` exige todas las palabras en cualquiera de los campos y
+		/// pasa por alto las tildes, así que «munoz alaskan» encuentra a Muñoz
+		/// con esa placa. El `includes` anterior era de una sola palabra y
+		/// literal: teclear el nombre y el apellido no encontraba nada.
+		if (
+			!coincide(filtros.search, [
+				`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`,
+				recargo.vehiculo?.placa,
+				recargo.empresa?.nombre,
+				recargo.numero_planilla
+			])
+		) {
+			return false;
+		}
 
-			if (filtros.planilla.length > 0) {
-				if (!filtros.planilla.includes(recargo?.numero_planilla ?? '')) return false;
-			}
+		if (filtros.conductor.length > 0) {
+			const nombre = `${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim();
+			if (!filtros.conductor.includes(nombre)) return false;
+		}
+		if (filtros.planilla.length > 0 && !filtros.planilla.includes(recargo.numero_planilla ?? '')) {
+			return false;
+		}
+		if (filtros.vehiculo.length > 0 && !filtros.vehiculo.includes(recargo.vehiculo?.placa ?? '')) {
+			return false;
+		}
+		if (filtros.empresa.length > 0 && !filtros.empresa.includes(recargo.empresa?.nombre ?? '')) {
+			return false;
+		}
+		if (filtros.estado.length > 0 && !filtros.estado.includes(recargo.estado)) return false;
+		return true;
+	}
 
-			if (filtros.vehiculo.length > 0) {
-				if (!filtros.vehiculo.includes(recargo.vehiculo?.placa ?? '')) return false;
-			}
-
-			if (filtros.empresa.length > 0) {
-				if (!filtros.empresa.includes(recargo.empresa?.nombre ?? '')) return false;
-			}
-			if (filtros.estado.length > 0) {
-				if (!filtros.estado.includes(recargo.estado)) return false;
-			}
-
-			return true;
-		})
+	const filteredRecargos = $derived(recargosParaFiltrar.filter(pasaFiltrosLocales));
+	const recargosDelPeriodo = $derived(
+		filteredRecargos.filter(
+			(recargo) => Number(recargo.mes) === Number(filtros.mes) && Number(recargo.año) === Number(filtros.anio)
+		)
 	);
+	const sugerenciasGlobales = $derived.by(() => {
+		if (!filtros.search.trim() || recargosDelPeriodo.length > 0) return [];
+		return recargosBusquedaGlobal
+			.filter(pasaFiltrosLocales)
+			.filter(
+				(recargo) => Number(recargo.mes) !== Number(filtros.mes) || Number(recargo.año) !== Number(filtros.anio)
+			)
+			.slice(0, 6);
+	});
 
 	/**
 	 * Cuántos filtros están puestos, ignorando mes, año y tamaño de página.
@@ -1789,9 +1813,8 @@
 	// lo que el usuario está tipeando casi en tiempo real sin martillar goto).
 	const URL_SYNC_DEBOUNCE_MS = 200;
 
-	// Track del último mes/año que disparó fetch. El `search` es local
-	// (filtra `recargos` en cliente) → no necesita fetch al backend. Solo
-	// `filtros.mes` / `filtros.anio` cambian el query string del server.
+	// El listado base solo se recarga al cambiar mes/año. La búsqueda remota
+	// tiene un debounce y convive con el filtrado local de las filas cargadas.
 	// Sin este guard, cada keystroke del search disparaba un setMesYAño
 	// → abort del fetch anterior → "se queda cargando infinitamente"
 	// combinado con el retry del apiClient.
@@ -1857,6 +1880,131 @@
 			}
 		}
 	});
+
+	/// Busca en todos los registros del período antes de paginar. El filtrado
+	/// local sigue activo para mostrar de inmediato lo que ya está en memoria.
+	$effect(() => {
+		const termino = filtros.search.trim();
+		const mes = filtros.mes;
+		const año = filtros.anio;
+		const importado = filtros.importado;
+		const eliminados = verEliminados;
+		if (!browser || !mesAnioInicializado) return;
+
+		if (!termino) {
+			recargosBusquedaRemota = [];
+			buscandoRecargosEnBackend = false;
+			return;
+		}
+
+		const controller = new AbortController();
+		recargosBusquedaRemota = [];
+		buscandoRecargosEnBackend = true;
+		const timer = setTimeout(async () => {
+			try {
+				const resultado = await recargosApi.obtenerParaCanvas(
+					{
+						search: termino,
+						mes,
+						año,
+						page: 1,
+						limit: 200,
+						eliminados,
+						...(importado !== 'all'
+							? { imported_from_transmeralda: importado }
+							: {})
+					},
+					{ signal: controller.signal }
+				);
+				if (!controller.signal.aborted) recargosBusquedaRemota = resultado.data;
+			} catch (error) {
+				if (!controller.signal.aborted) {
+					console.warn('[recargos] Falló la búsqueda remota; se conservan los resultados locales:', error);
+				}
+			} finally {
+				if (!controller.signal.aborted) buscandoRecargosEnBackend = false;
+			}
+		}, 300);
+
+		return () => {
+			clearTimeout(timer);
+			controller.abort();
+		};
+	});
+
+	function irARecargoSugerido(recargo: CanvasRecargo) {
+		const mes = Number(recargo.mes);
+		const año = Number(recargo.año);
+		if (!Number.isInteger(mes) || mes < 1 || mes > 12 || !Number.isInteger(año) || año < 2000) return;
+		filtros.mes = mes;
+		filtros.anio = año;
+		filtros.pagina = 1;
+	}
+
+	/// Si el período seleccionado no tiene resultados, consulta el historial sin mes/año.
+	$effect(() => {
+		const termino = filtros.search.trim();
+		const importado = filtros.importado;
+		const eliminados = verEliminados;
+		const hayCoincidenciasPeriodo = recargosDelPeriodo.length > 0;
+		const buscandoPeriodo = buscandoRecargosEnBackend;
+		void filtros.mes;
+		void filtros.anio;
+		if (!browser || !mesAnioInicializado) return;
+
+		if (!termino) {
+			recargosBusquedaGlobal = [];
+			buscandoEnHistorialGlobal = false;
+			busquedaGlobalCompleta = false;
+			errorBusquedaGlobal = false;
+			return;
+		}
+
+		if (buscandoPeriodo || hayCoincidenciasPeriodo) {
+			recargosBusquedaGlobal = [];
+			buscandoEnHistorialGlobal = false;
+			busquedaGlobalCompleta = false;
+			errorBusquedaGlobal = false;
+			return;
+		}
+
+		const controller = new AbortController();
+		recargosBusquedaGlobal = [];
+		buscandoEnHistorialGlobal = true;
+		busquedaGlobalCompleta = false;
+		errorBusquedaGlobal = false;
+		const timer = setTimeout(async () => {
+			try {
+				const resultado = await recargosApi.obtenerParaCanvas(
+					{
+						search: termino,
+						page: 1,
+						limit: 200,
+						eliminados,
+						...(importado !== 'all' ? { imported_from_transmeralda: importado } : {})
+					},
+					{ signal: controller.signal }
+				);
+				if (!controller.signal.aborted) recargosBusquedaGlobal = resultado.data;
+			} catch (error) {
+				if (!controller.signal.aborted) {
+					errorBusquedaGlobal = true;
+					console.warn('[recargos] Falló la búsqueda en todo el historial:', error);
+				}
+			} finally {
+				if (!controller.signal.aborted) {
+					buscandoEnHistorialGlobal = false;
+					busquedaGlobalCompleta = true;
+				}
+			}
+		}, 300);
+
+		return () => {
+			clearTimeout(timer);
+			controller.abort();
+		};
+	});
+
 </script>
 
 <svelte:head>
@@ -1869,9 +2017,21 @@
 	{@const periodo = `${getNombreMes(filtros.mes).toLowerCase()} de ${filtros.anio}`}
 	<div class="dir-vacio">
 		<img src={img.src} alt={img.alt} width="418" height="418" />
-		<h3>{verEliminados ? 'No hay recargos eliminados' : 'No hay recargos'}</h3>
+		<h3>
+			{buscandoRecargosEnBackend || buscandoEnHistorialGlobal
+				? 'Buscando en todas las planillas'
+				: verEliminados
+					? 'No hay recargos eliminados'
+					: 'No hay recargos'}
+		</h3>
 		<p>
-			{#if filtrosActivos > 0}
+			{#if buscandoRecargosEnBackend}
+				Consultando el resto de resultados del período…
+			{:else if buscandoEnHistorialGlobal}
+				Sin resultados en {periodo}; buscando en los demás meses…
+			{:else if busquedaGlobalCompleta && !errorBusquedaGlobal}
+				No se encontraron coincidencias en otros meses.
+			{:else if filtrosActivos > 0}
 				No se encontraron planillas de {periodo} con los filtros aplicados.
 			{:else if verEliminados}
 				Ninguna planilla de {periodo} está marcada como eliminada.
@@ -1898,21 +2058,12 @@
 	in:fade={{ duration: 400 }}
 >
 	<!-- ── CABECERA: título, conteos del mes y acciones ───────── -->
-	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+	<header class="page-card dir-cabecera rec-cabecera">
 		<div class="dir-cabecera-texto">
 			<h1 class="dir-titulo">Recargos de planillas</h1>
 			<p class="dir-desc">
 				Horas extra y recargos de {getNombreMes(filtros.mes).toLowerCase()} de {filtros.anio}.
 			</p>
-			{#if recargos.length > 0}
-				<div class="dir-conteos">
-					<ResumenConteos
-						conteos={conteosEstado}
-						activo={estadoResumenActivo}
-						onElegir={filtrarPorEstado}
-					/>
-				</div>
-			{/if}
 		</div>
 
 		<!-- `flex-wrap` (de `.dir-cabecera-acciones`): en móvil el selector de mes
@@ -2084,12 +2235,20 @@
 				</button>
 			{/if}
 		</div>
+		{#if recargos.length > 0}
+			<div class="dir-conteos rec-cabecera-conteos">
+				<ResumenConteos
+					conteos={conteosEstado}
+					activo={estadoResumenActivo}
+					onElegir={filtrarPorEstado}
+				/>
+			</div>
+		{/if}
 	</header>
 
 	<!-- ── FILTROS A LA VISTA: buscador, vista y tamaño de página ── -->
-	<!-- El buscador NO se deshabilita mientras carga: el filtrado es local, así
-	     que se puede seguir escribiendo mientras llega el mes del servidor. El
-	     aviso de «Actualizando…» lo da la propia tabla. -->
+	<!-- El buscador filtra lo cargado de inmediato y consulta el resto del período
+	     en paralelo; por eso sigue disponible mientras llega la respuesta remota. -->
 	<div class="dir-filtros">
 		<div class="dir-filtros-buscador">
 			<BuscadorLista
@@ -2098,6 +2257,11 @@
 				placeholder="Conductor, placa, empresa o planilla…"
 				etiqueta="Buscar recargos"
 			/>
+			{#if buscandoRecargosEnBackend || buscandoEnHistorialGlobal}
+				<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]" role="status">
+					{buscandoEnHistorialGlobal ? 'Buscando en todo el historial…' : 'Buscando en todo el período…'}
+				</span>
+			{/if}
 		</div>
 
 		<!-- Filtro: Solo importados de Transmeralda (después del search) -->
@@ -2138,6 +2302,43 @@
 			</select>
 		</label>
 	</div>
+
+
+	{#if buscandoEnHistorialGlobal || sugerenciasGlobales.length > 0 || busquedaGlobalCompleta}
+		<section class="rec-historial" aria-live="polite" aria-label="Coincidencias de recargos en otros meses">
+			{#if buscandoEnHistorialGlobal}
+				<p class="rec-historial-mensaje" role="status">
+					Sin coincidencias en {getNombreMes(filtros.mes).toLowerCase()} de {filtros.anio}; buscando en todo el historial…
+				</p>
+			{:else if sugerenciasGlobales.length > 0}
+				<span class="rec-historial-etiqueta">Otros meses:</span>
+				<div class="rec-historial-resultados">
+					{#each sugerenciasGlobales as sugerencia (sugerencia.id)}
+						{@const conductor = `${sugerencia.conductor?.nombre || ''} ${sugerencia.conductor?.apellido || ''}`.trim()}
+						<button
+							type="button"
+							onclick={() => irARecargoSugerido(sugerencia)}
+							title="Abrir {getNombreMes(Number(sugerencia.mes))} de {sugerencia.año} · {sugerencia.vehiculo?.placa || 'Sin placa'} · {conductor || 'Sin conductor'} · {sugerencia.empresa?.nombre || 'Sin empresa'}"
+							class="rec-historial-item"
+						>
+							<strong>Planilla {formatearNumeroPlanilla(sugerencia.numero_planilla ?? null)}</strong>
+							<span>{getNombreMes(Number(sugerencia.mes))} {sugerencia.año}</span>
+							<span>{sugerencia.vehiculo?.placa || 'Sin placa'}</span>
+							<span class="rec-historial-conductor">{conductor || 'Sin conductor'}</span>
+						</button>
+					{/each}
+				</div>
+			{:else if errorBusquedaGlobal}
+				<p class="rec-historial-mensaje" role="status">
+					No fue posible consultar el historial completo. Intenta de nuevo en unos segundos.
+				</p>
+			{:else}
+				<p class="rec-historial-mensaje" role="status">
+					No encontré coincidencias para “{filtros.search}” en otros meses.
+				</p>
+			{/if}
+		</section>
+	{/if}
 
 	<!-- Stats Panel -->
 	{#if !loading && filteredRecargos.length > 0}
@@ -2219,7 +2420,7 @@
 					<span
 						class="font-mono-meta rounded-md bg-[rgba(245,158,11,0.10)] px-2 py-0.5 text-[0.65rem] text-[#92400E]"
 					>
-						Filtrado: {filteredRecargos.length} / {recargos.length}
+						Filtrado: {filteredRecargos.length} / {recargosParaFiltrar.length}
 					</span>
 					<!-- Con seis filtros puestos a la vez, quitarlos uno a uno era
 					     el único camino de vuelta. -->
@@ -3587,4 +3788,118 @@
 			background-color: rgba(99, 102, 241, 0.18) !important;
 		}
 	}
+
+	/* Cabecera del canvas: controles a la derecha y conteos en una sola franja. */
+	.dir-cabecera.rec-cabecera {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-areas: 'intro acciones' 'conteos conteos';
+		align-items: center;
+		gap: 0.65rem 1.25rem;
+		padding: 1rem 1.25rem;
+	}
+	.dir-cabecera.rec-cabecera .dir-cabecera-texto {
+		grid-area: intro;
+		gap: 0.25rem;
+	}
+	.dir-cabecera.rec-cabecera .dir-cabecera-acciones {
+		grid-area: acciones;
+		justify-content: flex-end;
+		gap: 0.4rem;
+	}
+	.dir-cabecera.rec-cabecera .rec-cabecera-conteos {
+		grid-area: conteos;
+		margin-top: 0;
+	}
+
+	/* Las coincidencias son enlaces compactos en línea, no tarjetas apiladas. */
+	.rec-historial {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.45rem 0.75rem;
+		min-width: 0;
+		margin: 0 0.25rem;
+		padding: 0.45rem 0.65rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 0.85rem;
+		background: var(--bg-base);
+	}
+	.rec-historial-etiqueta {
+		flex: 0 0 auto;
+		color: var(--text-muted);
+		font-size: 0.68rem;
+		font-weight: 750;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+	}
+	.rec-historial-resultados {
+		display: flex;
+		flex: 1 1 500px;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		min-width: 0;
+	}
+	.rec-historial-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		max-width: 100%;
+		min-width: 0;
+		padding: 0.32rem 0.55rem;
+		border: 1px solid var(--border-default);
+		border-radius: 999px;
+		background: white;
+		color: var(--text-secondary);
+		font-size: 0.72rem;
+		line-height: 1.2;
+		white-space: nowrap;
+		transition: border-color 140ms ease-out, background-color 140ms ease-out;
+	}
+	@media (hover: hover) and (pointer: fine) {
+		.rec-historial-item:hover {
+			border-color: var(--emerald-500);
+			background: white;
+		}
+	}
+	.rec-historial-item:focus-visible {
+		outline: 2px solid var(--emerald-500);
+		outline-offset: 2px;
+	}
+	.rec-historial-item strong {
+		color: var(--text-primary);
+		font-weight: 750;
+	}
+	.rec-historial-conductor {
+		overflow: hidden;
+		max-width: 12rem;
+		text-overflow: ellipsis;
+	}
+	.rec-historial-mensaje {
+		margin: 0;
+		color: var(--text-secondary);
+		font-size: 0.75rem;
+	}
+	@media (max-width: 1100px) {
+		.dir-cabecera.rec-cabecera {
+			grid-template-columns: minmax(0, 1fr);
+			grid-template-areas: 'intro' 'conteos' 'acciones';
+			align-items: stretch;
+		}
+		.dir-cabecera.rec-cabecera .dir-cabecera-acciones {
+			justify-content: flex-start;
+		}
+	}
+	@media (max-width: 640px) {
+		.rec-historial {
+			align-items: flex-start;
+		}
+		.rec-historial-resultados {
+			flex-basis: 100%;
+		}
+		.rec-historial-item {
+			max-width: 100%;
+		}
+	}
+
 </style>

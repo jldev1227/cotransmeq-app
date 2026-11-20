@@ -36,6 +36,7 @@ export const recargosApi = {
 		if (filtros.mes) params.append('mes', filtros.mes.toString());
 		if (filtros.año) params.append('ano', filtros.año.toString()); // Usar 'ano' sin ñ
 		if (filtros.estado) params.append('estado', filtros.estado);
+		if (filtros.search?.trim()) params.append('search', filtros.search.trim());
 		if (filtros.numero_planilla) params.append('numero_planilla', filtros.numero_planilla);
 		if (filtros.imported_from_transmeralda) params.append('imported_from_transmeralda', filtros.imported_from_transmeralda);
 		if (filtros.page) params.append('page', filtros.page.toString());

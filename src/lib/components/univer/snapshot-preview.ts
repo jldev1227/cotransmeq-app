@@ -28,7 +28,8 @@ export function seccionesSnapshot(
 			['Fechas', 'fechas'],
 			['Cantidad', 'cantidad'],
 			['Facturado', 'total_facturado'],
-			['A liquidar', 'valor_liquidar']
+			['A liquidar', 'valor_liquidar'],
+			['Factura física', 'factura_fisica']
 		]);
 		const conceptos = filas(payload.conceptos ?? [], [
 			['Tipo', 'tipo'],

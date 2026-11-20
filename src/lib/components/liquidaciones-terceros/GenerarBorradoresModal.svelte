@@ -658,9 +658,9 @@
 				persistir: true,
 				anio,
 				mes,
-				// Vacío = todas. Se manda la lista solo si el usuario excluyó
-				// alguna, para no fijar un filtro que el servidor no necesita.
-				placas: placasExcluidas.size > 0 ? placasAIncluir : undefined,
+				// Siempre explícitas: incluso si todas las placas detectadas están
+				// marcadas, se deben omitir liquidaciones sin items de terceros.
+				placas: placasAIncluir,
 				force_new: forceNew
 			});
 			if (r.status === 'error') errorLanzar = r.error ?? 'Error al lanzar';

@@ -178,6 +178,7 @@ export interface RecargoPlanillaFiltros {
 	mes?: number;
 	año?: number;
 	estado?: string;
+	search?: string;
 	numero_planilla?: string;
 	/**
 	 * Filtro de planillas importadas de Transmeralda:

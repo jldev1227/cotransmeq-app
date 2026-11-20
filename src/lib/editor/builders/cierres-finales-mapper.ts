@@ -105,6 +105,7 @@ function itemsDeDetalle(d: any): ItemCierre[] {
 				// `=== true` los mostraría como excluidos de la base imponible
 				// cuando en realidad sí entran.
 				aplica_impuestos: it.aplica_impuestos !== false,
+				factura_fisica: it.factura_fisica === true,
 				excluido: !!it.deleted_at
 			};
 		});

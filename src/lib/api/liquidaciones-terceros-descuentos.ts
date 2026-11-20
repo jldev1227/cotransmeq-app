@@ -96,6 +96,24 @@ export interface ItemsDisponiblesResp {
 	total: number;
 }
 
+export interface FacturaFisicaBusqueda {
+	id: string;
+	pivote_id: string;
+	cierre_id: string;
+	numero_factura: string;
+	fecha_facturacion: string | null;
+	factura_estado: string | null;
+	mes: number;
+	anio: number;
+	placa: string;
+	recorrido: string;
+	fechas: string;
+	valor_liquidar: number;
+	tercero_nombre: string;
+	factura_fisica: boolean;
+	cierre_estado: string;
+}
+
 export type TipoNovedadConductor =
 	| 'VACACIONES'
 	| 'INCAPACIDAD'
@@ -769,6 +787,25 @@ export const liquidacionesTercerosDescuentosAPI = {
 			{
 				aplica_impuestos
 			}
+		);
+		return response.data;
+	},
+
+	async buscarFacturaFisica(params: {
+		q: string;
+		desde?: string;
+		hasta?: string;
+	}): Promise<{ resultados: FacturaFisicaBusqueda[]; total: number; truncado: boolean }> {
+		const response = await apiClient.get('/api/liquidaciones-terceros/buscar-factura-fisica', {
+			params
+		});
+		return response.data;
+	},
+
+	async actualizarFacturaFisicaItem(pivoteId: string, factura_fisica: boolean) {
+		const response = await apiClient.patch(
+			`/api/liquidaciones-terceros/items/${pivoteId}/factura-fisica`,
+			{ factura_fisica }
 		);
 		return response.data;
 	},
