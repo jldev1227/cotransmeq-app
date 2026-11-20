@@ -21,8 +21,8 @@
 	let modal = $state(false);
 	let guardando = $state(false);
 	let error = $state('');
-	let opciones = $state<OpcionesEscaneados>({ assignments: [], conductores: [], vehiculos: [] });
-	let assignmentId = $state('');
+	let opciones = $state<OpcionesEscaneados>({ formatos: [], conductores: [], vehiculos: [] });
+	let formularioSeleccionadoId = $state('');
 	let conductorId = $state('');
 	let vehicleId = $state('');
 	let dateFrom = $state('');
@@ -33,13 +33,12 @@
 	let archivoInput: HTMLInputElement;
 	let arrastrando = $state(false);
 	let timerLista: ReturnType<typeof setTimeout> | undefined;
-	const secuenciaOpciones = { assignments: 0, conductores: 0, vehiculos: 0 };
-	const asignaciones = $derived(
-		opciones.assignments.map((a) => ({
+	const secuenciaOpciones = { formatos: 0, conductores: 0, vehiculos: 0 };
+	const formatos = $derived(
+		opciones.formatos.map((a) => ({
 			value: a.id,
-			label: `${a.version.form.code} · ${a.version.form.name}`,
-			labelSecundario: `v${a.version.version_number} · ${a.name}`,
-			searchLabel: `${a.version.form.code} ${a.version.form.name} ${a.name} ${a.version.version_number}`
+			label: `${a.code} · ${a.name}`,
+			searchLabel: `${a.code} ${a.name}`
 		}))
 	);
 	const conductores = $derived(
@@ -76,7 +75,7 @@
 			cargando = false;
 		}
 	}
-	async function buscarOpciones(tipo: 'assignments' | 'conductores' | 'vehiculos', q: string) {
+	async function buscarOpciones(tipo: 'formatos' | 'conductores' | 'vehiculos', q: string) {
 		const secuencia = ++secuenciaOpciones[tipo];
 		try {
 			const resultado = await escaneadosAPI.opciones(q, formId);
@@ -84,7 +83,7 @@
 			const seleccionado = opciones[tipo].find(
 				(item) =>
 					item.id ===
-					(tipo === 'assignments' ? assignmentId : tipo === 'conductores' ? conductorId : vehicleId)
+					(tipo === 'formatos' ? formularioSeleccionadoId : tipo === 'conductores' ? conductorId : vehicleId)
 			);
 			opciones = {
 				...opciones,
@@ -97,13 +96,13 @@
 			error = e instanceof Error ? e.message : 'No se pudieron buscar opciones.';
 		}
 	}
-	function buscarAsignaciones(q: string) { void buscarOpciones('assignments', q); }
+	function buscarFormatos(q: string) { void buscarOpciones('formatos', q); }
 	function buscarConductores(q: string) { void buscarOpciones('conductores', q); }
 	function buscarVehiculos(q: string) { void buscarOpciones('vehiculos', q); }
 	async function abrir() {
 		modal = true;
 		error = '';
-		assignmentId = '';
+		formularioSeleccionadoId = '';
 		conductorId = '';
 		vehicleId = '';
 		dateFrom = '';
@@ -113,7 +112,7 @@
 		archivo = null;
 		try {
 			opciones = await escaneadosAPI.opciones('', formId);
-			if (formId && opciones.assignments.length === 1) assignmentId = opciones.assignments[0].id;
+			if (formId && opciones.formatos.length === 1) formularioSeleccionadoId = opciones.formatos[0].id;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'No se pudieron cargar las opciones.';
 		}
@@ -140,7 +139,7 @@
 	async function guardar() {
 		if (
 			!archivo ||
-			!assignmentId ||
+			!formularioSeleccionadoId ||
 			!conductorId ||
 			!vehicleId ||
 			!dateFrom ||
@@ -173,7 +172,7 @@
 			const hash = await crypto.subtle.digest('SHA-256', await archivo.arrayBuffer());
 			const sha256 = [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
 			const { id } = await escaneadosAPI.iniciar({
-				assignmentId,
+				formId: formularioSeleccionadoId,
 				conductorId,
 				vehicleId,
 				dateFrom,
@@ -271,9 +270,7 @@
 			{#each registros as registro (registro.id)}
 				<article class="registro">
 					<div>
-						<strong>{registro.formCode} · {registro.formName}</strong><small
-							>v{registro.versionNumber} · {registro.assignmentName}</small
-						>
+						<strong>{registro.formCode} · {registro.formName}</strong>
 					</div>
 					<div>
 						<strong>{registro.conductor}</strong><small
@@ -338,17 +335,17 @@
 			>
 				<div class="identidad">
 					<div class="campo">
-						<span>Formulario y versión</span>
+						<span>Formato</span>
 						<SelectBuscable
-							opciones={asignaciones}
-							valor={assignmentId || null}
-							placeholder="Buscar formulario o asignación…"
-							placeholderBusqueda="Nombre, código o versión"
-							ariaLabel="Formulario y versión"
-							onSeleccionar={(valor) => (assignmentId = valor ?? '')}
-							onBuscar={buscarAsignaciones}
+							opciones={formatos}
+							valor={formularioSeleccionadoId || null}
+							placeholder="Buscar formato…"
+							placeholderBusqueda="Nombre o código del formato"
+							ariaLabel="Formato"
+							onSeleccionar={(valor) => (formularioSeleccionadoId = valor ?? '')}
+							onBuscar={buscarFormatos}
 						/>
-						{#if formId}<small class="ayuda">Asignaciones del formulario del enlace.</small>{/if}
+						{#if formId}<small class="ayuda">Formato del enlace seleccionado automáticamente.</small>{/if}
 					</div>
 					<div class="campo">
 						<span>Conductor</span>
