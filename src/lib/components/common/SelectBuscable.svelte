@@ -18,6 +18,7 @@
 		ariaLabel?: string;
 		deshabilitado?: boolean;
 		onSeleccionar: (valor: string | null) => void;
+		onBuscar?: (texto: string) => void;
 	};
 
 	let {
@@ -27,7 +28,8 @@
 		placeholderBusqueda = 'Buscar…',
 		ariaLabel,
 		deshabilitado = false,
-		onSeleccionar
+		onSeleccionar,
+		onBuscar
 	}: Props = $props();
 
 	let abierto = $state(false);
@@ -55,6 +57,13 @@
 
 	$effect(() => {
 		if (busqueda !== undefined) highlightIndex = 0;
+	});
+
+	$effect(() => {
+		if (!abierto || !onBuscar) return;
+		const texto = busqueda.trim();
+		const timer = setTimeout(() => onBuscar(texto), 300);
+		return () => clearTimeout(timer);
 	});
 
 	async function scrollHighlightedIntoView() {
