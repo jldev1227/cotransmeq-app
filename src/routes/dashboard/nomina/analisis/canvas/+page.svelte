@@ -414,6 +414,7 @@
 		mes: string;
 		mesClave: string;
 		anio: number;
+		pagaCliente: boolean | null;
 		valor: number;
 	}
 	let paginaRecargo = $state(1);
@@ -435,6 +436,7 @@
 					mes: mesNombre(periodo.clave),
 					mesClave: periodo.clave,
 					anio: periodo.anio,
+					pagaCliente: r.paga_cliente,
 					valor: r.valor
 				});
 			}
@@ -451,6 +453,7 @@
 							mes: mesNombre(String(l.mes).padStart(2, '0')),
 							mesClave: String(l.mes).padStart(2, '0'),
 							anio: l.anio,
+							pagaCliente: null,
 							valor: l.total_recargos
 						});
 					}
@@ -944,7 +947,8 @@
 				label: 'Valor pagado',
 				num: true,
 				fmt: (v) => fmt(v ?? 0)
-			}
+			},
+			{ key: 'pagaCliente', label: 'Paga cliente', fmt: (v) => v === null ? 'Sin dato' : v ? 'Sí paga' : 'No paga' }
 		],
 		pernotes: [
 			{ key: 'placa', label: 'Placa' },
@@ -1276,6 +1280,7 @@
 						<h2>Recargos registrados en nómina</h2>
 						<span>
 							Empresa, mes e importe salen de los recargos guardados en la liquidación del conductor.
+							El estado indica quién asume el pago.
 						</span>
 					</header>
 					<div class="an-scroll">
@@ -1287,6 +1292,7 @@
 									<th><span class="an-th-btn">Empresa</span></th>
 									<th><span class="an-th-btn">Mes</span></th>
 									<th class="an-th--num"><span class="an-th-btn">Valor pagado</span></th>
+									<th><span class="an-th-btn">Paga cliente</span></th>
 								</tr>
 							</thead>
 							<tbody>
@@ -1298,6 +1304,15 @@
 										<td data-etiqueta="Mes">{f.mes} {f.anio}</td>
 										<td class="an-td--num" data-etiqueta="Valor pagado">
 											<strong>{fmt(f.valor)}</strong>
+										</td>
+										<td data-etiqueta="Paga cliente">
+											<span
+												class="an-recargo-cliente"
+												class:si-paga={f.pagaCliente === true}
+												class:no-paga={f.pagaCliente === false}
+											>
+												{f.pagaCliente === null ? 'Sin dato' : f.pagaCliente ? 'Sí paga' : 'No paga'}
+											</span>
 										</td>
 									</tr>
 								{/each}
@@ -1792,6 +1807,28 @@
 	}
 	.an-recargos-jornada .an-card-cabecera {
 		padding-bottom: 0.65rem;
+	}
+	.an-recargo-cliente {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.2rem 0.55rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 999px;
+		background: var(--bg-base);
+		color: var(--text-secondary);
+		font-size: 0.76rem;
+		font-weight: 700;
+		white-space: nowrap;
+	}
+	.an-recargo-cliente.si-paga {
+		background: #f0fdf4;
+		border-color: #bbf7d0;
+		color: #166534;
+	}
+	.an-recargo-cliente.no-paga {
+		background: #fee2e2;
+		border-color: #fca5a5;
+		color: #991b1b;
 	}
 	.an-tabla {
 		width: 100%;
