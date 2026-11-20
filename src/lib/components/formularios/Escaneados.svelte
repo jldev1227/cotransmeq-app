@@ -51,6 +51,11 @@
 	let novedadesEdicion = $state<NovedadEdicion[]>([]);
 	let detallesEdicion = $state<Array<{ clave: string; valor: string }>>([]);
 	let guardandoEdicion = $state(false);
+	let archivoReemplazo = $state<File | null>(null);
+	let archivoReemplazoInput: HTMLInputElement;
+	let arrastrandoReemplazo = $state(false);
+	let reemplazandoArchivo = $state(false);
+	let errorReemplazo = $state('');
 	let eliminandoId = $state<string | null>(null);
 	let errorEdicion = $state('');
 	let timerLista: ReturnType<typeof setTimeout> | undefined;
@@ -351,6 +356,58 @@
 			)
 			.map(([clave, valor]) => ({ clave, valor: String(valor) }));
 		errorEdicion = '';
+		archivoReemplazo = null;
+		errorReemplazo = '';
+	}
+	function seleccionarArchivoReemplazo(archivo?: File) {
+		if (!archivo) return;
+		if (archivo.type !== 'application/pdf' && !archivo.name.toLowerCase().endsWith('.pdf')) {
+			archivoReemplazo = null;
+			errorReemplazo = 'Selecciona un archivo PDF.';
+			return;
+		}
+		if (archivo.size === 0 || archivo.size > 25 * 1024 * 1024) {
+			archivoReemplazo = null;
+			errorReemplazo = archivo.size > 25 * 1024 * 1024
+				? 'El PDF supera el límite de 25 MB.'
+				: 'El archivo está vacío.';
+			return;
+		}
+		archivoReemplazo = archivo;
+		errorReemplazo = '';
+	}
+	function soltarReemplazo(event: DragEvent) {
+		event.preventDefault();
+		arrastrandoReemplazo = false;
+		seleccionarArchivoReemplazo(event.dataTransfer?.files?.[0]);
+	}
+	async function guardarReemplazoArchivo() {
+		if (!registroEdicion || !archivoReemplazo) return;
+		reemplazandoArchivo = true;
+		errorReemplazo = '';
+		try {
+			const prefijo = new Uint8Array(await archivoReemplazo.slice(0, 1024).arrayBuffer());
+			if (!new TextDecoder().decode(prefijo).includes('%PDF-')) {
+				errorReemplazo = 'El archivo no contiene una cabecera PDF válida.';
+				return;
+			}
+			const archivo = archivoReemplazo;
+			const resultado = await escaneadosAPI.reemplazarArchivo(registroEdicion.id, archivo);
+			registroEdicion = {
+				...registroEdicion,
+				originalName: resultado.originalName,
+				byteSize: resultado.byteSize,
+				uploadedAt: resultado.uploadedAt
+			};
+			archivoReemplazo = null;
+			if (archivoReemplazoInput) archivoReemplazoInput.value = '';
+			await cargar();
+			toast.success('PDF reemplazado.');
+		} catch (e) {
+			errorReemplazo = e instanceof Error ? e.message : 'No se pudo reemplazar el PDF.';
+		} finally {
+			reemplazandoArchivo = false;
+		}
 	}
 	async function guardarEdicion() {
 		if (!registroEdicion) return;
@@ -734,12 +791,30 @@
 				<div>
 					<span class="eyebrow">Formato físico escaneado</span>
 					<h3 id="titulo-edicion">Editar datos del PDF</h3>
-					<p>{registroEdicion.originalName} · El archivo original se conserva.</p>
+					<p>{registroEdicion.originalName} · {(registroEdicion.byteSize / 1024 / 1024).toFixed(1)} MB</p>
 				</div>
-				<button type="button" aria-label="Cerrar" class="cerrar" disabled={guardandoEdicion}
+				<button type="button" aria-label="Cerrar" class="cerrar" disabled={guardandoEdicion || reemplazandoArchivo}
 					onclick={() => (registroEdicion = null)}>×</button>
 			</header>
 			<form onsubmit={(event) => { event.preventDefault(); void guardarEdicion(); }}>
+				<section class="reemplazo-archivo">
+					<div class="novedades-encabezado">
+						<strong>Reemplazar PDF</strong><small>El nuevo archivo sustituirá al actual</small>
+					</div>
+					<input bind:this={archivoReemplazoInput} type="file" accept="application/pdf,.pdf" class="sr-only"
+						disabled={reemplazandoArchivo} onchange={(event) => seleccionarArchivoReemplazo(event.currentTarget.files?.[0])} />
+					<button type="button" class="zona-archivo" class:arrastrando={arrastrandoReemplazo}
+						disabled={reemplazandoArchivo} onclick={() => archivoReemplazoInput?.click()}
+						ondragover={(event) => { event.preventDefault(); arrastrandoReemplazo = true; }}
+						ondragleave={() => (arrastrandoReemplazo = false)} ondrop={soltarReemplazo}>
+						<span class="icono-archivo" aria-hidden="true">↑</span>
+						<strong>{archivoReemplazo?.name ?? 'Arrastra un PDF aquí o selecciónalo'}</strong>
+						<small>Un archivo · Máximo 25 MB</small>
+					</button>
+					{#if errorReemplazo}<p class="error" role="alert">{errorReemplazo}</p>{/if}
+					<button type="button" class="accion" disabled={!archivoReemplazo || reemplazandoArchivo || guardandoEdicion}
+						onclick={guardarReemplazoArchivo}>{reemplazandoArchivo ? 'Reemplazando…' : 'Reemplazar archivo actual'}</button>
+				</section>
 				<div class="fechas">
 					<label>Desde<input required type="date" bind:value={fechaDesdeEdicion} /></label>
 					<label>Hasta<input required type="date" min={fechaDesdeEdicion} bind:value={fechaHastaEdicion} /></label>
@@ -779,8 +854,8 @@
 				</details>
 				{#if errorEdicion}<p class="error" role="alert">{errorEdicion}</p>{/if}
 				<footer>
-					<button type="button" disabled={guardandoEdicion} onclick={() => (registroEdicion = null)}>Cancelar</button>
-					<button type="submit" class="accion" disabled={guardandoEdicion}>{guardandoEdicion ? 'Guardando…' : 'Guardar cambios'}</button>
+					<button type="button" disabled={guardandoEdicion || reemplazandoArchivo} onclick={() => (registroEdicion = null)}>Cancelar</button>
+					<button type="submit" class="accion" disabled={guardandoEdicion || reemplazandoArchivo}>{guardandoEdicion ? 'Guardando…' : 'Guardar cambios'}</button>
 				</footer>
 			</form>
 		</dialog>
