@@ -71,6 +71,8 @@ export interface GetEvaluacionesParams {
 	page?: number;
 	limit?: number;
 	search?: string;
+	desde?: string;
+	hasta?: string;
 	sortBy?: 'titulo' | 'created_at';
 	sortOrder?: 'asc' | 'desc';
 }
@@ -78,10 +80,10 @@ export interface GetEvaluacionesParams {
 export async function getEvaluaciones(
 	params: GetEvaluacionesParams = {}
 ): Promise<EvaluacionesResponse> {
-	const { page = 1, limit = 10, search, sortBy = 'created_at', sortOrder = 'desc' } = params;
+	const { page = 1, limit = 10, search, desde, hasta, sortBy = 'created_at', sortOrder = 'desc' } = params;
 
 	const response = await api.get('/api/evaluaciones', {
-		params: { page, limit, search, sortBy, sortOrder }
+		params: { page, limit, search, desde, hasta, sortBy, sortOrder }
 	});
 
 	return response.data;
