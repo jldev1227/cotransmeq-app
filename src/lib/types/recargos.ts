@@ -180,6 +180,11 @@ export interface RecargoPlanillaFiltros {
 	estado?: string;
 	search?: string;
 	numero_planilla?: string;
+	conductores?: string[];
+	placas?: string[];
+	empresas?: string[];
+	planillas?: string[];
+	estados?: string[];
 	/**
 	 * Filtro de planillas importadas de Transmeralda:
 	 *   'si'  → solo importadas

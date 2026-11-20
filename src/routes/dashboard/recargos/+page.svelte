@@ -62,9 +62,8 @@
 	 * habría roto esos enlaces en silencio. Lo nuevo son los cinco filtros de
 	 * lista, la página y el tamaño de página, que antes no viajaban.
 	 *
-	 * El tope de 200 por página no es estético: el backend limita a 200 por
-	 * consulta, y pedir miles de registros era el origen de las peticiones de
-	 * 7-23 s que aparecían en consola.
+	 * Cada consulta aplica sus filtros en PostgreSQL y trae como máximo 500
+	 * coincidencias; así no se filtra una muestra arbitraria de las primeras 200.
 	 */
 	const DEFS = {
 		search: texto(),
@@ -345,7 +344,6 @@
 
 	// Store data
 	const recargos = $derived($recargosStore.recargos);
-	let recargosBusquedaRemota = $state<CanvasRecargo[]>([]);
 	let buscandoRecargosEnBackend = $state(false);
 	let recargosBusquedaGlobal = $state<CanvasRecargo[]>([]);
 	let buscandoEnHistorialGlobal = $state(false);
@@ -506,17 +504,7 @@
 	// Todas las columnas
 	const columns: any[] = $derived([...fixedColumns, ...dayColumns, ...totalColumns]);
 
-	/// Combina la búsqueda completa del servidor con las filas ya cargadas;
-	/// conserva los resultados locales inmediatos y quita duplicados por ID.
-	const recargosParaFiltrar = $derived.by(() => {
-		if (!filtros.search.trim() || recargosBusquedaRemota.length === 0) return recargos;
-		const porId = new Map<string, CanvasRecargo>();
-		for (const recargo of recargosBusquedaRemota) porId.set(recargo.id, recargo);
-		for (const recargo of recargos) {
-			if (!porId.has(recargo.id)) porId.set(recargo.id, recargo);
-		}
-		return [...porId.values()];
-	});
+	// Los filtros se aplican en el endpoint y se vuelven a validar localmente.
 
 	// Reutiliza exactamente los filtros de la tabla para las búsquedas de otros meses.
 	function pasaFiltrosLocales(recargo: CanvasRecargo): boolean {
@@ -552,7 +540,7 @@
 		return true;
 	}
 
-	const filteredRecargos = $derived(recargosParaFiltrar.filter(pasaFiltrosLocales));
+	const filteredRecargos = $derived(recargos.filter(pasaFiltrosLocales));
 	const recargosDelPeriodo = $derived(
 		filteredRecargos.filter(
 			(recargo) => Number(recargo.mes) === Number(filtros.mes) && Number(recargo.año) === Number(filtros.anio)
@@ -579,12 +567,7 @@
 	const filtrosActivos = $derived(contarActivos(DEFS, filtros, [...NO_SON_FILTROS]));
 
 	function limpiarFiltros() {
-		const habiaImportado = filtros.importado !== 'all';
 		filtros = limpiar(DEFS, filtros, [...NO_SON_FILTROS]);
-		/// El de importados lo resuelve el servidor: dejarlo en «Todos» en el
-		/// selector sin volver a pedir habría mostrado la lista recortada bajo
-		/// un filtro que ya no aparece puesto.
-		if (habiaImportado) void handleImportedFilterChange();
 	}
 
 	// Paginated data
@@ -1117,14 +1100,12 @@
 		}
 	}
 
-	async function handleListDeleted() {
+	function handleListDeleted() {
 		verEliminados = true;
-		await recargosStore.fetchEliminados();
 	}
 
-	async function handleListActivos() {
+	function handleListActivos() {
 		verEliminados = false;
-		await recargosStore.fetchActivos();
 	}
 
 	// --- Clipboard: Copiar filas seleccionadas ---
@@ -1355,11 +1336,6 @@
 	 * variantes). Dispara un nuevo fetch con el filtro pasado al
 	 * backend (no es filtro local: el backend lo aplica en el WHERE).
 	 */
-	async function handleImportedFilterChange() {
-		await recargosStore.aplicarFiltros({
-			imported_from_transmeralda: filtros.importado
-		});
-	}
 
 	// Load data on mount
 	onMount(async () => {
@@ -1376,12 +1352,6 @@
 		/// página esté montada para no pedir dos veces el mismo mes.
 		mesAnioInicializado = true;
 
-		/// «Importado de Transmeralda» lo resuelve el servidor, no el filtrado
-		/// local. Si viene en la URL hay que aplicarlo aquí: pintarlo solo en
-		/// el selector habría mostrado «Sí» sobre la lista sin filtrar.
-		if (filtros.importado !== 'all') {
-			await handleImportedFilterChange();
-		}
 	});
 
 	// Cleanup socket listeners on destroy
@@ -1804,21 +1774,14 @@
 	// (el flag mesAnioInicializado evita un doble fetch al hidratar desde URL en onMount)
 	let mesAnioInicializado = $state(false);
 	let urlSyncTimer: ReturnType<typeof setTimeout> | null = null;
-	// Debounce del fetch: evita disparar 1 request por mes cuando el usuario
-	// navega rápido con prev/next (ej. julio→enero = 1 request, no 6).
-	// El store también aborta el request anterior cuando llega uno nuevo.
+	// Los cambios de filtros comparten un único request debounced al backend.
 	let fetchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	let secuenciaConsultaBackend = 0;
 	const FETCH_DEBOUNCE_MS = 350;
 	// Debounce de la URL (más corto que el fetch para que la URL refleje
 	// lo que el usuario está tipeando casi en tiempo real sin martillar goto).
 	const URL_SYNC_DEBOUNCE_MS = 200;
 
-	// El listado base solo se recarga al cambiar mes/año. La búsqueda remota
-	// tiene un debounce y convive con el filtrado local de las filas cargadas.
-	// Sin este guard, cada keystroke del search disparaba un setMesYAño
-	// → abort del fetch anterior → "se queda cargando infinitamente"
-	// combinado con el retry del apiClient.
-	let lastFetchedMesAnio = '';
 
 	/**
 	 * Los filtros a la URL.
@@ -1856,79 +1819,52 @@
 		);
 	});
 
-	// 2) Fetch: SOLO se dispara cuando cambia mes/año (no en cada keystroke
-	// del search). El `lastFetchedMesAnio` evita fetches redundantes cuando
-	// el usuario ya está en el mismo mes/año y solo está tipeando el search.
-	$effect(() => {
-		if (browser && mesAnioInicializado && filtros.mes && filtros.anio) {
-			const currentKey = `${filtros.mes}-${filtros.anio}`;
-			if (currentKey !== lastFetchedMesAnio) {
-				if (fetchDebounceTimer) clearTimeout(fetchDebounceTimer);
-				fetchDebounceTimer = setTimeout(() => {
-					// Guard: si justo antes de disparar el timer cambió
-					// de nuevo el mes/año, el currentKey ya no coincidirá
-					// con la key que disparó este timer, así que lo
-					// dejamos pasar y el siguiente timer (si lo hay) se
-					// encargará. Pero marcamos `lastFetchedMesAnio` solo
-					// cuando realmente se dispara el fetch, para no
-					// "comer" un cambio legítimo.
-					if (currentKey === `${filtros.mes}-${filtros.anio}`) {
-						lastFetchedMesAnio = currentKey;
-						recargosStore.setMesYAño(filtros.mes, filtros.anio);
-					}
-				}, FETCH_DEBOUNCE_MS);
-			}
-		}
-	});
+	/**
+	 * Traduce los filtros visibles a la consulta del canvas. El backend los aplica
+	 * antes del límite, para que una coincidencia de la fila 201 también aparezca.
+	 */
+	function crearFiltrosConsultaBackend(incluirPeriodo = true) {
+		return {
+			...(incluirPeriodo ? { mes: filtros.mes, año: filtros.anio } : {}),
+			search: filtros.search.trim() || undefined,
+			conductores: [...filtros.conductor],
+			placas: [...filtros.vehiculo],
+			empresas: [...filtros.empresa],
+			planillas: [...filtros.planilla],
+			estados: [...filtros.estado],
+			page: 1,
+			limit: 500,
+			eliminados: verEliminados,
+			...(filtros.importado !== 'all'
+				? { imported_from_transmeralda: filtros.importado }
+				: {})
+		};
+	}
 
-	/// Busca en todos los registros del período antes de paginar. El filtrado
-	/// local sigue activo para mostrar de inmediato lo que ya está en memoria.
 	$effect(() => {
-		const termino = filtros.search.trim();
-		const mes = filtros.mes;
-		const año = filtros.anio;
-		const importado = filtros.importado;
-		const eliminados = verEliminados;
+		const filtrosConsulta = crearFiltrosConsultaBackend();
+		JSON.stringify(filtrosConsulta);
 		if (!browser || !mesAnioInicializado) return;
 
-		if (!termino) {
-			recargosBusquedaRemota = [];
-			buscandoRecargosEnBackend = false;
-			return;
-		}
-
-		const controller = new AbortController();
-		recargosBusquedaRemota = [];
+		const secuencia = ++secuenciaConsultaBackend;
 		buscandoRecargosEnBackend = true;
 		const timer = setTimeout(async () => {
+			if (fetchDebounceTimer === timer) fetchDebounceTimer = null;
 			try {
-				const resultado = await recargosApi.obtenerParaCanvas(
-					{
-						search: termino,
-						mes,
-						año,
-						page: 1,
-						limit: 200,
-						eliminados,
-						...(importado !== 'all'
-							? { imported_from_transmeralda: importado }
-							: {})
-					},
-					{ signal: controller.signal }
-				);
-				if (!controller.signal.aborted) recargosBusquedaRemota = resultado.data;
-			} catch (error) {
-				if (!controller.signal.aborted) {
-					console.warn('[recargos] Falló la búsqueda remota; se conservan los resultados locales:', error);
-				}
+				await recargosStore.aplicarFiltros(filtrosConsulta);
 			} finally {
-				if (!controller.signal.aborted) buscandoRecargosEnBackend = false;
+				if (secuencia === secuenciaConsultaBackend) {
+					buscandoRecargosEnBackend = false;
+				}
 			}
-		}, 300);
+		}, FETCH_DEBOUNCE_MS);
+		fetchDebounceTimer = timer;
 
 		return () => {
 			clearTimeout(timer);
-			controller.abort();
+			if (fetchDebounceTimer === timer) fetchDebounceTimer = null;
+			if (secuencia === secuenciaConsultaBackend) secuenciaConsultaBackend++;
+			recargosStore.abortInflight();
 		};
 	});
 
@@ -1943,9 +1879,8 @@
 
 	/// Si el período seleccionado no tiene resultados, consulta el historial sin mes/año.
 	$effect(() => {
+		const filtrosGlobales = crearFiltrosConsultaBackend(false);
 		const termino = filtros.search.trim();
-		const importado = filtros.importado;
-		const eliminados = verEliminados;
 		const hayCoincidenciasPeriodo = recargosDelPeriodo.length > 0;
 		const buscandoPeriodo = buscandoRecargosEnBackend;
 		void filtros.mes;
@@ -1975,16 +1910,9 @@
 		errorBusquedaGlobal = false;
 		const timer = setTimeout(async () => {
 			try {
-				const resultado = await recargosApi.obtenerParaCanvas(
-					{
-						search: termino,
-						page: 1,
-						limit: 200,
-						eliminados,
-						...(importado !== 'all' ? { imported_from_transmeralda: importado } : {})
-					},
-					{ signal: controller.signal }
-				);
+				const resultado = await recargosApi.obtenerParaCanvas(filtrosGlobales, {
+					signal: controller.signal
+				});
 				if (!controller.signal.aborted) recargosBusquedaGlobal = resultado.data;
 			} catch (error) {
 				if (!controller.signal.aborted) {
@@ -2247,8 +2175,7 @@
 	</header>
 
 	<!-- ── FILTROS A LA VISTA: buscador, vista y tamaño de página ── -->
-	<!-- El buscador filtra lo cargado de inmediato y consulta el resto del período
-	     en paralelo; por eso sigue disponible mientras llega la respuesta remota. -->
+	<!-- Los filtros viajan al backend; la búsqueda global se activa si el período no coincide. -->
 	<div class="dir-filtros">
 		<div class="dir-filtros-buscador">
 			<BuscadorLista
@@ -2257,7 +2184,7 @@
 				placeholder="Conductor, placa, empresa o planilla…"
 				etiqueta="Buscar recargos"
 			/>
-			{#if buscandoRecargosEnBackend || buscandoEnHistorialGlobal}
+			{#if filtros.search.trim() && (buscandoRecargosEnBackend || buscandoEnHistorialGlobal)}
 				<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]" role="status">
 					{buscandoEnHistorialGlobal ? 'Buscando en todo el historial…' : 'Buscando en todo el período…'}
 				</span>
@@ -2267,7 +2194,6 @@
 		<!-- Filtro: Solo importados de Transmeralda (después del search) -->
 		<select
 			bind:value={filtros.importado}
-			onchange={handleImportedFilterChange}
 			disabled={bloqueoPorRecalc}
 			class="input-glow h-10 rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
 			style="min-width: 200px;"
@@ -2288,13 +2214,14 @@
 			onCambiar={cambiarVista}
 		/>
 
-		<!-- Tamaño de página (sin "Todas": el backend limita a 200 máx) -->
+		<!-- El backend permite consultar hasta 500 coincidencias por período. -->
 		<label class="rec-por-pagina" for="items-per-page-select">
 			<span>Mostrar</span>
 			<!-- Valores numéricos, no cadenas: el tamaño de página viaja en la URL
 			     y `parseInt` sobre un `<option value="50">` era el paso intermedio
 			     que ya no hace falta. -->
 			<select id="items-per-page-select" bind:value={filtros.porPagina}>
+				<option value={500}>500</option>
 				<option value={200}>200</option>
 				<option value={100}>100</option>
 				<option value={50}>50</option>
@@ -2420,7 +2347,7 @@
 					<span
 						class="font-mono-meta rounded-md bg-[rgba(245,158,11,0.10)] px-2 py-0.5 text-[0.65rem] text-[#92400E]"
 					>
-						Filtrado: {filteredRecargos.length} / {recargosParaFiltrar.length}
+						Filtrado: {filteredRecargos.length} / {recargos.length}
 					</span>
 					<!-- Con seis filtros puestos a la vez, quitarlos uno a uno era
 					     el único camino de vuelta. -->
