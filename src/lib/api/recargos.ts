@@ -38,6 +38,11 @@ export const recargosApi = {
 		if (filtros.estado) params.append('estado', filtros.estado);
 		if (filtros.search?.trim()) params.append('search', filtros.search.trim());
 		if (filtros.numero_planilla) params.append('numero_planilla', filtros.numero_planilla);
+		if (filtros.conductores?.length) params.append('conductores', JSON.stringify(filtros.conductores));
+		if (filtros.placas?.length) params.append('placas', JSON.stringify(filtros.placas));
+		if (filtros.empresas?.length) params.append('empresas', JSON.stringify(filtros.empresas));
+		if (filtros.planillas?.length) params.append('planillas', JSON.stringify(filtros.planillas));
+		if (filtros.estados?.length) params.append('estados', JSON.stringify(filtros.estados));
 		if (filtros.imported_from_transmeralda) params.append('imported_from_transmeralda', filtros.imported_from_transmeralda);
 		if (filtros.page) params.append('page', filtros.page.toString());
 		if (filtros.limit) params.append('limit', filtros.limit.toString());

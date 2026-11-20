@@ -45,9 +45,8 @@ function createRecargosStore() {
 		filtros: {},
 		pagination: {
 			page: 1,
-			// Cap máximo: el backend rechaza más de 200. Pedir más acá era el
-			// origen de los requests de 7-23s.
-			limit: 200,
+			// El endpoint filtra en base de datos y devuelve hasta 500 coincidencias.
+			limit: 500,
 			total: 0,
 			totalPages: 0
 		},
@@ -202,7 +201,7 @@ function createRecargosStore() {
 		},
 
 		/**
-		 * Cambiar la cantidad de items por página (50/100/200).
+		 * Cambiar la cantidad de items por página (20/50/100/200/500).
 		 * Resetea a página 1.
 		 */
 		async setLimit(limit: number) {
@@ -228,7 +227,18 @@ function createRecargosStore() {
 		 * Aplicar filtros
 		 */
 		async aplicarFiltros(filtros: RecargoPlanillaFiltros) {
-			update((s) => ({ ...s, filtros, pagination: { ...s.pagination, page: 1 } }));
+			update((s) => ({
+				...s,
+				filtros,
+				selectedMes: filtros.mes ?? s.selectedMes,
+				selectedAño: filtros.año ?? s.selectedAño,
+				eliminados: filtros.eliminados ?? s.eliminados,
+				pagination: {
+					...s.pagination,
+					page: filtros.page ?? 1,
+					limit: filtros.limit ?? s.pagination.limit
+				}
+			}));
 			await this.fetchRecargos();
 		},
 
