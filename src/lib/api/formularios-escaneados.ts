@@ -27,6 +27,7 @@ export type OpcionesEscaneados = {
 	}>;
 	vehiculos: Array<{ id: string; placa: string }>;
 };
+export type NovedadEscaneado = { fecha: string; descripcion: string };
 export type Escaneado = {
 	id: string;
 	formCode: string;
@@ -38,7 +39,7 @@ export type Escaneado = {
 	dateTo: string;
 	daysCovered: number;
 	explanation: string;
-	details: Record<string, string>;
+	details: Record<string, string | NovedadEscaneado[]>;
 	originalName: string;
 	byteSize: number;
 	uploadedAt: string | null;
@@ -52,9 +53,17 @@ export type NuevoEscaneado = {
 	dateTo: string;
 	explanation: string;
 	details: Record<string, string>;
+	novedades: NovedadEscaneado[];
 	originalName: string;
 	byteSize: number;
 	sha256: string;
+};
+export type ActualizarEscaneado = {
+	dateFrom: string;
+	dateTo: string;
+	explanation: string;
+	details: Record<string, string>;
+	novedades: NovedadEscaneado[];
 };
 
 export const escaneadosAPI = {
@@ -91,5 +100,13 @@ export const escaneadosAPI = {
 	},
 	url(id: string) {
 		return dato<{ url: string }>(apiClient.get(`/api/formularios/escaneados/${id}/url`));
+	},
+	actualizar(id: string, payload: ActualizarEscaneado) {
+		return dato<{ id: string; updated: boolean }>(
+			apiClient.patch(`/api/formularios/escaneados/${id}`, payload)
+		);
+	},
+	eliminar(id: string) {
+		return dato<{ id: string; deleted: boolean }>(apiClient.delete(`/api/formularios/escaneados/${id}`));
 	}
 };
