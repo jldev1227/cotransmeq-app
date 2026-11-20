@@ -35,6 +35,7 @@
 	import ModalDetalleOrden from '$lib/components/mantenimiento/ModalDetalleOrden.svelte';
 	import ModalDetallePlan from '$lib/components/mantenimiento/ModalDetallePlan.svelte';
 	import ModalNovedadesPreoperacional from '$lib/components/mantenimiento/ModalNovedadesPreoperacional.svelte';
+	import Escaneados from '$lib/components/formularios/Escaneados.svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import {
 		limpiar as limpiarFiltrosDe,
@@ -77,6 +78,11 @@
 	/// El envío completo de un preoperacional vive en `formularios`; sin ese
 	/// módulo se queda en el resumen de novedades.
 	const puedeFormularios = $derived(!!$authStore.user && !!authStore.getAccessLevel('formularios'));
+	const puedeGestionarEscaneados = $derived(
+		!!$authStore.user &&
+			(authStore.getAccessLevel('formularios') === 'full' ||
+				authStore.getAccessLevel('mantenimiento') === 'full')
+	);
 
 	// ── Filtros en la URL ────────────────────────────────────────────────
 	interface Filtros {
@@ -464,7 +470,8 @@
 			tabs={[
 				{ id: 'planes', label: 'Planes', cuenta: resumen?.planes.total ?? null },
 				{ id: 'ordenes', label: 'Órdenes', cuenta: resumen?.ordenes.abiertas || null },
-				{ id: 'costos', label: 'Costos' }
+				{ id: 'costos', label: 'Costos' },
+				...(puedeGestionarEscaneados ? [{ id: 'escaneados', label: 'Formatos escaneados' }] : [])
 			]}
 			activa={filtros.vista}
 			etiqueta="Vistas de mantenimiento"
@@ -729,6 +736,10 @@
 					nombreItems="órdenes"
 				/>
 			{/if}
+		</div>
+	{:else if filtros.vista === 'escaneados' && puedeGestionarEscaneados}
+		<div in:fly={{ y: 12, duration: 300, delay: 60 }}>
+			<Escaneados />
 		</div>
 	{:else}
 		<div class="dir-filtros" in:fly={{ y: 12, duration: 300 }}>
