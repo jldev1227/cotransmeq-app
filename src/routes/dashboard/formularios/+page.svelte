@@ -53,6 +53,7 @@
 	import MisFormularios from '$lib/components/formularios/MisFormularios.svelte';
 	import TarjetasMetricas from '$lib/components/formularios/TarjetasMetricas.svelte';
 	import type { Metrica } from '$lib/components/formularios/TarjetasMetricas.svelte';
+	import ImportarEnviosModal from '$lib/components/formularios/ImportarEnviosModal.svelte';
 	import Escaneados from '$lib/components/formularios/Escaneados.svelte';
 	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 
