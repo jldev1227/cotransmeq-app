@@ -14,10 +14,10 @@ async function dato<T>(promesa: Promise<Respuesta<T>>): Promise<T> {
 }
 
 export type OpcionesEscaneados = {
-	assignments: Array<{
+	formatos: Array<{
 		id: string;
+		code: string;
 		name: string;
-		version: { title: string; version_number: number; form: { code: string; name: string } };
 	}>;
 	conductores: Array<{
 		id: string;
@@ -31,8 +31,6 @@ export type Escaneado = {
 	id: string;
 	formCode: string;
 	formName: string;
-	versionNumber: number;
-	assignmentName: string;
 	conductor: string;
 	document: string | null;
 	placa: string;
@@ -47,7 +45,7 @@ export type Escaneado = {
 	createdBy: string;
 };
 export type NuevoEscaneado = {
-	assignmentId: string;
+	formId: string;
 	conductorId: string;
 	vehicleId: string;
 	dateFrom: string;
