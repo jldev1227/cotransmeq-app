@@ -98,6 +98,13 @@ export const escaneadosAPI = {
 			apiClient.post(`/api/formularios/escaneados/${id}/archivo`, body, { timeout: 120_000 })
 		);
 	},
+	reemplazarArchivo(id: string, archivo: File) {
+		const body = new FormData();
+		body.append('archivo', archivo);
+		return dato<{ id: string; status: string; originalName: string; byteSize: number; uploadedAt: string }>(
+			apiClient.put(`/api/formularios/escaneados/${id}/archivo`, body, { timeout: 120_000 })
+		);
+	},
 	url(id: string) {
 		return dato<{ url: string }>(apiClient.get(`/api/formularios/escaneados/${id}/url`));
 	},
