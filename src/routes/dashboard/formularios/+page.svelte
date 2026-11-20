@@ -1096,7 +1096,7 @@
 				</div>
 			</div>
 
-			<Escaneados />
+			<Escaneados formId={filtroFormId} />
 			{#if cargandoEnvios}
 				<div class="estado" aria-busy="true">Cargando envíos…</div>
 			{:else if envios.length === 0}

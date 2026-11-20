@@ -60,9 +60,11 @@ export type NuevoEscaneado = {
 };
 
 export const escaneadosAPI = {
-	opciones(q = '') {
+	opciones(q = '', formId = '') {
 		return dato<OpcionesEscaneados>(
-			apiClient.get('/api/formularios/escaneados/opciones', { params: { q } })
+			apiClient.get('/api/formularios/escaneados/opciones', {
+				params: { q, formId: formId || undefined }
+			})
 		);
 	},
 	listar(page = 1, search = '', coveredOn = '') {
@@ -80,6 +82,13 @@ export const escaneadosAPI = {
 	completar(id: string) {
 		return dato<{ id: string; status: string }>(
 			apiClient.post(`/api/formularios/escaneados/${id}/complete`, {})
+		);
+	},
+	subir(id: string, archivo: File) {
+		const body = new FormData();
+		body.append('archivo', archivo);
+		return dato<{ id: string; status: string }>(
+			apiClient.post(`/api/formularios/escaneados/${id}/archivo`, body, { timeout: 120_000 })
 		);
 	},
 	url(id: string) {
