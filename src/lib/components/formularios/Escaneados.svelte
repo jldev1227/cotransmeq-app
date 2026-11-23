@@ -309,7 +309,9 @@
 					});
 					documento.pendingId = id;
 				}
-				await escaneadosAPI.subir(documento.pendingId, documento.archivo);
+				await escaneadosAPI.subir(documento.pendingId, documento.archivo, (porcentaje) => {
+					progreso = `Subiendo PDF ${indice + 1} de ${documentos.length}… ${porcentaje}%`;
+				});
 				documento.completado = true;
 			}
 			modal = false;
