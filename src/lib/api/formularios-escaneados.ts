@@ -91,18 +91,26 @@ export const escaneadosAPI = {
 			apiClient.post(`/api/formularios/escaneados/${id}/complete`, {})
 		);
 	},
-	subir(id: string, archivo: File) {
+	subir(id: string, archivo: File, onProgress?: (percent: number) => void) {
 		const body = new FormData();
 		body.append('archivo', archivo);
 		return dato<{ id: string; status: string }>(
-			apiClient.post(`/api/formularios/escaneados/${id}/archivo`, body, { timeout: 120_000 })
+			apiClient.post(`/api/formularios/escaneados/${id}/archivo`, body, {
+				timeout: 600_000,
+				onUploadProgress: (event) => {
+					if (event.total) onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+				}
+			})
 		);
 	},
 	reemplazarArchivo(id: string, archivo: File) {
 		const body = new FormData();
 		body.append('archivo', archivo);
 		return dato<{ id: string; status: string; originalName: string; byteSize: number; uploadedAt: string }>(
-			apiClient.put(`/api/formularios/escaneados/${id}/archivo`, body, { timeout: 120_000 })
+			apiClient.put(`/api/formularios/escaneados/${id}/archivo`, body, {
+				timeout: 600_000,
+				headers: { 'X-File-Size': String(archivo.size) }
+			})
 		);
 	},
 	url(id: string) {
