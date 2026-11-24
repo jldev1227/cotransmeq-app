@@ -3,6 +3,8 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { toast } from 'svelte-sonner';
+	import { get } from 'svelte/store';
+	import { authStore } from '$lib/stores/auth';
 	import {
 		accionesCorrectivasAPI,
 		type AccionCorrectivaPreventiva,
@@ -608,7 +610,8 @@
 				causas: causasValidas.length > 0 ? causasValidas : undefined,
 				seguimientos_correccion: aplica_correccion_inmediata ? segCorreccion : undefined,
 				fecha_limite_evaluacion_eficacia: fecha_limite_evaluacion_eficacia || undefined,
-				criterio_evaluacion_eficacia: criterio_evaluacion_eficacia.trim() || undefined,
+				// En actualización, '' debe llegar al backend para borrar un criterio anterior.
+				criterio_evaluacion_eficacia: criterio_evaluacion_eficacia.trim(),
 				ciclos_eficacia: ciclosValidos.length ? ciclosValidos : undefined,
 				evaluaciones_eficacia: evaluaciones_eficacia.length ? evaluaciones_eficacia : undefined,
 				evidencias_eficacia: evidenciasValidas.length ? evidenciasValidas : undefined,
@@ -729,16 +732,16 @@
 	};
 
 	function getCacheKey(): string {
-		return `accion_draft_${accion?.id || 'new'}`;
+		// localStorage es compartido por todos los usuarios del navegador; el
+		// borrador debe quedar aislado por usuario y por acción.
+		const usuarioId = get(authStore).user?.id ?? 'sin-sesion';
+		return `accion_draft_${usuarioId}_${accion?.id || 'new'}`;
 	}
 
 	let autosaveTimer: any = null;
 
-	function guardarBorrador() {
-		if (!browser) return;
-		const cache: CacheAccion = {
-			updatedAt: Date.now(),
-			data: {
+	function obtenerDatosBorrador(): CacheAccion['data'] {
+		return {
 				accion_numero,
 				lugar_sede,
 				proceso_origen_hallazgo,
@@ -776,7 +779,14 @@
 				observaciones_cierre,
 				responsable_cierre,
 				cargo_responsable_cierre
-			}
+		};
+	}
+
+	function guardarBorrador() {
+		if (!browser) return;
+		const cache: CacheAccion = {
+			updatedAt: Date.now(),
+			data: obtenerDatosBorrador()
 		};
 		try {
 			localStorage.setItem(getCacheKey(), JSON.stringify(cache));
@@ -873,13 +883,14 @@
 		if (!raw) return;
 		try {
 			const cache: CacheAccion = JSON.parse(raw);
-			const serverUpdatedAt = accion.updated_at ? new Date(accion.updated_at).getTime() : 0;
-			if (cache.updatedAt > serverUpdatedAt) {
-				toast.warning('Tienes cambios sin guardar localmente más recientes que la versión del servidor', {
-					description: `Local: ${new Date(cache.updatedAt).toLocaleString('es-CO')} · Servidor: ${new Date(serverUpdatedAt).toLocaleString('es-CO')}`,
+			// La hora del autosave avanza aunque nadie haya editado el formulario.
+			// Solo hay conflicto si el contenido local realmente difiere del servidor.
+			if (JSON.stringify(cache.data) !== JSON.stringify(obtenerDatosBorrador())) {
+				toast.warning('Hay una copia local con cambios distintos a la versión del servidor', {
+					description: `Guardada en este dispositivo: ${new Date(cache.updatedAt).toLocaleString('es-CO')}`,
 					duration: 8000,
 					action: {
-						label: 'Restaurar local',
+						label: 'Restaurar copia local',
 						onClick: () => aplicarBorrador(cache)
 					}
 				});

@@ -571,6 +571,11 @@
 	let documento = $state<HTMLElement | null>(null);
 	let exportando = $state(false);
 
+	/** El explorador de envíos reutiliza el mismo DOM al descargar varios PDFs en un ZIP. */
+	export function obtenerDocumento(): HTMLElement | null {
+		return documento;
+	}
+
 	async function exportar() {
 		if (!documento || exportando) return;
 		exportando = true;

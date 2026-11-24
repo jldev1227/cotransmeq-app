@@ -48,6 +48,11 @@ de Puppeteer para repetir la identidad del registro en el margen inferior sin
 participar en la paginación. `Ctrl+P` conserva un pie sencillo al final del
 documento.
 
+En la pestaña de envíos, el ZIP recorre todas las páginas que coinciden con los
+filtros actuales y genera un PDF por diligenciamiento con este mismo componente.
+Cada archivo queda en `código - formato/vN - título/`, respetando la versión que
+se usó al diligenciar.
+
 Reglas que no se negocian:
 
 - **El CSS del documento vive en un módulo `.ts` que devuelve una cadena, no en

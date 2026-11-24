@@ -4,7 +4,7 @@
 	 *
 	 * Misma cáscara que los directorios (`dir-*` de app.css y `listing/`):
 	 * cabecera con los indicadores como conteos pulsables, buscador y
-	 * segmentos a la vista, y las tarjetas de acción en una rejilla fluida.
+	 * segmentos a la vista, y las acciones en filas compactas.
 	 * Entre medias, dos paneles de seguimiento (revisiones vencidas y
 	 * próximas) y una franja con el estado de las causas y el reparto por
 	 * tipo. Antes tenía su propio cascarón —cabecera con icono, pastillas,
@@ -114,7 +114,7 @@
 	});
 
 	// ── Datos ────────────────────────────────────────────────────────────
-	/// 24 llena filas completas en la rejilla a 2, 3 y 4 columnas.
+	/// Mantiene una cantidad manejable de filas por página y una lectura rápida.
 	const POR_PAGINA = 24;
 	const RESUMEN_VACIO: ResumenAcciones = {
 		total_estados: 0,
@@ -540,19 +540,29 @@
 				{/if}
 			</div>
 		{:else}
-			<div class="ac-rejilla" in:fly={{ y: 12, duration: 400, delay: 200 }}>
-				{#each acciones as accion (accion.id)}
-					<AccionCard
-						{accion}
-						highlight={highlightId === accion.id}
-						loadingAction={loadingState?.id === accion.id ? loadingState.action : null}
-						on:duplicar={handleDuplicar}
-						on:eliminar={handleEliminar}
-						on:restaurar={handleRestaurar}
-						on:eliminar-permanente={handleEliminarPermanente}
-						on:pdf={handleExportPDF}
-					/>
-				{/each}
+			<div class="ac-lista" role="table" aria-label="Acciones correctivas" in:fly={{ y: 12, duration: 400, delay: 200 }}>
+				<div class="ac-lista-cabecera" role="row">
+					<span role="columnheader">Fecha de registro</span>
+					<span role="columnheader">Consecutivo</span>
+					<span role="columnheader">Descripción</span>
+					<span role="columnheader">Estado</span>
+					<span role="columnheader" class="ac-lista-col-acciones">Acciones</span>
+				</div>
+				<div class="ac-lista-cuerpo" role="rowgroup">
+					{#each acciones as accion (accion.id)}
+						<AccionCard
+							{accion}
+							modoLista
+							highlight={highlightId === accion.id}
+							loadingAction={loadingState?.id === accion.id ? loadingState.action : null}
+							on:duplicar={handleDuplicar}
+							on:eliminar={handleEliminar}
+							on:restaurar={handleRestaurar}
+							on:eliminar-permanente={handleEliminarPermanente}
+							on:pdf={handleExportPDF}
+						/>
+					{/each}
+				</div>
 			</div>
 			{#if total > POR_PAGINA}
 				<PaginadorLista
@@ -761,7 +771,7 @@
 		color: var(--text-primary);
 	}
 
-	/* ═══ Resultados y rejilla ═══ */
+	/* ═══ Resultados y filas ═══ */
 	.ac-resultados {
 		display: flex;
 		align-items: center;
@@ -784,11 +794,37 @@
 	.ac-limpiar:hover {
 		text-decoration: underline;
 	}
-	.ac-rejilla {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
-		gap: 0.75rem;
-		align-items: start;
+	.ac-lista {
+		--ac-lista-columnas: 8rem 9rem minmax(18rem, 1fr) 9rem 12rem;
+		overflow-x: auto;
+		border: 1px solid var(--border-subtle);
+		border-radius: 0.9rem;
+		background: var(--bg-surface);
 		padding-bottom: 1rem;
+	}
+	.ac-lista-cabecera {
+		display: grid;
+		grid-template-columns: var(--ac-lista-columnas);
+		align-items: center;
+		gap: 0.65rem;
+		min-width: 970px;
+		padding: 0.65rem 0.85rem;
+		border-bottom: 1px solid var(--border-subtle);
+		background: var(--bg-base);
+	}
+	.ac-lista-cabecera span {
+		min-width: 0;
+		color: var(--text-muted);
+		font-size: 0.66rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		white-space: nowrap;
+	}
+	.ac-lista-col-acciones {
+		text-align: right;
+	}
+	.ac-lista-cuerpo {
+		display: block;
 	}
 </style>

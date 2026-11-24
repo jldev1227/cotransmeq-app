@@ -103,7 +103,7 @@ En la ficha SARLAFT, el panel de gestión y soportes permanece visible al recorr
 | `/dashboard/evaluaciones/[id]` | Detalle con resultados, exportación a PDF o ZIP y acción para compartir el QR público. | `evaluaciones` | `evaluaciones` |
 | `/dashboard/evaluaciones/[id]/editar` | Editar una evaluación. | `evaluaciones` | `evaluaciones` |
 | `/dashboard/salidas-nc` | Registro de salidas no conformes (ISO 9001, 8.7). | `salidas-nc` | `salidas-nc` |
-| `/dashboard/formularios` | Formularios dinámicos: catálogo, explorador de envíos (`?vista=envios`) y lo asignado al usuario. | `formularios` | `formularios-dinamicos` |
+| `/dashboard/formularios` | Formularios dinámicos: catálogo alfabético, explorador de envíos (`?vista=envios`) con ZIP de todos los diligenciamientos filtrados por formato y versión, y lo asignado al usuario. | `formularios` | `formularios-dinamicos` |
 | `/dashboard/formularios/[formId]` | Un formato: versiones, asignaciones y sus envíos. | `formularios` | `formularios-dinamicos` |
 | `/dashboard/formularios/[formId]/editar/[versionId]` | Constructor de una versión. | `formularios` | `formularios-dinamicos` |
 | `/dashboard/formularios/[formId]/preview/[versionId]` | Vista previa a varios anchos de pantalla. | `formularios` | `formularios-dinamicos` |
