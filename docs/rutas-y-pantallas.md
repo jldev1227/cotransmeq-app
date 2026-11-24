@@ -89,6 +89,7 @@ En la ficha SARLAFT, el panel de gestión y soportes permanece visible al recorr
 | Ruta | Pantalla | Módulo | API |
 |---|---|---|---|
 | `/dashboard/asistencias` | Formularios de asistencia (eventos y capacitaciones) con QR público para firmar, marcado con el sello corporativo. | `asistencias` | `asistencias` |
+| `/dashboard/asistencias/inducciones` | Registros enviados desde `/public/inducciones`: búsqueda por visitante, entidad o cédula, filtros por sede/fecha, vista de firmas y temas, edición con nivel completo y exportación. Enlace desde Asistencias. | `asistencias` | `inducciones` |
 | `/dashboard/asistencias/[id]/respuestas` | Firmas recibidas, detalle del evento y acción para compartir su QR público. | `asistencias` | `asistencias` |
 | `/dashboard/acciones-correctivas` | Tablero de acciones correctivas y preventivas; rejilla compacta y fluida de tarjetas con hallazgo, estado, seguimiento y acceso al detalle. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/acciones-correctivas/crear` | Alta de una acción. | `acciones-correctivas` | `acciones-correctivas` |
@@ -209,7 +210,7 @@ servidor; las demás sí.
 | `/public/certificados/[nit]` | Certificados de un NIT, por tipo y año. | `certificados-tributarios` |
 | `/public/extracto/[codigo]` | Validación pública de un extracto de contrato: el destino del QR impreso. | `extractos` |
 | `/public/servicio/[token]` | Servicio compartido por enlace, con mapa. | `servicios` (`/api/servicios/public/:token`) |
-| `/public/inducciones` | Inducción de visitantes (HSEQ-FR-66) con firma. | `inducciones` |
+| `/public/inducciones` | Formulario público de inducción de visitantes HSEQ-FR-66; los registros se consultan en `/dashboard/asistencias/inducciones`. | `inducciones` |
 | `/public/desprendible/[token]` | Ver y firmar un desprendible por token. No encontré en el código actual quién genera este enlace. | `liquidaciones` (`/api/desprendible-firma`) |
 | `/public/documento/[token]` | Ver y firmar un desprendible compartido. Tampoco encontré quién genera el enlace. | `documentos` (`/api/desprendible/compartido`) |
 | `/public/desprendible` | **Suelta.** Genera un PDF de desprendible a partir de `?data=<JSON en base64>`; nadie en el código construye ese enlace. | — |
