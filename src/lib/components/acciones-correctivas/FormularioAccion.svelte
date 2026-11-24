@@ -1030,11 +1030,13 @@
 					id="accion_numero"
 					type="text"
 					bind:value={accion_numero}
-					disabled={modoEdicion}
-					class="w-full rounded-[var(--fm-radius)] border border-[var(--fm-border)] bg-[var(--fm-surface)] px-3 py-2 text-sm focus:border-[var(--fm-text)] focus:ring-2 focus:ring-[var(--fm-focus-ring)] disabled:bg-[var(--fm-surface)] disabled:text-[var(--fm-muted)]"
+					maxlength="50"
+					aria-invalid={!!errors.accion_numero}
+					class="w-full rounded-[var(--fm-radius)] border border-[var(--fm-border)] bg-[var(--fm-surface)] px-3 py-2 text-sm focus:border-[var(--fm-text)] focus:ring-2 focus:ring-[var(--fm-focus-ring)]"
 					placeholder="Ej: A26_01"
 					required
 				/>
+				<p class="mt-1 text-xs text-[var(--fm-muted)]">Puedes cambiar el consecutivo; debe ser único (máximo 50 caracteres).</p>
 				{#if errors.accion_numero}
 					<p class="mt-1 text-sm text-red-600">{errors.accion_numero}</p>
 				{/if}
