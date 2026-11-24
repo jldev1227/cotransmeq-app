@@ -310,6 +310,8 @@
 	}
 	.card-lista .row-fecha {
 		grid-column: 1;
+		grid-row: 1;
+		align-self: center;
 		color: var(--text-secondary);
 		font-size: 0.78rem;
 		font-variant-numeric: tabular-nums;
@@ -320,14 +322,20 @@
 	}
 	.card-lista .head-left {
 		grid-column: 2;
+		grid-row: 1;
+		align-self: center;
 		min-width: 0;
 	}
 	.card-lista .row-estado {
 		grid-column: 4;
+		grid-row: 1;
+		align-self: center;
 		min-width: 0;
 	}
 	.card-lista .description-lista {
 		grid-column: 3;
+		grid-row: 1;
+		align-self: center;
 		min-width: 0;
 		max-width: 36rem;
 		overflow: hidden;
@@ -347,6 +355,8 @@
 	}
 	.card-lista .acciones-celda {
 		grid-column: 5;
+		grid-row: 1;
+		align-self: center;
 		min-width: 0;
 	}
 	.card-lista .actions {
