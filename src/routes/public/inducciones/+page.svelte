@@ -5,6 +5,7 @@
   import SignatureCanvas from '$lib/components/asistencias/SignatureCanvas.svelte'
   import SuccessAnimation from '$lib/components/asistencias/SuccessAnimation.svelte'
   import { induccionesAPI } from '$lib/api/inducciones'
+  import { mascota } from '$lib/mascot';
 
   let isSubmitting = false
   let showSuccessAnimation = false
@@ -203,22 +204,26 @@
 
   <!-- ── ZONA FIJA SUPERIOR ─────────────────────────────────────────────── -->
   <div class="top-zone">
-    <!-- Header -->
-    <div class="px-4 pt-4 pb-2 text-center">
-      <div class="flex justify-center mb-1.5">
-        <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-700 shadow-md shadow-orange-200">
-          <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-          </svg>
+    <header class="page-intro page-card">
+      <div class="intro-main">
+        <div class="intro-brand">
+          <img class="intro-logo intro-logo--co" src="/assets/logo.webp" alt="Logo de Cotransmeq" width="58" height="44" />
+          <strong class="intro-brand-name">COTRANSMEQ S.A.S.</strong>
+          <span>GESTIÓN HSEQ · VISITANTES</span>
+        </div>
+        <div class="intro-bottom">
+          <div class="intro-copy">
+            <h1>Inducción de visitantes</h1>
+            <p class="intro-description">Completa la información de tu visita y confirma los temas de seguridad recibidos.</p>
+          </div>
+          <div class="intro-documento"><strong>HSEQ-FR-66</strong><span>{formatFecha(fecha)}</span></div>
         </div>
       </div>
-      <h1 class="text-base font-bold text-gray-900 leading-tight">Inducción / Reinducción Visitantes</h1>
-      <p class="text-[11px] text-gray-400 mt-0.5">HSEQ-FR-66 · {formatFecha(fecha)}</p>
-    </div>
+      <img class="intro-mascot" src={mascota('bienvenida').src} alt={mascota('bienvenida').alt} width="108" height="108" />
+    </header>
 
     <!-- Stepper -->
-    <div class="mx-4 mb-1.5 flex items-center justify-between rounded-xl bg-white px-3 py-2.5 shadow-sm border border-gray-100">
+    <div class="steps-bar mx-4 mb-1.5 flex items-center justify-between rounded-xl bg-white px-3 py-2.5 border border-gray-100">
       {#each stepsConfig as s, i}
         <div class="flex flex-col items-center gap-0.5">
           <div class="flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-all duration-300
@@ -240,7 +245,7 @@
     </div>
 
     <!-- Progress bar -->
-    <div class="mx-4 mb-2 h-1 overflow-hidden rounded-full bg-gray-200">
+    <div class="progress-track mx-4 mb-2 h-1 overflow-hidden rounded-full bg-gray-200">
       <div
         class="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all duration-500 ease-out"
         style="width: {progressPct}%"
@@ -251,7 +256,7 @@
   <!-- ── ZONA SCROLLABLE ────────────────────────────────────────────────── -->
   <div bind:this={scrollArea} class="scroll-zone">
     <div class="px-4 pb-4">
-      <div class="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+      <div class="form-card page-card">
 
         <!-- PASO 1: Sede -->
         {#if step === 1}
@@ -541,14 +546,28 @@
     display: flex;
     flex-direction: column;
     height: 100dvh;
-    background: linear-gradient(135deg, #f8fafc 0%, #ecfdf5 50%, #f1f5f9 100%);
+    background: var(--bg-base, #f5f7f5);
     /* Respeta el safe area del notch en la parte superior (iOS) */
     padding-top: env(safe-area-inset-top);
   }
 
-  .top-zone {
-    flex-shrink: 0;
-  }
+  .top-zone { flex-shrink: 0; padding: 1rem 1rem .4rem; }
+  .page-intro { display: flex; align-items: stretch; justify-content: space-between; gap: 1rem; min-height: 144px; padding: 1rem 1.2rem 0; border: 1px solid var(--border-default, #dce7e1); border-radius: 18px; background: linear-gradient(110deg, var(--bg-surface, #fff) 65%, #fff1e7); overflow: hidden; }
+  .intro-main { display: flex; flex: 1; min-width: 0; flex-direction: column; justify-content: space-between; padding-bottom: 1rem; }
+  .intro-brand { display: flex; align-items: center; flex-wrap: wrap; gap: .7rem; min-height: 44px; }
+  .intro-logo { display: block; width: 146px; height: 36px; object-fit: contain; object-position: left center; }
+  .intro-logo--co { width: 56px; }
+  .intro-brand-name { color: #193b31; font-size: .85rem; font-weight: 900; letter-spacing: -.02em; }
+  .intro-brand span { border-left: 1px solid var(--border-default, #dce7e1); padding-left: .7rem; color: #a34c1c; font-size: .69rem; font-weight: 800; letter-spacing: .09em; }
+  .intro-bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-top: .5rem; }
+  .intro-copy { min-width: 0; }
+  .page-intro h1 { margin: 0; color: var(--text-primary, #17221d); font: 800 clamp(1.4rem, 2vw, 1.75rem)/1.15 var(--font-display, inherit); letter-spacing: -.025em; }
+  .intro-description { margin: .35rem 0 0; color: var(--text-muted, #63756a); font-size: .85rem; }
+  .intro-documento { display: flex; flex-direction: column; gap: .2rem; flex: none; text-align: right; color: #a34c1c; font-size: .78rem; }
+  .intro-documento span { color: var(--text-muted, #63756a); }
+  .intro-mascot { align-self: flex-end; flex: none; width: 104px; height: 104px; object-fit: contain; object-position: bottom center; }
+  .form-card { overflow: hidden; border: 1px solid var(--border-default, #e5e8e5); border-radius: 18px; background: var(--bg-surface, #fff); box-shadow: 0 4px 24px rgba(40, 30, 10, .04); }
+  @media (max-width: 640px) { .page-intro { position: relative; min-height: 0; padding: .8rem .9rem 0; gap: .2rem; } .intro-logo { width: 112px; height: 31px; } .intro-logo--co { width: 36px; } .intro-brand-name { font-size: .72rem; } .intro-brand { gap: .45rem; min-height: 34px; } .intro-brand span { font-size: .56rem; padding-left: .45rem; } .intro-bottom { align-items: flex-start; flex-direction: column; gap: .35rem; margin-top: .5rem; } .intro-documento { flex-direction: row; flex-wrap: wrap; gap: .5rem; text-align: left; font-size: .7rem; } .intro-description { max-width: 245px; font-size: .78rem; } .intro-main { width: 100%; padding-bottom: .85rem; } .intro-documento { padding-right: 66px; } .intro-mascot { position: absolute; right: .45rem; bottom: 0; width: 64px; height: 76px; } }
 
   /* El área de contenido crece para llenar el espacio disponible y es scrollable */
   .scroll-zone {
@@ -561,10 +580,14 @@
   /* El footer no crece, respeta el safe area del home indicator en iPhone */
   .footer-zone {
     flex-shrink: 0;
-    background: white;
-    border-top: 1px solid #f1f5f9;
+    background: var(--bg-surface, white);
+    border-top: 1px solid var(--border-default, #e5e8e5);
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.07);
     /* Safe area para el home indicator del iPhone */
     padding-bottom: 10px;
   }
+	.steps-bar, .progress-track { margin-left: 0; margin-right: 0; }
+  .steps-bar { margin-top: .7rem; }
+  .progress-track { margin-top: .6rem; }
+	.scroll-zone > div { padding: .25rem 1rem 1rem; }
 </style>
