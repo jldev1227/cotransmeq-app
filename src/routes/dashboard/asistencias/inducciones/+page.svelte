@@ -269,13 +269,13 @@
 	<title>Inducciones visitantes — {EMPRESA}</title>
 </svelte:head>
 
-<main class="inducciones-page">
-	<header class="page-heading">
+<main class="inducciones-page dir-pagina">
+	<header class="page-heading page-card dir-cabecera">
 		<div>
 			<a class="back-link" href="/dashboard/asistencias"><ArrowLeft size={16} /> Asistencias</a>
 			<p class="eyebrow">HSEQ · HSEQ-FR-66</p>
-			<h1>Inducciones de visitantes</h1>
-			<p class="subtitle">
+			<h1 class="dir-titulo">Inducciones de visitantes</h1>
+			<p class="subtitle dir-desc">
 				Consulta y administra los registros enviados desde el formulario público.
 			</p>
 		</div>
@@ -284,7 +284,7 @@
 		</a>
 	</header>
 
-	<section class="stats" aria-label="Resumen de inducciones">
+	<section class="stats dir-conteos" aria-label="Resumen de inducciones">
 		<div class="stat"><span>Registros</span><strong>{estadisticas?.total ?? '—'}</strong></div>
 		<div class="stat">
 			<span>Últimos 30 días</span><strong>{estadisticas?.ultimo_mes ?? '—'}</strong>
@@ -296,7 +296,7 @@
 		</div>
 	</section>
 
-	<section class="filters" aria-label="Filtros de inducciones">
+	<section class="filters dir-filtros" aria-label="Filtros de inducciones">
 		<BuscadorLista
 			bind:valor={busqueda}
 			onBuscar={(termino) => cambiar('q', termino.trim())}
@@ -402,8 +402,8 @@
 							<button
 								type="button"
 								class="icon-button"
-								title="Descargar formato imprimible"
-								aria-label="Descargar formato imprimible"
+								title="Descargar PDF"
+								aria-label="Descargar PDF"
 								disabled={exportando === `${registro.id}:pdf`}
 								onclick={() => void exportar('pdf', registro)}><FileText size={17} /></button
 							>
@@ -429,10 +429,11 @@
 		<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1">
 			<header class="modal-header">
 				<div>
-					<p class="eyebrow">HSEQ-FR-66 · {modal === 'editar' ? 'Edición' : 'Registro'}</p>
+					<p class="modal-eyebrow">HSEQ-FR-66 · {modal === 'editar' ? 'EDICIÓN' : 'REGISTRO'}</p>
 					<h2 id="modal-title">
 						{modal === 'editar' ? 'Editar inducción' : detalle.visitante_nombre}
 					</h2>
+					<p class="modal-subtitle">{modal === 'editar' ? detalle.visitante_nombre : `${fechaLegible(detalle.fecha, true)} · ${SEDES[detalle.sede]}`}</p>
 				</div>
 				<button
 					class="icon-button"
@@ -507,7 +508,7 @@
 					<button
 						type="button"
 						class="secondary-button"
-						onclick={() => void exportar('pdf', detalle!)}><FileText size={16} /> Imprimible</button
+						onclick={() => void exportar('pdf', detalle!)}><FileText size={16} /> PDF</button
 					>
 				</footer>
 			{:else}
@@ -658,18 +659,18 @@
 		cursor: pointer;
 	}
 	.stats {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 0.8rem;
-		margin: 1rem 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+		margin: 0.8rem 0;
 	}
 	.stat {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-		padding: 1rem 1.2rem;
+		display: inline-flex;
+		align-items: baseline;
+		gap: 0.55rem;
+		padding: 0.5rem 0.8rem;
 		border: 1px solid var(--border-default, #dce7e1);
-		border-radius: 14px;
+		border-radius: 999px;
 		background: var(--bg-surface, #fff);
 	}
 	.stat span,
@@ -680,7 +681,7 @@
 		font-size: 0.76rem;
 	}
 	.stat strong {
-		font-size: 1.35rem;
+		font-size: 0.95rem;
 		font-variant-numeric: tabular-nums;
 	}
 	.filters {
@@ -791,7 +792,8 @@
 		display: grid;
 		place-items: center;
 		padding: 1rem;
-		background: rgba(11, 28, 22, 0.56);
+		background: rgba(2, 6, 23, 0.62);
+		backdrop-filter: blur(4px);
 	}
 	.modal {
 		display: flex;
@@ -800,31 +802,44 @@
 		max-height: min(92vh, 1000px);
 		overflow: hidden;
 		border: 1px solid var(--border-default, #dce7e1);
-		border-radius: 18px;
+		border-radius: 16px;
 		background: var(--bg-surface, #fff);
-		box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+		box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
 	}
 	.modal-header {
 		display: flex;
 		justify-content: space-between;
-		align-items: flex-start;
+		align-items: center;
 		gap: 1rem;
-		padding: 1.15rem 1.35rem;
-		border-bottom: 1px solid var(--border-default, #e6eeea);
+		padding: .85rem 1.25rem;
+		border-bottom: 1px solid var(--border-default, #e2e8f0);
+		background: var(--bg-surface, #fff);
+		color: var(--text-primary, #0f172a);
 	}
+	.modal-header > div { min-width: 0; }
+	.modal-eyebrow { margin: 0 0 .2rem; color: var(--au-dark, #047857); font-size: .66rem; font-weight: 800; letter-spacing: .13em; }
+	.modal-subtitle { margin: .2rem 0 0; color: var(--text-muted, #64748b); font-size: .78rem; }
+	.modal-header .icon-button { width: 34px; height: 34px; border: 0; border-radius: 50%; background: transparent; color: var(--text-muted, #475569); }
+	.modal-header .icon-button:hover { background: var(--bg-base, #f1f5f9); color: var(--text-primary, #0f172a); }
 	.modal-header h2 {
 		margin: 0;
-		font-size: 1.3rem;
+		font-family: var(--font-display, inherit);
+		font-size: 1.08rem;
+		font-weight: 800;
+		line-height: 1.2;
 	}
 	.modal-content,
 	.edit-form {
 		overflow: auto;
-		padding: 1.25rem 1.35rem;
+		padding: 1.2rem 1.35rem;
+		background: var(--bg-surface, #fff);
 	}
 	.detail-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 		gap: 1rem;
+		padding: .25rem 0 1.1rem;
+		border-bottom: 1px solid var(--border-default, #e2e8f0);
 	}
 	.detail-grid div {
 		display: flex;
@@ -835,7 +850,7 @@
 		font-size: 0.9rem;
 	}
 	.topic-section {
-		margin-top: 1.4rem;
+		margin-top: 1.1rem;
 	}
 	.section-title {
 		display: flex;
@@ -860,11 +875,13 @@
 		padding: 0.55rem 0.65rem;
 		border-radius: 9px;
 		background: #fff5f3;
+		border: 1px solid #f3ded7;
 		color: #7f4039;
 		font-size: 0.82rem;
 	}
 	.topic-list > .topic-yes {
 		background: var(--au-tint, #e7f7ef);
+		border-color: #cce7d6;
 		color: var(--au-dark, #087451);
 	}
 	.topic-check {
@@ -967,7 +984,8 @@
 	}
 	.edit-form fieldset {
 		margin: 1rem 0;
-		padding: 0.8rem;
+		padding: 1rem;
+		background: var(--bg-surface, #fff);
 		border: 1px solid var(--border-default, #dce7e1);
 		border-radius: 11px;
 	}
@@ -1015,7 +1033,7 @@
 			gap: 0.5rem;
 		}
 		.stat {
-			padding: 0.8rem;
+			padding: 0.5rem 0.8rem;
 		}
 		.filters > * {
 			flex: 1 1 100%;
