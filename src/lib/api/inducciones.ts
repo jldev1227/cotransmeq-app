@@ -86,6 +86,7 @@ export interface UpdateInduccionInput {
 }
 
 export interface FiltrosInduccion {
+	search?: string;
 	sede?: Sede;
 	fecha_desde?: string;
 	fecha_hasta?: string;

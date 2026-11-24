@@ -489,6 +489,15 @@
 			<button
 				type="button"
 				class="btn-secondary"
+				onclick={() => goto('/dashboard/asistencias/inducciones')}
+				title="Consultar registros del formulario público HSEQ-FR-66"
+			>
+				<Eye size={16} strokeWidth={2} />
+				Inducciones visitantes
+			</button>
+			<button
+				type="button"
+				class="btn-secondary"
 				onclick={() => descargarZip(null)}
 				disabled={descargando || totalRows === 0}
 				title="ZIP con el PDF de cada formulario de la lista filtrada (búsqueda, estado y periodo)"
