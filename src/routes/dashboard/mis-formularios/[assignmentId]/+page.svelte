@@ -270,7 +270,7 @@
 
 	async function cargarVehiculos() {
 		try {
-			const respuesta: any = await vehiculosAPI.getAll({ incluir_ocultos: 'true' });
+			const respuesta: any = await vehiculosAPI.getAll();
 			const lista = Array.isArray(respuesta?.data) ? respuesta.data : (respuesta ?? []);
 			vehiculos = ordenarPorEtiqueta(
 				lista.map((v: any) => ({ id: v.id, placa: v.placa })).filter((v: any) => v.id && v.placa),

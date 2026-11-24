@@ -1007,7 +1007,7 @@
 		try {
 			const [vehiculosRes, tiposRes, firmantesRes, tercerosRes, operadorasRes] =
 				await Promise.all([
-					apiClient.get<{ data: Vehiculo[] }>('/api/vehiculos', { params: { incluir_ocultos: 'true' } }),
+					apiClient.get<{ data: Vehiculo[] }>('/api/vehiculos'),
 					liquidacionesServiciosAPI.obtenerTiposRecargo(),
 					usuariosAPI.firmantes().catch(() => [] as Firmante[]),
 					tercerosAPI.listar({
