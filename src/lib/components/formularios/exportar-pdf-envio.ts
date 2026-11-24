@@ -93,7 +93,7 @@ async function mensajeDeBlob(e: any): Promise<string> {
  * siempre se quiere MIRAR antes de guardar, y el visor del navegador ya trae su
  * propio botón de descarga.
  */
-export async function exportarPdfEnvio(doc: HTMLElement, nombreArchivo: string): Promise<void> {
+export async function generarPdfEnvio(doc: HTMLElement, nombreArchivo: string): Promise<Blob> {
 	const documento = await cuerpoParaPdf(doc);
 	/// La MISMA hoja que pinta el preview, importada como valor. No se extrae del
 	/// CSSOM: ese camino depende de la clase de scoping de Svelte y de si la hoja
@@ -101,9 +101,8 @@ export async function exportarPdfEnvio(doc: HTMLElement, nombreArchivo: string):
 	/// imágenes— sin dar ningún aviso.
 	const css = documentoEnvioCss();
 
-	let blob: Blob;
 	try {
-		blob = await formulariosDocumentoPdfAPI.renderizar({
+		return await formulariosDocumentoPdfAPI.renderizar({
 			...documento,
 			css,
 			filename: nombreArchivo
@@ -111,6 +110,11 @@ export async function exportarPdfEnvio(doc: HTMLElement, nombreArchivo: string):
 	} catch (e: any) {
 		throw new Error(await mensajeDeBlob(e));
 	}
+}
+
+/** Genera el PDF desde el documento que ya ve la pantalla y lo abre en otra pestaña. */
+export async function exportarPdfEnvio(doc: HTMLElement, nombreArchivo: string): Promise<void> {
+	const blob = await generarPdfEnvio(doc, nombreArchivo);
 
 	const url = URL.createObjectURL(blob);
 	window.open(url, '_blank');

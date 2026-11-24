@@ -15,6 +15,7 @@
 
 	export let accion: AccionCorrectivaPreventiva;
 	export let highlight: boolean = false;
+	export let modoLista: boolean = false;
 	export let loadingAction: 'duplicar' | 'eliminar' | 'restaurar' | 'eliminar-permanente' | 'pdf' | null = null;
 
 	const dispatch = createEventDispatcher<{
@@ -66,25 +67,38 @@
 
 <article
 	class="card"
+	class:card-lista={modoLista}
+	role={modoLista ? 'row' : undefined}
 	class:card-vencida={!isDeleted && (accion.estado_global === 'VENCIDA' || accion.estado_accion === 'Vencidas')}
 	class:card-highlight={highlight}
 	class:card-deleted={isDeleted}
 >
+	{#if modoLista}
+		<div class="row-fecha" role="cell">{formatDate((accion.created_at || '').slice(0, 10)) || '—'}</div>
+	{/if}
 	<div class="card-head">
-		<div class="head-left">
+		<div class="head-left" role={modoLista ? 'cell' : undefined}>
 			<a class="accion-num" href="/dashboard/acciones-correctivas/{accion.id}">{accion.accion_numero || 'Sin número'}</a>
 			{#if !isDeleted}
 				<RiskDot nivel={accion.valoracion_riesgo || ''} />
 			{/if}
 		</div>
-		{#if isDeleted}
+		{#if modoLista}
+			<div class="row-estado" role="cell">
+				{#if isDeleted}
+					<span class="badge-deleted">Eliminada</span>
+				{:else}
+					<StatusBadge estado={accion.estado_global || accion.estado_accion || 'EN_PROCESO'} />
+				{/if}
+			</div>
+		{:else if isDeleted}
 			<span class="badge-deleted">Eliminada</span>
 		{:else}
 			<StatusBadge estado={accion.estado_global || accion.estado_accion || 'EN_PROCESO'} />
 		{/if}
 	</div>
 
-	<a class="description" href="/dashboard/acciones-correctivas/{accion.id}" title={accion.descripcion_hallazgo || 'Sin descripción'}>
+	<a class="description" class:description-lista={modoLista} role={modoLista ? 'cell' : undefined} href="/dashboard/acciones-correctivas/{accion.id}" title={accion.descripcion_hallazgo || 'Sin descripción'}>
 		{accion.descripcion_hallazgo || 'Sin descripción'}
 	</a>
 
@@ -95,11 +109,13 @@
 		<span class="tag tag-neutral">{accion.tipo_hallazgo_detectado || 'Sin clasificar'}</span>
 	</div>
 
-	{#if accion.causas && accion.causas.length > 0}
-		<CausasDots causas={accion.causas} />
-	{:else}
-		<div class="sin-causas">Sin causas registradas</div>
-	{/if}
+	<div class="card-causas">
+		{#if accion.causas && accion.causas.length > 0}
+			<CausasDots causas={accion.causas} />
+		{:else}
+			<div class="sin-causas">Sin causas registradas</div>
+		{/if}
+	</div>
 
 	<div class="card-meta">
 		<div class="meta-location">
@@ -161,6 +177,7 @@
 				</div>
 			{/if}
 		</div>
+		<div class="acciones-celda" role={modoLista ? 'cell' : undefined}>
 		<div class="actions" role="group" aria-label="Acciones para {accion.accion_numero}">
 			{#if isDeleted}
 				<button
@@ -253,6 +270,7 @@
 				</button>
 			{/if}
 		</div>
+		</div>
 	</footer>
 </article>
 
@@ -269,6 +287,83 @@
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		cursor: default;
 		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+	}
+	.card-lista {
+		display: grid;
+		grid-template-columns: var(--ac-lista-columnas, 8rem 9rem minmax(18rem, 1fr) 9rem 12rem);
+		align-items: center;
+		gap: 0.65rem;
+		min-width: 970px;
+		padding: 0.55rem 0.85rem;
+		border: 0;
+		border-bottom: 1px solid var(--border);
+		border-radius: 0;
+		box-shadow: none;
+	}
+	.card-lista:last-child {
+		border-bottom: 0;
+	}
+	.card-lista:hover {
+		transform: none;
+		background: var(--surface-hover);
+		box-shadow: none;
+	}
+	.card-lista .row-fecha {
+		grid-column: 1;
+		color: var(--text-secondary);
+		font-size: 0.78rem;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.card-lista .card-head {
+		display: contents;
+	}
+	.card-lista .head-left {
+		grid-column: 2;
+		min-width: 0;
+	}
+	.card-lista .row-estado {
+		grid-column: 4;
+		min-width: 0;
+	}
+	.card-lista .description-lista {
+		grid-column: 3;
+		min-width: 0;
+		max-width: 36rem;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		font-size: 0.82rem;
+		color: var(--text-secondary);
+	}
+	.card-lista .tags,
+	.card-lista .card-causas,
+	.card-lista .card-meta,
+	.card-lista .footer-left {
+		display: none;
+	}
+	.card-lista .card-footer {
+		display: contents;
+	}
+	.card-lista .acciones-celda {
+		grid-column: 5;
+		min-width: 0;
+	}
+	.card-lista .actions {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.25rem;
+	}
+	.card-lista .actions .act-btn {
+		flex: 0 0 32px;
+		width: 32px;
+	}
+	.card-lista .actions .act-btn-primary span {
+		display: none;
+	}
+	.card-deleted.card-lista .actions {
+		grid-template-columns: none;
 	}
 	.card:hover {
 		border-color: rgba(234, 88, 12, 0.3);

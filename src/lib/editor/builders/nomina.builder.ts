@@ -752,8 +752,10 @@ const MIN_COLUMNAS = 27;
 // ─── Estilos ──────────────────────────────────────────────────────────
 
 const FMT_COP = '"$"#,##0;[Red]-"$"#,##0';
-/// Este campo admite fracciones de día y debe conservar una cifra decimal visible.
+/// La base prestacional admite décimas de día.
 const FMT_DIAS_1 = '0.0';
+/// El bono de nivelación admite centésimas y las muestra con dos decimales fijos.
+const FMT_DIAS_2 = '0.00';
 /**
  * Las horas van SIN patrón a propósito.
  *
@@ -2785,7 +2787,7 @@ function zonaDesprendible(args: {
 				s: {
 					...estilo,
 					ht: HorizontalAlign.CENTER,
-					...(dev.clave === 'ajuste_salarial' ? { n: { pattern: FMT_DIAS_1 } } : {})
+					...(dev.clave === 'ajuste_salarial' ? { n: { pattern: FMT_DIAS_2 } } : {})
 				}
 			});
 

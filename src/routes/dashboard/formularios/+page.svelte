@@ -29,7 +29,7 @@
 		texto,
 		type DefinicionesFiltros
 	} from '$lib/listing/filtros';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { listadoEnvios, listadoFormularios } from '$lib/stores/volverListado';
@@ -44,6 +44,8 @@
 	} from '$lib/api/formularios';
 	import {
 		SUBMISSION_STATUS_LABELS,
+		type FormVersionDto,
+		type SubmissionDetailDto,
 		type FormDefinitionDto,
 		type SubmissionStatus,
 		type SubmissionSummaryDto
@@ -54,6 +56,13 @@
 	import TarjetasMetricas from '$lib/components/formularios/TarjetasMetricas.svelte';
 	import type { Metrica } from '$lib/components/formularios/TarjetasMetricas.svelte';
 	import ImportarEnviosModal from '$lib/components/formularios/ImportarEnviosModal.svelte';
+	import PreviewEnvioPDF from '$lib/components/formularios/PreviewEnvioPDF.svelte';
+	import { generarPdfEnvio } from '$lib/components/formularios/exportar-pdf-envio';
+	import {
+		crearZip,
+		nombreArchivoSeguro,
+		nombreUnico
+	} from '$lib/components/liquidaciones-terceros/preview/zip';
 	import Escaneados from '$lib/components/formularios/Escaneados.svelte';
 	import ModalUrlSync, { type EstadoModalURL } from '$lib/components/navigation/ModalUrlSync.svelte';
 
@@ -118,6 +127,11 @@
 	let cargandoEnvios = $state(false);
 	let enviosCargadosAlguna = $state(false);
 	let exportando = $state(false);
+	let exportandoZip = $state(false);
+	let progresoZip = $state({ actual: 0, total: 0 });
+	let envioParaZip = $state<SubmissionDetailDto | null>(null);
+	let definicionParaZip = $state<FormVersionDto | null>(null);
+	let vistaPdfParaZip = $state<{ obtenerDocumento(): HTMLElement | null } | null>(null);
 	let paginaEnvios = $state(1);
 	let totalEnvios = $state(0);
 
@@ -635,6 +649,115 @@
 		}
 	}
 
+	/** Descarga los PDFs de todos los envíos que coinciden con los filtros actuales. */
+	async function exportarZipEnvios() {
+		if (exportandoZip) return;
+		exportandoZip = true;
+		progresoZip = { actual: 0, total: 0 };
+		const toastId = toast.loading('Buscando los envíos filtrados…');
+
+		try {
+			const filtros = filtrosEnvios();
+			const limite = 100;
+			const ids: string[] = [];
+			let paginaConsulta = 1;
+			let total = Number.POSITIVE_INFINITY;
+
+			while (ids.length < total) {
+				const { data, meta } = await enviosFormularioAPI.listar({
+					...filtros,
+					page: paginaConsulta,
+					limit: limite
+				});
+				ids.push(...data.map((envio) => envio.id));
+				total = meta.total ?? ids.length;
+				if (total > 0xffff) {
+					throw new Error('El ZIP supera el máximo de registros compatible. Reduce el rango de fechas y descárgalo por partes.');
+				}
+				if (!data.length || data.length < limite) break;
+				paginaConsulta += 1;
+			}
+
+			if (!ids.length) {
+				toast.info('No hay diligenciamientos para descargar con estos filtros.', { id: toastId });
+				return;
+			}
+			progresoZip = { actual: 0, total: ids.length };
+			const entradas: Array<{ nombre: string; datos: Uint8Array }> = [];
+			const nombresUsados = new Set<string>();
+			const nombresFormatos = new Map(
+				catalogoTotal.map((formulario) => [formulario.id, formulario.name])
+			);
+			let tamanoTotal = 0;
+
+			for (const [indice, id] of ids.entries()) {
+				const { submission, definition } = await enviosFormularioAPI.obtener(id);
+				envioParaZip = submission;
+				definicionParaZip = definition;
+				await tick();
+
+				const documento = vistaPdfParaZip?.obtenerDocumento();
+				if (!documento) throw new Error('No se pudo preparar el documento para el ZIP.');
+				const formId = submission.version?.formId;
+				let nombreFormato = formId ? nombresFormatos.get(formId) : undefined;
+				if (!nombreFormato && formId) {
+					const formulario = await formulariosAPI.obtener(formId).catch(() => null);
+					nombreFormato = formulario?.name ?? submission.version?.title ?? 'Formulario';
+					nombresFormatos.set(formId, nombreFormato);
+				}
+
+				const identificador = [
+					submission.vehiculo?.placa,
+					submission.actor?.nombre,
+					submission.businessDate ?? submission.startedAt?.slice(0, 10),
+					submission.id.slice(0, 8)
+				]
+					.filter(Boolean)
+					.join('_');
+				const carpetaFormato = nombreArchivoSeguro(
+					`${submission.version?.code ?? 'Formulario'} - ${nombreFormato ?? definition.title}`
+				);
+				const carpetaVersion = nombreArchivoSeguro(
+					`v${submission.version?.versionNumber ?? 0} - ${definition.title}`
+				);
+				const baseArchivo = nombreArchivoSeguro(identificador).slice(0, 115);
+				const nombre = `${nombreUnico(baseArchivo, nombresUsados)}.pdf`;
+				const pdf = await generarPdfEnvio(documento, nombre);
+				const datos = new Uint8Array(await pdf.arrayBuffer());
+				tamanoTotal += datos.byteLength;
+				if (tamanoTotal > 0xffffffff) {
+					throw new Error('El ZIP supera el tamaño máximo compatible. Reduce el rango de fechas y descárgalo por partes.');
+				}
+				entradas.push({
+					nombre: `${carpetaFormato}/${carpetaVersion}/${nombre}`,
+					datos
+				});
+				progresoZip = { actual: indice + 1, total: ids.length };
+				if ((indice + 1) % 5 === 0 || indice + 1 === ids.length) {
+					toast.loading(`Generando PDF ${indice + 1} de ${ids.length}…`, { id: toastId });
+				}
+			}
+
+			const blob = crearZip(entradas);
+			const url = URL.createObjectURL(blob);
+			const enlace = document.createElement('a');
+			enlace.href = url;
+			enlace.download = `diligenciamientos-formularios-${new Date().toISOString().slice(0, 10)}.zip`;
+			document.body.appendChild(enlace);
+			enlace.click();
+			enlace.remove();
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
+			toast.success(`${ids.length} PDF(s) incluidos en el ZIP.`, { id: toastId });
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'No se pudo generar el ZIP.', { id: toastId });
+		} finally {
+			envioParaZip = null;
+			definicionParaZip = null;
+			vistaPdfParaZip = null;
+			exportandoZip = false;
+		}
+	}
+
 	function fecha(iso: string | null): string {
 		if (!iso) return '—';
 		return new Date(iso).toLocaleDateString('es-CO', {
@@ -1090,6 +1213,17 @@
 							Importar desde Transmeralda
 						</button>
 					{/if}
+					<button
+						type="button"
+						class="btn btn--mini"
+						disabled={exportandoZip || cargandoEnvios || totalEnvios === 0}
+						title="Descarga un PDF por diligenciamiento y los organiza por formato y versión"
+						onclick={exportarZipEnvios}
+					>
+						{exportandoZip
+							? `PDF ${progresoZip.actual} de ${progresoZip.total || '…'}`
+							: 'Descargar ZIP'}
+					</button>
 					<button type="button" class="btn btn--mini" disabled={exportando} onclick={exportar}>
 						{exportando ? 'Generando…' : 'Exportar CSV'}
 					</button>
@@ -1224,6 +1358,16 @@
 		</div>
 	{/if}
 </div>
+
+{#if envioParaZip && definicionParaZip}
+	<div class="pdf-zip-oculto" aria-hidden="true">
+		<PreviewEnvioPDF
+			bind:this={vistaPdfParaZip}
+			envio={envioParaZip}
+			definicion={definicionParaZip}
+		/>
+	</div>
+{/if}
 
 <ModalUrlSync referencias={referenciasModal} onCambio={aplicarReferenciaModal} />
 {#if modalCrear}
@@ -1824,6 +1968,15 @@
 		font-size: 0.8125rem;
 		line-height: 1.5;
 		color: var(--text-very-muted, #94a3b8);
+	}
+
+	.pdf-zip-oculto {
+		position: fixed;
+		top: 0;
+		left: -200vw;
+		width: 1200px;
+		visibility: hidden;
+		pointer-events: none;
 	}
 
 	.modal {
