@@ -58,6 +58,7 @@ import { alcanceOcasional } from '../business/id-sintetico';
 import { GASTOS_VEHICULO } from '../business/costos-laborales';
 import { IDENTIDAD } from './identidad-empresa';
 import { contraste } from './colores-canvas';
+import { compararItemsOcasionalesPorFactura } from '$lib/utils/orden-factura-ocasional';
 
 /**
  * Tonos de MARCA. Salen de `identidad-empresa.ts`, el único archivo que
@@ -345,17 +346,9 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 
 		const firstItemRow = r;
 
-		// ── Orden por # LIQ ───────────────────────────────────────────────
-		// Los items llegan ordenados por placa. Se reagrupan por consecutivo
-		// para que las filas de una misma liquidación queden juntas, que es lo
-		// que hace legible la columna RECARGOS de abajo.
-		const itemsOrdenados = [...items].sort((a, b) => {
-			const porLiq = String(a.consecutivo || '').localeCompare(String(b.consecutivo || ''));
-			if (porLiq !== 0) return porLiq;
-			const porPlaca = String(a.placa || '').localeCompare(String(b.placa || ''));
-			if (porPlaca !== 0) return porPlaca;
-			return (Number(a.orden) || 0) - (Number(b.orden) || 0);
-		});
+		// La factura vigente que entrega el backend define el orden visible.
+		// Sin factura, la fila queda al final; los empates conservan un orden estable.
+		const itemsOrdenados = [...items].sort(compararItemsOcasionalesPorFactura);
 
 		/**
 		 * RECARGOS es de la LIQUIDACIÓN, no del item.
