@@ -18,6 +18,7 @@ import type {
 } from '$lib/api/liquidaciones-terceros-ocasional';
 import { COP, enRojo, fmtPct, nombreArchivoHoja, nombreMes } from '../formato';
 import { TITULO_SCOPE } from '../columnas';
+import { compararItemsOcasionalesPorFactura } from '$lib/utils/orden-factura-ocasional';
 import type {
 	BloquePreview,
 	ColumnaPreview,
@@ -122,7 +123,7 @@ export function documentoOcasional(o: {
 }): DocumentoPreview {
 	// Los excluidos se muestran tachados y NO suman: es el soft-delete del
 	// pivote, igual que en el canvas de cierres.
-	const items = [...o.items].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+	const items = [...o.items].sort(compararItemsOcasionalesPorFactura);
 	const vivos = items.filter((it) => !it.excluido);
 
 	const filasItems: FilaPreview[] = items.map((it, i) => ({
