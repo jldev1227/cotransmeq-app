@@ -24,15 +24,17 @@
 	let venceAt = $state(0);
 	let ahora = $state(0);
 	let desfaseReloj = 0;
-	let vencido = $state(false);
 	let iniciando = $state(false);
 	const segundosRestantes = $derived(Math.max(0, Math.ceil((venceAt - ahora) / 1000)));
 	const tiempoRestante = $derived(`${String(Math.floor(segundosRestantes / 60)).padStart(2, '0')}:${String(segundosRestantes % 60).padStart(2, '0')}`);
+	const segundosAdicionales = $derived(Math.max(0, Math.floor((ahora - venceAt) / 1000)));
+	const tiempoAdicional = $derived(`${String(Math.floor(segundosAdicionales / 60)).padStart(2, '0')}:${String(segundosAdicionales % 60).padStart(2, '0')}`);
+	const superoReferencia = $derived(venceAt > 0 && ahora >= venceAt);
 	const claveIntento = $derived(`encuesta-intento:${token}`);
 	const claveBorrador = $derived(`encuesta-borrador:${token}`);
 
 	$effect(() => {
-		if (!intentoActual || terminado || vencido || typeof localStorage === 'undefined') return;
+		if (!intentoActual || terminado || typeof localStorage === 'undefined') return;
 		localStorage.setItem(claveBorrador, JSON.stringify({ intento: intentoActual, respuestas, nombre, correo }));
 	});
 
@@ -41,9 +43,7 @@
 		venceAt = Date.parse(estado.vence_at);
 		desfaseReloj = Date.parse(estado.servidor_at) - Date.now();
 		ahora = Date.now() + desfaseReloj;
-		vencido = estado.vencido || ahora >= venceAt;
 		localStorage.setItem(claveIntento, estado.intento);
-		if (vencido) localStorage.removeItem(claveBorrador);
 	}
 
 	async function iniciarIntento(nuevo = false) {
@@ -53,7 +53,7 @@
 			const restaurar = !nuevo && !intentoActual;
 			const borrador = restaurar ? localStorage.getItem(claveBorrador) : null;
 			aplicarIntento(await encuestasAPI.intento(token, anterior));
-			if (restaurar && borrador && !vencido) {
+			if (restaurar && borrador) {
 				try {
 					const guardado = JSON.parse(borrador);
 					if (guardado.intento === intentoActual) {
@@ -75,7 +75,8 @@
 		} catch (e: any) {
 			if (!nuevo && localStorage.getItem(claveIntento) && /Inicia nuevamente/i.test(e.message)) {
 				localStorage.removeItem(claveIntento);
-				vencido = true;
+				intentoActual = '';
+				error = 'El inicio guardado no es válido. Inicia una nueva sesión para responder.';
 			} else {
 				error = e.message || 'No se pudo iniciar la encuesta';
 			}
@@ -113,17 +114,13 @@
 		const alVolver = () => {
 			if (document.visibilityState === 'visible') {
 				void sincronizarEncuesta();
-				if (intentoActual && !vencido && !terminado) void iniciarIntento();
+				if (intentoActual && !terminado) void iniciarIntento();
 			}
 		};
 		document.addEventListener('visibilitychange', alVolver);
 		const respaldo = setInterval(alVolver, 15_000);
 		const reloj = setInterval(() => {
 			ahora = Date.now() + desfaseReloj;
-			if (venceAt && ahora >= venceAt && !terminado) {
-				vencido = true;
-				localStorage.removeItem(claveBorrador);
-			}
 		}, 250);
 		return () => {
 			activa = false;
@@ -262,7 +259,7 @@
 
 	async function enviar(event: SubmitEvent) {
 		event.preventDefault();
-		if (!encuesta || enviando || vencido || !intentoActual) return;
+		if (!encuesta || enviando || !intentoActual) return;
 		if (preguntasPendientes.size) {
 			const primera = preguntasPendientes.values().next().value;
 			error = 'La encuesta cambió mientras respondías. Completa las preguntas marcadas para continuar.';
@@ -289,8 +286,10 @@
 			localStorage.removeItem(claveBorrador);
 			window.scrollTo({ top: 0, behavior: 'smooth' });
 		} catch (e: any) {
-			if (e.code === 'TIEMPO_TERMINADO' || e.code === 'INTENTO_INVALIDO') {
-				vencido = true;
+			if (e.code === 'INTENTO_INVALIDO') {
+				intentoActual = '';
+				localStorage.removeItem(claveIntento);
+				error = 'El inicio guardado no es válido. Inicia una nueva sesión para responder.';
 				return;
 			}
 			/// Si la encuesta cambió justo antes del envío, recarga el cuestionario y
@@ -317,16 +316,16 @@
 			<div class="hero-meta"><span class="hero-eyebrow">PARTICIPACIÓN · {COMPANY_NAME}</span>{#if !cargando && encuesta}<span class="estado" class:estado-cerrado={!encuesta.abierta}><span class="estado-punto"></span>{encuesta.abierta ? 'Abierta' : 'Cerrada'}</span>{/if}</div>
 			{#if !cargando && encuesta}<h1 id="titulo-encuesta">{encuesta.titulo}</h1>{#if encuesta.descripcion}<p class="descripcion">{encuesta.descripcion}</p>{/if}{:else}<h1 id="titulo-encuesta">Queremos conocer tu opinión</h1><p class="descripcion">Tus respuestas nos ayudan a entender mejor cada experiencia.</p>{/if}
 				{#if avisoActualizacion}<aside class="aviso-actualizacion" role="status"><strong>{avisoActualizacion.titulo}</strong><p>{avisoActualizacion.descripcion}</p>{#if avisoActualizacion.preguntas.length}<ul>{#each avisoActualizacion.preguntas as titulo}<li>{titulo}</li>{/each}</ul>{/if}</aside>{/if}
-			{#if !cargando && encuesta?.abierta && !terminado && !vencido}<div class="progreso"><div class="progreso-superior"><span>Tu progreso</span><strong>{contestadas} de {total} respondidas</strong></div><div class="progreso-pista" role="progressbar" aria-label="Preguntas respondidas" aria-valuemin="0" aria-valuemax={total} aria-valuenow={contestadas}><span style:width={total ? Math.round((contestadas / total) * 100) + '%' : '0%'}></span></div></div>{/if}
+			{#if !cargando && encuesta?.abierta && !terminado}<div class="progreso"><div class="progreso-superior"><span>Tu progreso</span><strong>{contestadas} de {total} respondidas</strong></div><div class="progreso-pista" role="progressbar" aria-label="Preguntas respondidas" aria-valuemin="0" aria-valuemax={total} aria-valuenow={contestadas}><span style:width={total ? Math.round((contestadas / total) * 100) + '%' : '0%'}></span></div></div>{/if}
 		</section>
 		<section class="encuesta-contenido" aria-label="Formulario de encuesta">
 			{#if cargando}<div class="tarjeta estado-tarjeta"><span class="cargando-punto"></span><p>Cargando encuesta…</p></div>
 			{:else if terminado}<div class="tarjeta cierre" role="status"><div class="cierre-icono" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12 4 4L19 6" stroke-linecap="round" stroke-linejoin="round" /></svg></div><span class="cierre-eyebrow">RESPUESTA REGISTRADA</span><h2>¡Gracias por participar!</h2><p>{mensajeFinal}</p></div>
 			{:else if !encuesta || !encuesta.abierta}<div class="tarjeta estado-tarjeta" role="status"><div class="estado-tarjeta__icono">i</div><h2>{encuesta ? 'Esta encuesta está cerrada' : 'No encontramos este enlace'}</h2><p>{error || 'Ya no se reciben respuestas por este enlace.'}</p></div>
-			{:else if vencido || !intentoActual}<div class="tarjeta estado-tarjeta" role="status"><div class="estado-tarjeta__icono">⌛</div><h2>{vencido ? 'Tiempo terminado' : 'No se pudo iniciar la encuesta'}</h2><p>{vencido ? 'Pasaron los 30 minutos para responder. Puedes comenzar de nuevo; las respuestas anteriores se descartarán.' : error}</p><button class="enviar reiniciar" type="button" disabled={iniciando} onclick={() => void iniciarIntento(true)}>{iniciando ? 'Iniciando…' : 'Volver a diligenciar'}</button></div>
+			{:else if !intentoActual}<div class="tarjeta estado-tarjeta" role="status"><div class="estado-tarjeta__icono">i</div><h2>No se pudo iniciar la encuesta</h2><p>{error}</p><button class="enviar reiniciar" type="button" disabled={iniciando} onclick={() => void iniciarIntento(true)}>{iniciando ? 'Iniciando…' : 'Intentar de nuevo'}</button></div>
 			{:else}
 				<form class="encuesta-formulario" onsubmit={enviar}>
-					<div class="tarjeta temporizador" role="timer" aria-label="Tiempo restante para responder"><span>Tiempo restante para enviar</span><strong>{tiempoRestante}</strong><small>El plazo de 30 minutos continúa aunque cierres esta página o apagues el teléfono.</small></div>
+					<div class="tarjeta temporizador" class:temporizador-superado={superoReferencia} role="timer" aria-label="Tiempo de referencia de la encuesta"><span>{superoReferencia ? 'Superaste los 30 minutos de referencia' : 'Tiempo de referencia restante'}</span><strong>{superoReferencia ? `+${tiempoAdicional}` : tiempoRestante}</strong><small>{superoReferencia ? 'Puedes continuar y enviar cuando completes las preguntas obligatorias. Se registrará el tiempo total empleado.' : 'Puedes continuar y enviar aunque pasen los 30 minutos. El tiempo sigue contando si cierras esta página.'}</small></div>
 					{#if encuesta.nombre_modo !== 'NO' || encuesta.correo_modo !== 'NO'}<section class="tarjeta identidad"><div class="tarjeta-cabecera"><span class="seccion-numero">01</span><div><h2>Sobre ti</h2><p>Estos datos ayudan a contextualizar tu respuesta.</p></div></div>
 						{#if encuesta.nombre_modo !== 'NO'}<label for="nombre">Nombre <span>{encuesta.nombre_modo === 'OBLIGATORIO' ? 'Obligatorio' : 'Opcional'}</span></label><input id="nombre" type="text" autocomplete="name" maxlength="160" bind:value={nombre} required={encuesta.nombre_modo === 'OBLIGATORIO'} placeholder="Escribe tu nombre" />{/if}
 						{#if encuesta.correo_modo !== 'NO'}<label for="correo">Correo electrónico <span>{encuesta.correo_modo === 'OBLIGATORIO' ? 'Obligatorio' : 'Opcional'}</span></label><input id="correo" type="email" autocomplete="email" maxlength="254" bind:value={correo} required={encuesta.correo_modo === 'OBLIGATORIO'} placeholder="nombre@correo.com" />{/if}
@@ -428,6 +427,8 @@
 	.temporizador { display:flex; flex-wrap:wrap; align-items:center; gap:.35rem 1rem; padding:1rem 1.15rem; border-color:color-mix(in srgb,var(--encuesta-acento) 35%,var(--encuesta-borde)); }
 	.temporizador span { font-size:.85rem; font-weight:700; }
 	.temporizador strong { margin-left:auto; color:var(--encuesta-acento); font-variant-numeric:tabular-nums; font-size:1.35rem; }
+	.temporizador-superado { border-color:var(--encuesta-borde); }
+	.temporizador-superado strong { color:var(--encuesta-texto); }
 	.temporizador small { width:100%; color:var(--encuesta-muted); line-height:1.4; }
 	.reiniciar { margin-top:1.25rem; }
 	.spinner { width:1rem; height:1rem; border:2px solid rgba(255,255,255,.45); border-top-color:#fff; border-radius:50%; animation:encuesta-spin .7s linear infinite; }
