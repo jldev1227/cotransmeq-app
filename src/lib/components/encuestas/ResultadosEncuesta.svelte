@@ -34,6 +34,13 @@
 	function fecha(valor: string) {
 		return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(valor));
 	}
+	function duracion(segundos: number | null): string {
+		if (segundos == null) return '—';
+		const horas = Math.floor(segundos / 3600);
+		const minutos = Math.floor((segundos % 3600) / 60);
+		const resto = segundos % 60;
+		return horas ? `${horas} h ${String(minutos).padStart(2, '0')} min ${String(resto).padStart(2, '0')} s` : `${minutos} min ${String(resto).padStart(2, '0')} s`;
+	}
 </script>
 
 <div class="resultados">
@@ -98,7 +105,7 @@
 				<div class="tabla-toolbar">
 					<span class="eyebrow">Modo tabla · Respuestas individuales</span>
 					<span class="tabla-conteo">
-						{datos.respuestas.length} filas · {datos.total} respuestas · {preguntas.length + 3} columnas
+						{datos.respuestas.length} filas · {datos.total} respuestas · {preguntas.length + 4} columnas
 					</span>
 				</div>
 				{#if datos.respuestas.length === 0}
@@ -111,6 +118,7 @@
 							<thead><tr>
 								<th class="columna-fija">Participante</th>
 								<th>Fecha de respuesta</th>
+								<th>Tiempo empleado</th>
 								<th>Origen</th>
 								{#each preguntas as p (p.id)}<th>{p.titulo}</th>{/each}
 							</tr></thead>
@@ -123,6 +131,7 @@
 											{#if r.nombre && r.correo}<small>{r.correo}</small>{/if}
 										</td>
 										<td class="fecha-respuesta"><time datetime={r.created_at}>{fecha(r.created_at)}</time></td>
+										<td class="tiempo-respuesta"><span>{duracion(r.tiempo_respuesta_segundos)}</span>{#if r.tiempo_respuesta_segundos != null && r.tiempo_respuesta_segundos >= 1800}<small>Superó 30 min</small>{/if}</td>
 										<td><span class="origen-chip" class:detectado={origen !== '—'}>{origen}</span></td>
 										{#each preguntas as p (p.id)}
 											<td class="respuesta-celda">{representar(p, r.respuestas[p.id])}</td>
@@ -206,6 +215,9 @@
 	.participante strong { color: var(--text-primary); font-size: .72rem; font-weight: 750; }
 	.participante small { margin-top: .2rem; color: var(--text-muted); font-size: .65rem; }
 	.fecha-respuesta { min-width: 11rem; color: var(--text-secondary); font-size: .68rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.tiempo-respuesta { min-width: 9rem; font-size: .72rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.tiempo-respuesta span, .tiempo-respuesta small { display: block; }
+	.tiempo-respuesta small { margin-top: .2rem; color: var(--text-muted); font-size: .63rem; }
 	.origen-chip { display: inline-flex; align-items: center; min-height: 1.35rem; padding: .12rem .45rem; border: 1px solid var(--border-subtle); border-radius: .4rem; background: var(--bg-base); color: var(--text-muted); font-size: .63rem; font-weight: 700; white-space: nowrap; }
 	.origen-chip.detectado { border-color: color-mix(in srgb, var(--accion) 28%, var(--border-subtle)); background: color-mix(in srgb, var(--accion) 9%, var(--bg-surface)); color: var(--accion); }
 	.respuesta-celda { min-width: 13rem; line-height: 1.45; }

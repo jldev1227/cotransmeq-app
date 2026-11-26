@@ -81,6 +81,7 @@ export interface ResultadoEncuesta {
 		respuestas: Record<string, string | string[] | number | boolean | RespuestaOpcionesEncuesta>;
 		coincide_ip: boolean;
 		coincide_dispositivo: boolean;
+		tiempo_respuesta_segundos: number | null;
 		created_at: string;
 	}>;
 	pagina: number;
