@@ -46,6 +46,12 @@ export interface EncuestaPublica extends Pick<EncuestaInput, 'titulo' | 'descrip
 	abierta: boolean;
 	actualizada_at: string;
 }
+export interface IntentoEncuesta {
+	intento: string;
+	vence_at: string;
+	vencido: boolean;
+	servidor_at: string;
+}
 export interface AnalisisPregunta {
 	id: string;
 	titulo: string;
@@ -137,6 +143,16 @@ export const encuestasAPI = {
 		if (!res.ok) throw new Error(mensajeError(data, 'No se pudo abrir la encuesta'));
 		return data.encuesta;
 	},
+	async intento(token: string, anterior?: string): Promise<IntentoEncuesta> {
+		const res = await fetch(`${API_BASE}/api/public/encuestas/${encodeURIComponent(token)}/intentos`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(anterior ? { intento: anterior } : {})
+		});
+		const data = await res.json();
+		if (!res.ok) throw new Error(mensajeError(data, 'No se pudo iniciar la encuesta'));
+		return data;
+	},
 	suscribirActualizaciones(token: string, callback: (evento: { actualizada_at: string; estado: Encuesta['estado'] }) => void): () => void {
 		const stream = new EventSource(`${API_BASE}/api/public/encuestas/${encodeURIComponent(token)}/eventos`);
 		const recibir = (evento: Event) => {
@@ -147,7 +163,7 @@ export const encuestasAPI = {
 	},
 	async responder(
 		token: string,
-		payload: { nombre?: string; correo?: string; dispositivo?: string; respuestas: Record<string, unknown> }
+		payload: { intento: string; nombre?: string; correo?: string; dispositivo?: string; respuestas: Record<string, unknown> }
 	): Promise<{ id: string; mensaje: string }> {
 		const res = await fetch(`${API_BASE}/api/public/encuestas/${encodeURIComponent(token)}/respuestas`, {
 			method: 'POST',
@@ -155,7 +171,7 @@ export const encuestasAPI = {
 			body: JSON.stringify(payload)
 		});
 		const data = await res.json();
-		if (!res.ok) throw new Error(mensajeError(data, 'No se pudo guardar tu respuesta'));
+		if (!res.ok) throw Object.assign(new Error(mensajeError(data, 'No se pudo guardar tu respuesta')), { code: data?.code });
 		return data;
 	}
 };

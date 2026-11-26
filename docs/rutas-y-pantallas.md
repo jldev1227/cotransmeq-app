@@ -211,6 +211,7 @@ servidor; las demás sí.
 | `/public/extracto/[codigo]` | Validación pública de un extracto de contrato: el destino del QR impreso. | `extractos` |
 | `/public/servicio/[token]` | Servicio compartido por enlace, con mapa. | `servicios` (`/api/servicios/public/:token`) |
 | `/public/inducciones` | Formulario público de inducción de visitantes HSEQ-FR-66; los registros se consultan en `/dashboard/asistencias/inducciones`. | `inducciones` |
+| `/public/encuestas/[token]` | Encuesta pública con 30 minutos desde la apertura del intento. El plazo lo firma el servidor; el intento y el borrador se conservan en `localStorage` al cerrar la página o apagar el teléfono. Muestra la cuenta regresiva y, al vencer, permite comenzar de nuevo con respuestas vacías. | `encuestas` (`/api/public/encuestas/:token/intentos` y `/respuestas`) |
 | `/public/desprendible/[token]` | Ver y firmar un desprendible por token. No encontré en el código actual quién genera este enlace. | `liquidaciones` (`/api/desprendible-firma`) |
 | `/public/documento/[token]` | Ver y firmar un desprendible compartido. Tampoco encontré quién genera el enlace. | `documentos` (`/api/desprendible/compartido`) |
 | `/public/desprendible` | **Suelta.** Genera un PDF de desprendible a partir de `?data=<JSON en base64>`; nadie en el código construye ese enlace. | — |
