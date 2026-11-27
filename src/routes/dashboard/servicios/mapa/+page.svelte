@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
 	import { onMount } from 'svelte';
 	import mapboxgl from 'mapbox-gl';
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import { MAPBOX_WARM_STYLE } from '$lib/mapbox';
 	import {
 		ArrowLeft,
-		Clock3,
 		Gauge,
 		LocateFixed,
 		MapPin,
@@ -27,6 +27,7 @@
 		velocidadKmh: number | null;
 		rumbo: number | null;
 		fechaPosicion: string | null;
+		tipoVehiculo?: 'camioneta' | 'bus';
 	}
 
 	interface ErrorGps {
@@ -53,7 +54,7 @@
 	let mapaListo = false;
 	let encuadreInicial = false;
 	let temporizador: ReturnType<typeof setInterval> | undefined;
-	let marcadores = new Map<string, { marker: mapboxgl.Marker; element: HTMLButtonElement }>();
+	let marcadores = new Map<string, { marker: mapboxgl.Marker; element: HTMLImageElement }>();
 	let unidades = $state<UnidadGps[]>([]);
 	let placaBuscada = $state('');
 	let unidadSeleccionadaId = $state<string | null>(null);
@@ -66,7 +67,6 @@
 	let mensajeWialon = $state<string | null>(null);
 	let errorAutorizacion = $state(false);
 	let codigoAutorizacion = $state<string | null>(null);
-	let ultimaActualizacion = $state<string | null>(null);
 
 	const unidadesVisibles = $derived.by(() => {
 		const q = normalizar(placaBuscada);
@@ -74,10 +74,6 @@
 	});
 	const unidadSeleccionada = $derived(
 		unidades.find((unidad) => unidad.id === unidadSeleccionadaId) ?? null
-	);
-	const conPosicion = $derived(unidades.filter((unidad) => tieneCoordenadas(unidad)).length);
-	const enMovimiento = $derived(
-		unidades.filter((unidad) => tieneCoordenadas(unidad) && (unidad.velocidadKmh ?? 0) > 0).length
 	);
 
 	function normalizar(valor: string): string {
@@ -89,7 +85,21 @@
 	}
 
 	function tieneCoordenadas(unidad: UnidadGps): boolean {
-		return unidad.latitud !== null && unidad.longitud !== null;
+		return (
+			typeof unidad.latitud === 'number' &&
+			typeof unidad.longitud === 'number' &&
+			Number.isFinite(unidad.latitud) &&
+			Number.isFinite(unidad.longitud) &&
+			Math.abs(unidad.latitud) <= 90 &&
+			Math.abs(unidad.longitud) <= 180 &&
+			!(unidad.latitud === 0 && unidad.longitud === 0)
+		);
+	}
+
+	function iconoVehiculo(unidad: UnidadGps): string {
+		return unidad.tipoVehiculo === 'bus'
+			? `${base}/assets/marker-bus.svg`
+			: `${base}/assets/marker-camioneta.png`;
 	}
 
 	function mensajeErrorAutorizacion(codigo: string): string {
@@ -147,8 +157,21 @@
 		mapa.flyTo({
 			center: [unidad.longitud!, unidad.latitud!],
 			zoom: Math.max(mapa.getZoom(), 12),
+			padding: paddingMapa(),
 			duration: 650
 		});
+	}
+
+	function paddingMapa() {
+		if (window.innerWidth <= 650) {
+			return {
+				top: 100,
+				right: 45,
+				bottom: Math.min(window.innerHeight * 0.42, 320) + 25,
+				left: 45
+			};
+		}
+		return { top: 70, right: 70, bottom: 70, left: window.innerWidth <= 900 ? 320 : 390 };
 	}
 
 	function actualizarMarcadores(): void {
@@ -165,19 +188,37 @@
 		for (const unidad of conGps) {
 			let entrada = marcadores.get(unidad.id);
 			if (!entrada) {
-				const element = document.createElement('button');
-				element.type = 'button';
+				const element = document.createElement('img');
 				element.className = 'gps-marcador';
-				element.setAttribute('aria-label', `Centrar mapa en ${unidad.placa}`);
-				element.textContent = unidad.placa;
-				const marker = new mapboxgl.Marker({ element, anchor: 'bottom' })
-					.setPopup(new mapboxgl.Popup({ offset: 14 }).setText(unidad.placa))
+				element.src = iconoVehiculo(unidad);
+				element.alt = `Centrar mapa en ${unidad.placa}`;
+				element.title = unidad.placa;
+				element.draggable = false;
+				element.tabIndex = 0;
+				element.setAttribute('role', 'button');
+				const marker = new mapboxgl.Marker({ element, anchor: 'center' })
+					.setLngLat([unidad.longitud!, unidad.latitud!])
+					.setPopup(new mapboxgl.Popup({ offset: 18 }).setText(unidad.placa))
 					.addTo(mapa);
-				element.addEventListener('click', () => (unidadSeleccionadaId = unidad.id));
+				const seleccionar = () => {
+					const actual = unidades.find((item) => item.id === unidad.id);
+					if (actual) enfocar(actual);
+				};
+				element.addEventListener('click', seleccionar);
+				element.addEventListener('keydown', (evento) => {
+					if (evento.key === 'Enter' || evento.key === ' ') {
+						evento.preventDefault();
+						seleccionar();
+					}
+				});
 				entrada = { marker, element };
 				marcadores.set(unidad.id, entrada);
 			}
 			entrada.marker.setLngLat([unidad.longitud!, unidad.latitud!]);
+			if (entrada.element.getAttribute('src') !== iconoVehiculo(unidad)) {
+				entrada.element.src = iconoVehiculo(unidad);
+			}
+			entrada.element.classList.toggle('gps-marcador--bus', unidad.tipoVehiculo === 'bus');
 			entrada.element.classList.toggle('gps-marcador--activo', unidad.id === unidadSeleccionadaId);
 		}
 
@@ -185,9 +226,9 @@
 			const bounds = new mapboxgl.LngLatBounds();
 			for (const unidad of conGps) bounds.extend([unidad.longitud!, unidad.latitud!]);
 			if (conGps.length === 1) {
-				mapa.flyTo({ center: [conGps[0].longitud!, conGps[0].latitud!], zoom: 12, duration: 650 });
+				mapa.flyTo({ center: [conGps[0].longitud!, conGps[0].latitud!], zoom: 12, padding: paddingMapa(), duration: 650 });
 			} else {
-				mapa.fitBounds(bounds, { padding: 70, maxZoom: 12, duration: 650 });
+				mapa.fitBounds(bounds, { padding: paddingMapa(), maxZoom: 12, duration: 650 });
 			}
 			encuadreInicial = true;
 		}
@@ -221,8 +262,6 @@
 
 			cuentaWialonConfigurada = true;
 			unidades = Array.isArray(data?.units) ? data.units : [];
-			ultimaActualizacion =
-				typeof data?.fetchedAt === 'string' ? data.fetchedAt : new Date().toISOString();
 			errorGps = null;
 			if (!unidadSeleccionadaId || !unidades.some((unidad) => unidad.id === unidadSeleccionadaId)) {
 				unidadSeleccionadaId = unidades[0]?.id ?? null;
@@ -314,12 +353,20 @@
 			mapa = new mapboxgl.Map({
 				container: contenedorMapa,
 				style: MAPBOX_WARM_STYLE,
+				projection: 'mercator',
 				center: [-74.0721, 4.711],
 				zoom: 6,
+				pitch: 0,
+				bearing: 0,
+				maxPitch: 0,
+				dragRotate: false,
+				touchPitch: false,
 				attributionControl: true
 			});
 			mapa.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+			mapa.on('style.load', forzarVista2D);
 			mapa.on('load', () => {
+				forzarVista2D();
 				mapaListo = true;
 				actualizarMarcadores();
 			});
@@ -337,6 +384,22 @@
 		};
 	});
 
+	function forzarVista2D(): void {
+		if (!mapa) return;
+		mapa.setProjection('mercator');
+		mapa.setTerrain(null);
+		mapa.setMaxPitch(0);
+		mapa.setPitch(0);
+		mapa.setBearing(0);
+		mapa.dragRotate.disable();
+		mapa.touchZoomRotate.disableRotation();
+		for (const capa of mapa.getStyle()?.layers ?? []) {
+			if (['fill-extrusion', 'hillshade', 'model', 'sky'].includes(capa.type)) {
+				mapa.setLayoutProperty(capa.id, 'visibility', 'none');
+			}
+		}
+	}
+
 	$effect(() => {
 		unidadesVisibles;
 		unidadSeleccionadaId;
@@ -349,18 +412,12 @@
 </svelte:head>
 
 <div class="mapa-pagina">
-	<header class="mapa-cabecera">
-		<div class="mapa-cabecera-titulo">
-			<button type="button" class="mapa-volver" onclick={() => goto('/dashboard/servicios')}>
-				<ArrowLeft size={17} />
-				<span>Servicios</span>
-			</button>
-			<div>
-				<p class="mapa-eyebrow"><Radio size={14} /> OPERACIÓN EN VIVO</p>
-				<h1>Seguimiento de flota</h1>
-				<p class="mapa-subtitulo">Ubicación y velocidad GPS por placa, con datos de Wialon.</p>
-			</div>
-		</div>
+	<div class="mapa-cabecera">
+		<h1 class="mapa-oculto">Seguimiento de flota</h1>
+		<button type="button" class="mapa-volver" onclick={() => goto('/dashboard/servicios')}>
+			<ArrowLeft size={17} />
+			<span>Servicios</span>
+		</button>
 		<div class="mapa-cabecera-acciones">
 			<div class="mapa-estado" class:mapa-estado--error={!!errorGps}>
 				{#if errorGps}<WifiOff size={15} />{:else}<Wifi size={15} />{/if}
@@ -394,7 +451,7 @@
 				Actualizar
 			</button>
 		</div>
-	</header>
+	</div>
 	{#if mensajeWialon}
 		<div
 			class="mapa-autorizacion-feedback"
@@ -405,36 +462,6 @@
 			{#if errorAutorizacion && codigoAutorizacion}<small>Código: {codigoAutorizacion}</small>{/if}
 		</div>
 	{/if}
-
-	<section class="mapa-metricas" aria-label="Resumen de flota">
-		<div class="metrica">
-			<span class="metrica-icono"><Truck size={17} /></span>
-			<div><strong>{unidades.length}</strong><span>Unidades en Wialon</span></div>
-		</div>
-		<div class="metrica">
-			<span class="metrica-icono"><MapPin size={17} /></span>
-			<div><strong>{conPosicion}</strong><span>Con posición GPS</span></div>
-		</div>
-		<div class="metrica">
-			<span class="metrica-icono"><Gauge size={17} /></span>
-			<div><strong>{enMovimiento}</strong><span>En movimiento</span></div>
-		</div>
-		<div class="metrica metrica-actualizacion">
-			<span class="metrica-icono"><Clock3 size={17} /></span>
-			<div>
-				<strong
-					>{ultimaActualizacion
-						? new Intl.DateTimeFormat('es-CO', {
-								hour: '2-digit',
-								minute: '2-digit',
-								second: '2-digit'
-							}).format(new Date(ultimaActualizacion))
-						: '—'}</strong
-				>
-				<span>Última consulta</span>
-			</div>
-		</div>
-	</section>
 
 	<main class="mapa-contenido">
 		<aside class="mapa-placas">
@@ -589,64 +616,61 @@
 
 <style>
 	.mapa-pagina {
+		position: fixed;
+		inset: 0;
+		z-index: 20;
+		height: 100dvh;
+		overflow: hidden;
+		box-sizing: border-box;
+		background: #f5f8f6;
 		--mapa-acento: #166534;
 		--mapa-suave: #f0fdf4;
 		--mapa-borde: #e4e9e6;
-		padding: 1.25rem 1.25rem 2rem;
 		color: #17221d;
 	}
 	.mapa-cabecera {
+		position: absolute;
+		z-index: 5;
+		top: 1rem;
+		right: 1rem;
+		left: 1rem;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-		margin-bottom: 1rem;
+		pointer-events: none;
 	}
-	.mapa-cabecera-titulo,
-	.mapa-cabecera-acciones {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
+	.mapa-oculto {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
 	}
 	.mapa-volver {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		border: 0;
-		background: transparent;
+		border: 1px solid var(--mapa-borde);
+		border-radius: 0.7rem;
+		background: white;
+		box-shadow: 0 5px 18px rgb(17 43 29 / 14%);
 		color: #617068;
 		cursor: pointer;
 		font-size: 0.86rem;
 		font-weight: 650;
-		padding: 0.55rem 0.65rem 0.55rem 0;
+		padding: 0.6rem 0.75rem;
+		pointer-events: auto;
 	}
 	.mapa-volver:hover {
 		color: var(--mapa-acento);
 	}
-	.mapa-eyebrow {
+	.mapa-cabecera-acciones {
 		display: flex;
 		align-items: center;
-		gap: 0.4rem;
-		margin: 0 0 0.25rem;
-		color: var(--mapa-acento);
-		font-size: 0.66rem;
-		font-weight: 800;
-		letter-spacing: 0.12em;
-	}
-	h1 {
-		margin: 0;
-		color: #17221d;
-		font-size: clamp(1.35rem, 2vw, 1.75rem);
-		font-weight: 760;
-		letter-spacing: -0.035em;
-	}
-	.mapa-subtitulo {
-		margin: 0.25rem 0 0;
-		color: #718078;
-		font-size: 0.88rem;
-	}
-	.mapa-cabecera-acciones {
 		gap: 0.6rem;
+		pointer-events: auto;
 	}
 	.mapa-estado,
 	.mapa-actualizar {
@@ -688,60 +712,26 @@
 			transform: rotate(360deg);
 		}
 	}
-	.mapa-metricas {
-		display: grid;
-		grid-template-columns: repeat(4, minmax(0, 1fr));
-		gap: 0.75rem;
-		margin-bottom: 0.9rem;
+	.mapa-contenido {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
 	}
-	.metrica {
+	.mapa-placas {
+		position: absolute;
+		z-index: 3;
+		top: 4.75rem;
+		bottom: 1rem;
+		left: 1rem;
 		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		min-height: 4.1rem;
+		width: min(22rem, calc(100% - 2rem));
+		min-height: 0;
+		flex-direction: column;
+		overflow: hidden;
 		border: 1px solid var(--mapa-borde);
 		border-radius: 0.9rem;
 		background: #fff;
-		padding: 0.7rem 0.9rem;
-	}
-	.metrica-icono {
-		display: grid;
-		width: 2.35rem;
-		height: 2.35rem;
-		place-items: center;
-		border-radius: 0.7rem;
-		background: var(--mapa-suave);
-		color: var(--mapa-acento);
-	}
-	.metrica div {
-		display: grid;
-		gap: 0.12rem;
-	}
-	.metrica strong {
-		color: #1b2821;
-		font-size: 1.08rem;
-		font-weight: 760;
-		line-height: 1;
-	}
-	.metrica span:not(.metrica-icono) {
-		color: #7a8880;
-		font-size: 0.72rem;
-	}
-	.mapa-contenido {
-		display: grid;
-		grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr);
-		min-height: 31rem;
-		overflow: hidden;
-		border: 1px solid var(--mapa-borde);
-		border-radius: 1rem;
-		background: #fff;
-		box-shadow: 0 5px 22px rgb(26 53 39 / 5%);
-	}
-	.mapa-placas {
-		display: flex;
-		min-height: 31rem;
-		flex-direction: column;
-		border-right: 1px solid var(--mapa-borde);
+		box-shadow: 0 10px 32px rgb(17 43 29 / 18%);
 	}
 	.placas-cabecera {
 		display: flex;
@@ -926,9 +916,10 @@
 		background: #17a36d;
 	}
 	.mapa-visual {
-		position: relative;
+		position: absolute;
+		inset: 0;
 		min-width: 0;
-		min-height: 31rem;
+		min-height: 0;
 		background: #e7ece8;
 	}
 	.mapa-canvas {
@@ -939,10 +930,10 @@
 	.mapa-aviso {
 		position: absolute;
 		z-index: 2;
-		top: 1rem;
-		left: 1rem;
+		top: 4.75rem;
+		left: 24rem;
 		display: flex;
-		width: min(32rem, calc(100% - 2rem));
+		width: min(32rem, calc(100% - 25rem));
 		gap: 0.75rem;
 		border: 1px solid #e8e8d6;
 		border-radius: 0.85rem;
@@ -952,7 +943,11 @@
 		backdrop-filter: blur(10px);
 	}
 	.mapa-autorizacion-feedback {
-		margin: 0 0 0.85rem;
+		position: absolute;
+		z-index: 5;
+		top: 4.75rem;
+		left: 24rem;
+		width: min(32rem, calc(100% - 25rem));
 		border: 1px solid #cde7d8;
 		border-radius: 0.7rem;
 		background: #f1faf4;
@@ -1054,13 +1049,13 @@
 		position: absolute;
 		right: 1rem;
 		bottom: 1rem;
-		left: 1rem;
+		left: auto;
 		z-index: 1;
 		display: flex;
 		align-items: center;
 		gap: 0.65rem;
 		width: fit-content;
-		max-width: calc(100% - 2rem);
+		max-width: min(34rem, calc(100% - 25rem));
 		border: 1px solid rgb(225 232 226 / 90%);
 		border-radius: 0.8rem;
 		background: rgb(255 255 255 / 94%);
@@ -1106,7 +1101,13 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.mapa-instrucciones {
-		margin-top: 0.8rem;
+		position: absolute;
+		right: 1.25rem;
+		bottom: 1.25rem;
+		z-index: 4;
+		width: min(30rem, calc(100% - 2.5rem));
+		max-height: 50dvh;
+		overflow-y: auto;
 		border: 1px solid var(--mapa-borde);
 		border-radius: 0.8rem;
 		background: #fff;
@@ -1130,92 +1131,92 @@
 		line-height: 1.55;
 	}
 	:global(.gps-marcador) {
-		max-width: 8.5rem;
-		border: 1px solid #fff;
-		border-radius: 0.5rem;
-		background: #fff;
-		box-shadow: 0 3px 10px rgb(17 43 29 / 24%);
-		color: #2c4034;
+		width: 1.9rem;
+		height: 1.9rem;
+		object-fit: contain;
 		cursor: pointer;
-		font:
-			750 0.7rem/1.1 system-ui,
-			sans-serif;
-		overflow: hidden;
-		padding: 0.37rem 0.5rem;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		filter: drop-shadow(0 2px 2px rgb(17 43 29 / 35%));
+	}
+	:global(.gps-marcador--bus) {
+		width: 2.3rem;
+		height: 1.55rem;
 	}
 	:global(.gps-marcador--activo) {
-		background: var(--mapa-acento);
-		color: #fff;
+		filter: drop-shadow(0 0 3px var(--mapa-acento)) drop-shadow(0 2px 2px rgb(17 43 29 / 35%));
+	}
+	:global(.gps-marcador:hover),
+	:global(.gps-marcador:focus-visible) {
+		z-index: 2;
+		filter: drop-shadow(0 0 4px var(--mapa-acento));
+	}
+	:global(.mapa-visual .mapboxgl-ctrl-top-right) {
+		top: 4.75rem;
+		right: 1rem;
 	}
 	@media (max-width: 900px) {
-		.mapa-metricas {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
+		.mapa-placas {
+			width: min(18rem, calc(100% - 2rem));
 		}
-		.mapa-contenido {
-			grid-template-columns: minmax(15rem, 18rem) minmax(0, 1fr);
+		.mapa-conectar,
+		.mapa-aviso,
+		.mapa-autorizacion-feedback {
+			left: 20rem;
+			width: min(32rem, calc(100% - 21rem));
+		}
+		.mapa-seleccionada {
+			max-width: calc(100% - 21rem);
 		}
 	}
 	@media (max-width: 650px) {
-		.mapa-pagina {
-			padding: 0.85rem 0.75rem 1.5rem;
-		}
 		.mapa-cabecera {
-			align-items: flex-start;
-			flex-direction: column;
-		}
-		.mapa-cabecera-titulo {
-			align-items: flex-start;
-			gap: 0.5rem;
-		}
-		.mapa-volver {
-			margin-top: 0.4rem;
+			top: 0.65rem;
+			right: 0.65rem;
+			left: 0.65rem;
 		}
 		.mapa-cabecera-acciones {
-			width: 100%;
-			justify-content: space-between;
+			gap: 0.35rem;
 		}
-		.mapa-metricas {
-			gap: 0.45rem;
+		.mapa-estado span {
+			display: none;
 		}
-		.metrica {
-			min-height: 3.6rem;
-			gap: 0.5rem;
+		.mapa-actualizar {
+			font-size: 0;
+		}
+		.mapa-volver,
+		.mapa-estado,
+		.mapa-actualizar {
 			padding: 0.55rem;
 		}
-		.metrica-icono {
-			width: 2rem;
-			height: 2rem;
-		}
-		.metrica strong {
-			font-size: 0.95rem;
-		}
-		.metrica span:not(.metrica-icono) {
-			font-size: 0.65rem;
-		}
-		.mapa-contenido {
-			grid-template-columns: 1fr;
-		}
 		.mapa-placas {
-			min-height: 13rem;
-			max-height: 18rem;
-			border-right: 0;
-			border-bottom: 1px solid var(--mapa-borde);
-		}
-		.placas-lista {
-			max-height: 11rem;
-		}
-		.mapa-visual {
-			min-height: 26rem;
+			top: auto;
+			right: 0.65rem;
+			bottom: 0.65rem;
+			left: 0.65rem;
+			width: auto;
+			height: min(42dvh, 20rem);
 		}
 		.mapa-seleccionada {
+			top: 4.5rem;
+			right: 0.65rem;
+			bottom: auto;
 			left: 0.65rem;
-			bottom: 0.65rem;
+			max-width: calc(100% - 1.3rem);
 		}
-		.mapa-conectar {
-			top: 0.65rem;
+		.mapa-conectar,
+		.mapa-aviso,
+		.mapa-autorizacion-feedback {
+			top: 4.5rem;
+			right: 0.65rem;
 			left: 0.65rem;
+			width: auto;
+		}
+		:global(.mapa-visual .mapboxgl-ctrl-top-right) {
+			top: 8.5rem;
+			right: 0.65rem;
+		}
+		.mapa-instrucciones {
+			right: 0.65rem;
+			bottom: calc(min(42dvh, 20rem) + 1.3rem);
 			width: calc(100% - 1.3rem);
 		}
 	}

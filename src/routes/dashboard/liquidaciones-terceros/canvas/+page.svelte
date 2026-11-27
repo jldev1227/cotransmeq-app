@@ -28,6 +28,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { liquidacionesTercerosDescuentosAPI } from '$lib/api/liquidaciones-terceros-descuentos';
+	import { conceptosParaSincronizar } from '$lib/editor/business/sincronizar-adicionales-nomina';
 	import {
 		createCierresFinalesEngine,
 		disposeEngine,
@@ -83,7 +84,6 @@
 	import ConfiguracionTercerosModal from '$lib/components/liquidaciones-terceros/ConfiguracionTercerosModal.svelte';
 	import EliminarCierreModal from '$lib/components/liquidaciones-terceros/EliminarCierreModal.svelte';
 	import ConductoresCierreModal from '$lib/components/liquidaciones-terceros/ConductoresCierreModal.svelte';
-	import NovedadesConductorCierreModal from '$lib/components/liquidaciones-terceros/NovedadesConductorCierreModal.svelte';
 	import PropietariosCierreModal from '$lib/components/liquidaciones-terceros/PropietariosCierreModal.svelte';
 	import ConceptosCierreModal from '$lib/components/liquidaciones-terceros/ConceptosCierreModal.svelte';
 	import ItemsDisponiblesModal from '$lib/components/liquidaciones-terceros/ItemsDisponiblesModal.svelte';
@@ -1331,7 +1331,6 @@
 	}
 
 	let modalConductores = $state(false);
-	let modalNovedades = $state(false);
 	let modalPropietarios = $state(false);
 	/// Cierre cuyo borrado está pendiente de confirmar, o `null`.
 	/// Guarda el objeto y no el id porque el modal necesita placa y
@@ -1351,7 +1350,6 @@
 		{ key: 'preview-canvas', id: cierreActivo ?? undefined, open: previewAbierto },
 		{ key: 'historial-cierre', id: cierreActivo ?? undefined, open: historialAbierto },
 		{ key: 'conductores-cierre', id: cierreActivo ?? undefined, open: modalConductores },
-		{ key: 'novedades-cierre', id: cierreActivo ?? undefined, open: modalNovedades },
 		{ key: 'propietarios-cierre', id: cierreActivo ?? undefined, open: modalPropietarios },
 		{ key: 'conceptos-cierre', id: cierreActivo ?? undefined, open: modalConceptos },
 		{ key: 'configuracion-cierre-terceros', open: modalConfiguracion },
@@ -1368,7 +1366,6 @@
 		previewAbierto = referencia?.key === 'preview-canvas';
 		historialAbierto = referencia?.key === 'historial-cierre';
 		modalConductores = referencia?.key === 'conductores-cierre';
-		modalNovedades = referencia?.key === 'novedades-cierre';
 		modalPropietarios = referencia?.key === 'propietarios-cierre';
 		modalConceptos = referencia?.key === 'conceptos-cierre';
 		modalConfiguracion = referencia?.key === 'configuracion-cierre-terceros';
@@ -1533,7 +1530,8 @@
 					const nomina = await liquidacionesTercerosDescuentosAPI.autocompletarNomina({
 						placa: cierre.placa,
 						mes,
-						anio
+						anio,
+						cierre_id: cierre.id
 					});
 
 					const conceptosNomina = nomina.conceptos ?? [];
@@ -1547,17 +1545,10 @@
 						return;
 					}
 
-					// Los COSTO_LABORAL se sustituyen enteros: son el reflejo de la
-					// nómina del mes, y conservar los viejos junto a los nuevos
-					// duplicaría cada conductor.
-					const conservados = (detalle.conceptos as any[]).filter(
-						(c) => c.tipo !== 'COSTO_LABORAL'
+					await liquidacionesTercerosDescuentosAPI.guardarConceptos(
+						cierre.id,
+						conceptosParaSincronizar(conceptosNomina, detalle.conceptos)
 					);
-
-					await liquidacionesTercerosDescuentosAPI.guardarConceptos(cierre.id, [
-						...conceptosNomina,
-						...conservados
-					] as any);
 					// Las retenciones gravan sobre lo liquidado, no sobre la nómina,
 					// pero `guardarConceptos` solo recalcula totales: sin esto, las
 					// filas de impuesto se quedarían con la base anterior.
@@ -2387,15 +2378,6 @@
 				onSelect: () => (modalConductores = true)
 			},
 			{
-				id: 'novedades',
-				label: 'Novedades de conductores',
-				hint: 'Registrar vacaciones, incapacidades o licencias con sus días y periodo. El resumen queda junto a cada conductor en esta hoja.',
-				icon: icoConductor,
-				disabled: !hojaEditable || !detalleActivo || !!accionEnCurso,
-				disabledHint: motivoBloqueo,
-				onSelect: () => (modalNovedades = true)
-			},
-			{
 				id: 'propietarios',
 				label: 'Propietarios de la placa',
 				hint: 'Repartir el valor a pagar entre varios propietarios en cascada: el primero toma su % del total y los demás se reparten el remanente. Por defecto la hoja tiene uno solo.',
@@ -2411,7 +2393,7 @@
 			{
 				id: 'concepto',
 				label: 'Filas del cierre',
-				hint: 'Añadir o quitar gastos de vehículo, anticipos y adicionales, y quitar o devolver items de la liquidación.',
+				hint: 'Añadir o quitar conceptos por conductor, gastos, anticipos y adicionales; también quitar o devolver items de la liquidación.',
 				icon: icoConcepto,
 				disabled: !hojaEditable || !detalleActivo || !!accionEnCurso,
 				disabledHint: motivoBloqueo,
@@ -2622,28 +2604,6 @@
 					? `${partes.join(' · ')}. Dotación y examen médico recalculados.`
 					: 'Días y propietario actualizados; dotación y examen médico recalculados.'
 			});
-		}}
-	/>
-{/if}
-
-{#if modalNovedades && cierreActivoObj && detalleActivo}
-	<NovedadesConductorCierreModal
-		cierreId={cierreActivoObj.id}
-		placa={cierreActivoObj.placa}
-		periodo={periodDisplay}
-		conceptos={detalleActivo.conceptos}
-		novedadesIniciales={detalleActivo.novedades_conductores}
-		onClose={() => (modalNovedades = false)}
-		onGuardado={async () => {
-			await conOverlay(
-				{
-					titulo: 'Actualizando novedades',
-					detalle: `${cierreActivoObj.placa} · actualizando el resumen de novedades por conductor.`
-				},
-				() => recargarCierre(cierreActivoObj.id)
-			);
-			modalNovedades = false;
-			toast.success(`Novedades de ${cierreActivoObj.placa} guardadas`);
 		}}
 	/>
 {/if}

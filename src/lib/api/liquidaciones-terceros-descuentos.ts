@@ -114,21 +114,6 @@ export interface FacturaFisicaBusqueda {
 	cierre_estado: string;
 }
 
-export type TipoNovedadConductor =
-	| 'VACACIONES'
-	| 'INCAPACIDAD'
-	| 'LICENCIA_MATERNIDAD'
-	| 'LICENCIA_PATERNIDAD';
-
-export interface NovedadConductor {
-	id: string;
-	tipo: TipoNovedadConductor;
-	fecha_inicio: string | null;
-	fecha_fin: string | null;
-	dias: number;
-	observaciones: string | null;
-}
-
 export interface ConceptoDescuento {
 	id?: string;
 	liquidacion_tercero_id?: string;
@@ -350,6 +335,7 @@ export const liquidacionesTercerosDescuentosAPI = {
 		placa: string;
 		mes: number;
 		anio: number;
+		cierre_id?: string;
 	}): Promise<AutocompletarNominaResult> {
 		const response = await apiClient.get('/api/liquidaciones-terceros/autocompletar-nomina', {
 			params
@@ -852,18 +838,6 @@ export const liquidacionesTercerosDescuentosAPI = {
 		return response.data;
 	},
 
-	/** Reemplaza las novedades por conductor registradas en una hoja del cierre. */
-	async guardarNovedadesConductores(
-		liquidacionTerceroFinalId: string,
-		novedades: Record<string, NovedadConductor[]>
-	): Promise<{ novedades_conductores: Record<string, NovedadConductor[]> }> {
-		const response = await apiClient.put(
-			`/api/liquidaciones-terceros/${liquidacionTerceroFinalId}/novedades-conductores`,
-			{ novedades_conductores: novedades }
-		);
-		return response.data;
-	},
-
 	// ── Filas sueltas de GASTOS y ANTICIPOS ──
 
 	/**
@@ -881,10 +855,11 @@ export const liquidacionesTercerosDescuentosAPI = {
 	async agregarConceptoFila(
 		liquidacionTerceroFinalId: string,
 		fila: {
-			tipo: 'GASTO_OPERATIVO' | 'ANTICIPO';
+			tipo: 'COSTO_LABORAL' | 'GASTO_OPERATIVO' | 'ANTICIPO';
 			concepto: string;
 			dias: number;
 			valor_unitario: number;
+			conductor_id?: string;
 			/** En ANTICIPOS es la FECHA: no hay columna propia, va en observaciones. */
 			observaciones?: string | null;
 		}
@@ -896,7 +871,7 @@ export const liquidacionesTercerosDescuentosAPI = {
 		return response.data;
 	},
 
-	/** Quita una fila de GASTOS o ANTICIPOS (soft-delete). */
+	/** Quita una fila manual del cierre (soft-delete). */
 	async eliminarConceptoFila(conceptoId: string): Promise<{
 		cierreId: string;
 		mes: number;
@@ -909,7 +884,7 @@ export const liquidacionesTercerosDescuentosAPI = {
 		return response.data;
 	},
 
-	/** Actualiza un campo editable de una fila de gastos o anticipos del cierre. */
+	/** Actualiza un campo editable de una fila manual del cierre. */
 	async actualizarConceptoFila(params: {
 		id: string;
 		field: 'concepto' | 'dias' | 'valor_unitario' | 'observaciones';

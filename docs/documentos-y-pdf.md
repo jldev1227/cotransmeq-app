@@ -294,7 +294,9 @@ Detalles que ya mordieron:
 - La página de control de días OP-FR-03 ([pdfControlDias.ts](../src/lib/utils/pdfControlDias.ts))
   solo la trae el canvas, que pide `/api/recorridos/canvas` con el rango de la
   liquidación. Sin permiso de lectura de `recorridos` el `.catch` la omite sin
-  avisar. Cuando está, la de «días sin recargo» no se imprime.
+  avisar. Cuando está, la de «días sin recargo» no se imprime. El interruptor
+  `mostrar_recargos` del canvas controla las páginas de detalle, incluida esta;
+  apagarlo no cambia los recargos que se pagan en la primera página.
 
 ### Otros documentos en pdfmake
 

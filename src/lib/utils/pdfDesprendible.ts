@@ -578,7 +578,7 @@ export async function construirDocDefinition(
 		...Object.values(bonosAgrupados)
 			.filter((b) => b.quantity > 0)
 			.map((b) => ({ concepto: b.name || '', cantidad: String(b.quantity), valor: formatCurrency(b.totalValue) })),
-		{ concepto: 'Recargos OTROS', detalle: verDetalle, valor: formatCurrency(totalRecargosOtros) },
+		{ concepto: 'Otros', detalle: verDetalle, valor: formatCurrency(totalRecargosOtros) },
 		...(hayRecargosParex ? [{ concepto: 'Recargos PAREX', detalle: verDetalle, valor: formatCurrency(totalRecargosParex) }] : []),
 		...(hayRecargosGeopark ? [{ concepto: 'Recargos GEOPARK', detalle: verDetalle, valor: formatCurrency(totalRecargosGeopark) }] : []),
 		{
@@ -1528,8 +1528,10 @@ export async function construirDocDefinition(
 	// Solo llega desde el canvas de nómina (`desprendible-nomina.ts` la pide
 	// al libro de recorridos). El portal y el enlace firmado no la traen y el
 	// documento sale como antes.
+	// El mismo interruptor que oculta el desglose horario controla esta página;
+	// la primera página y los recargos que paga no dependen de él.
 	const controlDias: ControlDias | null = (recargosData as any)?.control_dias ?? null;
-	if (controlDias?.filas?.length) {
+	if (controlDias?.filas?.length && item.mostrar_recargos) {
 		let firmaControl: string | null = null;
 		if (firmas && firmas[0]?.presignedUrl) {
 			try {

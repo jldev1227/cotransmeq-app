@@ -32,6 +32,7 @@
 		type ConfigGastosPeriodo
 	} from '$lib/editor/business/conceptos.service';
 	import type { AdicionalCierre, ItemCierre } from '$lib/editor/builders/cierres-finales.builder';
+	import { esConceptoConductorDinamico } from '$lib/editor/business/conductor-grupos.service';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import TabsVista, { type TabVista } from '$lib/components/ui/TabsVista.svelte';
 
@@ -94,7 +95,7 @@
 		onCambiado
 	}: Props = $props();
 
-	type Seccion = 'GASTO_OPERATIVO' | 'ANTICIPO' | 'ADICIONAL' | 'ITEM';
+	type Seccion = 'GASTO_OPERATIVO' | 'ANTICIPO' | 'ADICIONAL' | 'ITEM' | 'CONDUCTOR';
 
 	/**
 	 * Los tres gastos que se calculan solos no se pueden borrar ni duplicar.
@@ -124,6 +125,10 @@
 	/// Solo en ADICIONALES.
 	let recorrido = $state('');
 	let pctAdmon = $state(10);
+	let conductorActivoId = $state<string | null>(null);
+	let nombreConceptoConductor = $state('');
+	let diasConceptoConductor = $state(1);
+	let valorConceptoConductor = $state(0);
 
 	let trabajando = $state(false);
 	let error = $state('');
@@ -162,6 +167,49 @@
 		(conceptos ?? []).filter((c) => c.tipo === 'ANTICIPO').length
 	);
 	const cuentaAdicionales = $derived((adicionales ?? []).length);
+	const conductores = $derived.by(() => {
+		const porId = new Map<string, { id: string; nombre: string; identificacion: string }>();
+		for (const c of conceptos ?? []) {
+			if (c.tipo !== 'COSTO_LABORAL' || !c.conductor_id) continue;
+			const nombre = [c.conductor?.nombre, c.conductor?.apellido].filter(Boolean).join(' ');
+			porId.set(c.conductor_id, {
+				id: c.conductor_id,
+				nombre: nombre || 'Conductor sin nombre',
+				identificacion: c.conductor?.numero_identificacion || ''
+			});
+		}
+		return [...porId.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+	});
+	const conductorActivo = $derived(
+		conductores.find((conductor) => conductor.id === conductorActivoId) ?? conductores[0] ?? null
+	);
+	const conceptosDelConductor = $derived(
+		(conceptos ?? [])
+			.filter((c) => c.tipo === 'COSTO_LABORAL' && c.conductor_id === conductorActivo?.id)
+			.slice()
+			.sort((a, b) => (a.orden || 0) - (b.orden || 0))
+	);
+	const totalConductorActivo = $derived(
+		conceptosDelConductor.reduce((s, c) => s + (Number(c.valor_total) || 0), 0)
+	);
+	const nombreConductorNormalizado = $derived(
+		nombreConceptoConductor.trim().toUpperCase().replace(/\s+/g, '_')
+	);
+	const yaExisteConductor = $derived(
+		conceptosDelConductor.some((c) => c.concepto === nombreConductorNormalizado)
+	);
+	const puedeAgregarConductor = $derived(
+		!trabajando && !!conductorActivo && !!nombreConductorNormalizado && !yaExisteConductor &&
+		Number.isFinite(Number(diasConceptoConductor)) && Number(diasConceptoConductor) >= 0 &&
+		Number.isFinite(Number(valorConceptoConductor)) && Number(valorConceptoConductor) >= 0
+	);
+
+	$effect(() => {
+		const ids = conductores.map((conductor) => conductor.id);
+		if (!conductorActivoId || !ids.includes(conductorActivoId)) {
+			conductorActivoId = ids[0] ?? null;
+		}
+	});
 
 	/// Pestañas del encabezado, con el número de filas de cada sección: dice
 	/// dónde estás sin depender solo del color y cuántas filas hay sin tener
@@ -170,6 +218,7 @@
 		{ id: 'GASTO_OPERATIVO', label: 'Gastos de vehículo', cuenta: cuentaGastos },
 		{ id: 'ANTICIPO', label: 'Anticipos', cuenta: cuentaAnticipos },
 		{ id: 'ADICIONAL', label: 'Adicionales', cuenta: cuentaAdicionales },
+		{ id: 'CONDUCTOR', label: 'Conductores', cuenta: conductores.length },
 		{ id: 'ITEM', label: 'Items', cuenta: (items ?? []).length }
 	]);
 
@@ -422,7 +471,7 @@
 		seccion !== 'ADICIONAL' && filas.some((c) => c.concepto === nombreNormalizado)
 	);
 	const puedeAgregar = $derived(
-		trabajando || seccion === 'ITEM'
+		trabajando || seccion === 'ITEM' || seccion === 'CONDUCTOR'
 			? false
 			: seccion === 'ADICIONAL'
 				? !!recorrido.trim() && Number(valorUnitario) > 0
@@ -491,7 +540,7 @@
 		/// aquí): su formulario ni se pinta. Sin este corte, `seccion` llegaría
 		/// tal cual como `tipo` y el backend respondería 400 —solo admite
 		/// GASTO_OPERATIVO y ANTICIPO—; con él TypeScript también lo sabe.
-		if (!puedeAgregar || seccion === 'ITEM') return;
+		if (!puedeAgregar || seccion === 'ITEM' || seccion === 'CONDUCTOR') return;
 		trabajando = true;
 		error = '';
 		try {
@@ -542,6 +591,34 @@
 		try {
 			await liquidacionesTercerosAdicionalesAPI.eliminar(a.id);
 			await onCambiado({ accion: 'remove', concepto: a.recorrido || 'adicional' });
+		} catch (e: any) {
+			error = e?.response?.data?.error || e?.message || 'Error desconocido';
+		} finally {
+			trabajando = false;
+		}
+	}
+
+	async function agregarConceptoConductor() {
+		if (!puedeAgregarConductor || !conductorActivo) return;
+		trabajando = true;
+		error = '';
+		try {
+			await liquidacionesTercerosDescuentosAPI.agregarConceptoFila(cierreId, {
+				tipo: 'COSTO_LABORAL',
+				conductor_id: conductorActivo.id,
+				concepto: nombreConductorNormalizado,
+				dias: Number(diasConceptoConductor),
+				valor_unitario: Number(valorConceptoConductor)
+			});
+			const concepto = nombreConductorNormalizado;
+			nombreConceptoConductor = '';
+			diasConceptoConductor = 1;
+			valorConceptoConductor = 0;
+			await onCambiado({
+				accion: 'add',
+				concepto,
+				mensaje: `${etiqueta(concepto)} se agregó solo a ${conductorActivo.nombre} en este cierre.`
+			});
 		} catch (e: any) {
 			error = e?.response?.data?.error || e?.message || 'Error desconocido';
 		} finally {
@@ -758,7 +835,7 @@
 	open={true}
 	eyebrow={`Cierre · ${periodo}`}
 	title={`Conceptos de ${placa}`}
-	subtitle="Añadir o quitar filas de gastos, anticipos y adicionales"
+	subtitle="Gestionar filas del cierre y conceptos por conductor"
 	tamano="lg"
 	cerrarAlFondo={false}
 	bloqueado={trabajando}
@@ -780,7 +857,104 @@
 	{/snippet}
 
 	<div class="cxm-card">
-		{#if seccion === 'ITEM'}
+		{#if seccion === 'CONDUCTOR'}
+			{#if conductores.length === 0}
+				<p class="cxm-vacio">
+					Este cierre todavía no tiene conductores. Agrégalos desde «Conductores del cierre» para
+					poder registrar conceptos individuales.
+				</p>
+			{:else}
+				<div class="cxm-conductor-tabs" role="tablist" aria-label="Conductores del cierre">
+					{#each conductores as conductor (conductor.id)}
+						<button
+							class="cxm-conductor-tab"
+							class:cxm-conductor-tab-activa={conductorActivo?.id === conductor.id}
+							role="tab"
+							aria-selected={conductorActivo?.id === conductor.id}
+							onclick={() => (conductorActivoId = conductor.id)}
+						>
+							{conductor.nombre}
+						</button>
+					{/each}
+				</div>
+
+				{#if conductorActivo}
+					<table class="cxm-tabla">
+						<thead>
+							<tr>
+								<th>Concepto</th>
+								<th class="cxm-num">Días / %</th>
+								<th class="cxm-num">Valor</th>
+								<th class="cxm-num">Total</th>
+								<th></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each conceptosDelConductor as c (c.id ?? c.concepto)}
+								{@const dinamico = esConceptoConductorDinamico(c)}
+								<tr>
+									<td>
+										{etiqueta(c.concepto)}
+										{#if dinamico}<span class="cxm-auto">manual</span>{/if}
+									</td>
+									<td class="cxm-num">{c.dias ?? c.porcentaje ?? 0}</td>
+									<td class="cxm-num">${formatCOP(Number(c.valor_unitario))}</td>
+									<td class="cxm-num cxm-total">${formatCOP(Number(c.valor_total))}</td>
+									<td class="cxm-num cxm-acciones">
+										{#if dinamico}
+											<button
+												class="cxm-quitar"
+												onclick={() => quitar(c)}
+												disabled={trabajando || !c.id}
+												title="Quitar este concepto solo de este conductor y cierre"
+												aria-label="Quitar {etiqueta(c.concepto)}"
+											>×</button>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+						<tfoot>
+							<tr>
+								<td colspan="3">Total del conductor en este cierre</td>
+								<td class="cxm-num cxm-total">${formatCOP(totalConductorActivo)}</td>
+								<td></td>
+							</tr>
+						</tfoot>
+					</table>
+
+					<div class="cxm-alta">
+						<h3>Añadir concepto a {conductorActivo.nombre}</h3>
+						<div class="cxm-campos">
+							<label class="cxm-crece">
+								<span>Concepto</span>
+								<input type="text" bind:value={nombreConceptoConductor} maxlength="100" placeholder="BONIFICACIÓN ESPECIAL" disabled={trabajando} />
+							</label>
+							<label class="cxm-corto">
+								<span>Días / cantidad</span>
+								<input type="number" min="0" step="0.5" bind:value={diasConceptoConductor} disabled={trabajando} />
+							</label>
+							<label class="cxm-corto">
+								<span>Valor unitario</span>
+								<input type="number" min="0" step="1" bind:value={valorConceptoConductor} disabled={trabajando} />
+							</label>
+							<button class="btn-primary cxm-add" type="button" onclick={agregarConceptoConductor} disabled={!puedeAgregarConductor}>
+								{trabajando ? 'Guardando…' : '+ Añadir fila'}
+							</button>
+						</div>
+						{#if nombreConductorNormalizado && yaExisteConductor}
+							<p class="cxm-aviso">{etiqueta(nombreConductorNormalizado)} ya existe para este conductor en este cierre.</p>
+						{/if}
+						{#if error}<p class="cxm-error">{error}</p>{/if}
+						<p class="cxm-nota">
+							La fila queda limitada a {placa}, {periodo} y {conductorActivo.nombre}. Se suma al
+							total del conductor; las bases de prestaciones y seguridad social conservan sus reglas
+							actuales. Puedes ajustar días y valor unitario directamente en la hoja.
+						</p>
+					</div>
+				{/if}
+			{/if}
+		{:else if seccion === 'ITEM'}
 			<table class="cxm-tabla">
 				<thead>
 					<tr>
@@ -1203,7 +1377,7 @@
 
 	<!-- Los items NO se añaden a mano: vienen de las liquidaciones de
 	     servicio del mes. Aquí solo se quitan y se devuelven. -->
-	{#if seccion !== 'ITEM'}
+	{#if seccion !== 'ITEM' && seccion !== 'CONDUCTOR'}
 	<div class="cxm-alta">
 		<h3>Añadir fila</h3>
 		<div class="cxm-campos">
@@ -1325,6 +1499,32 @@
 <style>
 	.cxm-tabs-off {
 		opacity: 0.6;
+	}
+	.cxm-conductor-tabs {
+		display: flex;
+		gap: 6px;
+		margin: 0 0 12px;
+		overflow-x: auto;
+		padding: 2px 1px 6px;
+	}
+	.cxm-conductor-tab {
+		flex: 0 0 auto;
+		min-height: 36px;
+		border: 1px solid var(--border-default);
+		border-radius: 999px;
+		background: var(--bg-surface);
+		padding: 0 14px;
+		color: var(--text-secondary);
+		font: inherit;
+		font-size: 12px;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.cxm-conductor-tab:hover { border-color: var(--accion); }
+	.cxm-conductor-tab-activa {
+		border-color: var(--accion);
+		background: var(--accion);
+		color: white;
 	}
 
 	/* Bloques blancos sobre el cuerpo claro de ModalBase. */

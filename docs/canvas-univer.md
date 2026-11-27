@@ -45,6 +45,12 @@ permisos por módulo en [autenticacion-y-permisos.md](./autenticacion-y-permisos
 | Ingresos                    | `/dashboard/liquidaciones-terceros/ingresos/canvas`    | `liquidaciones-terceros`             | Un mes; hojas INGRESOS y ADICIONALES                                     | `ingresos-terceros-engine.ts`, `ingresos-terceros.builder.ts`                                     | La tabla es derivada; la capa editable (INCLUIR, cantidades, conceptos del pie) por REST (`guardar`); anotaciones por `sheet-session`                                                                                       |
 | Liquidaciones de servicios  | `/dashboard/liquidaciones-servicios/canvas`            | `liquidaciones-servicios`            | Todo el histórico; hojas Liquidaciones, Facturas y Terceros              | `servicios-historial-engine.ts` y sus tres builders                                               | La hoja es de solo lectura. Editar abre `ModalLiquidacion` con el `LiquidacionEditor` completo; presencia y eventos de dominio por `historial-servicios-session` (room global)                                              |
 
+En el canvas de nómina, «Desglose del desprendible» permite ocultar o mostrar
+por hoja —o para todo el periodo— las páginas de detalle: el desglose hora a
+hora de las planillas y la planilla de recorridos con días laborados. Al
+apagarlo, solo desaparecen esas páginas; los recargos siguen sumando en la
+primera página del desprendible.
+
 En la nómina, la rejilla de días se compacta por conductor. Cada hoja agrega
 columnas solo para sus servicios adicionales; un turno partido de otra persona
 no deja huecos ni desplaza las fechas de esta hoja.
@@ -78,8 +84,11 @@ En cierres multi-propietario, las filas de anticipos repartidos por igual llevan
 el concepto registrado y la cuota de cada propietario.
 El modal «Cierre · conceptos» permite editar gastos de vehículo y anticipos
 (concepto, cantidad o fecha e importe), además de recorrido, fechas, importes,
-cantidad y porcentaje administrativo de los adicionales. Los importes
-derivados y los totales se vuelven a calcular en el servidor al guardar.
+cantidad y porcentaje administrativo de los adicionales. La pestaña Conductores
+lista los conceptos por persona y permite añadir o quitar filas manuales ligadas
+al cierre y al conductor seleccionado. Esas filas entran en el total de costos
+laborales del cierre, pero no cambian las bases de prestaciones ni de seguridad
+social. El servidor vuelve a calcular los totales al guardar.
 El modal de generación abre filtrado al periodo del canvas y permite consolidar
 automáticamente los borradores del mismo propietario; el toolbar también
 permite seleccionar y agrupar borradores ya existentes del mismo periodo. La
@@ -387,3 +396,12 @@ referencia. Ver [pruebas-y-calidad.md](./pruebas-y-calidad.md).
   antes de replicar.
 - Allí `vite.config.ts` fija el puerto 5273 con `strictPort`; aquí el puerto es
   el de Vite por defecto.
+# Adicionales de nómina en cierres finales
+
+Al generar un borrador se importan los conceptos adicionales del desprendible
+de las nóminas cuyo `periodo_end` cae en el mes del cierre y están relacionadas
+con su placa. Cada concepto aparece como fila dinámica del conductor en la hoja
+y en el modal de conceptos. Se puede editar la cantidad o el valor unitario
+directamente en la hoja, incluso un valor negativo de deducción, o descartar
+la fila en el modal. Una sincronización posterior conserva las filas dinámicas
+ya editadas y respeta los descartes de ese cierre.
