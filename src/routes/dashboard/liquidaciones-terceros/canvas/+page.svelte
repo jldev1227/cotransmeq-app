@@ -28,6 +28,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { liquidacionesTercerosDescuentosAPI } from '$lib/api/liquidaciones-terceros-descuentos';
+	import { conceptosParaSincronizar } from '$lib/editor/business/sincronizar-adicionales-nomina';
 	import {
 		createCierresFinalesEngine,
 		disposeEngine,
@@ -1529,7 +1530,8 @@
 					const nomina = await liquidacionesTercerosDescuentosAPI.autocompletarNomina({
 						placa: cierre.placa,
 						mes,
-						anio
+						anio,
+						cierre_id: cierre.id
 					});
 
 					const conceptosNomina = nomina.conceptos ?? [];
@@ -1543,17 +1545,10 @@
 						return;
 					}
 
-					// Los COSTO_LABORAL se sustituyen enteros: son el reflejo de la
-					// nómina del mes, y conservar los viejos junto a los nuevos
-					// duplicaría cada conductor.
-					const conservados = (detalle.conceptos as any[]).filter(
-						(c) => c.tipo !== 'COSTO_LABORAL'
+					await liquidacionesTercerosDescuentosAPI.guardarConceptos(
+						cierre.id,
+						conceptosParaSincronizar(conceptosNomina, detalle.conceptos)
 					);
-
-					await liquidacionesTercerosDescuentosAPI.guardarConceptos(cierre.id, [
-						...conceptosNomina,
-						...conservados
-					] as any);
 					// Las retenciones gravan sobre lo liquidado, no sobre la nómina,
 					// pero `guardarConceptos` solo recalcula totales: sin esto, las
 					// filas de impuesto se quedarían con la base anterior.

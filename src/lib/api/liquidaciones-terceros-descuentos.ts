@@ -335,6 +335,7 @@ export const liquidacionesTercerosDescuentosAPI = {
 		placa: string;
 		mes: number;
 		anio: number;
+		cierre_id?: string;
 	}): Promise<AutocompletarNominaResult> {
 		const response = await apiClient.get('/api/liquidaciones-terceros/autocompletar-nomina', {
 			params

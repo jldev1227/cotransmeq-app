@@ -396,3 +396,12 @@ referencia. Ver [pruebas-y-calidad.md](./pruebas-y-calidad.md).
   antes de replicar.
 - Allí `vite.config.ts` fija el puerto 5273 con `strictPort`; aquí el puerto es
   el de Vite por defecto.
+# Adicionales de nómina en cierres finales
+
+Al generar un borrador se importan los conceptos adicionales del desprendible
+de las nóminas cuyo `periodo_end` cae en el mes del cierre y están relacionadas
+con su placa. Cada concepto aparece como fila dinámica del conductor en la hoja
+y en el modal de conceptos. Se puede editar la cantidad o el valor unitario
+directamente en la hoja, incluso un valor negativo de deducción, o descartar
+la fila en el modal. Una sincronización posterior conserva las filas dinámicas
+ya editadas y respeta los descartes de ese cierre.
