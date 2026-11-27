@@ -1698,7 +1698,10 @@ function groupByConductor(conceptos: any[]) {
 			totalConductor: number;
 		}
 	>();
-	const SALARIOS = ['SALARIO', 'AUXILIO_TRANSPORTE', 'BONIFICACION', 'OTROS_AUXILIOS', 'RECARGOS'];
+	const SALARIOS = [
+		'SALARIO', 'AUXILIO_TRANSPORTE', 'BONIFICACION', 'BONIFICACION_TURNO_DOBLE',
+		'OTROS_AUXILIOS', 'RECARGOS'
+	];
 	const PRESTACIONES = ['CESANTIAS', 'INTERESES_CESANTIAS', 'PRIMA', 'VACACIONES'];
 	const SEGURIDAD = ['SALUD', 'PENSION', 'ARP', 'PARAFISCALES'];
 
@@ -1718,7 +1721,8 @@ function groupByConductor(conceptos: any[]) {
 		}
 		const g = map.get(key)!;
 		g.totalConductor += c.valor_total || 0;
-		if (SALARIOS.includes(c.concepto)) g.salarios.push(c);
+		if (SALARIOS.includes(c.concepto) || (!PRESTACIONES.includes(c.concepto) && !SEGURIDAD.includes(c.concepto)))
+			g.salarios.push(c);
 		else if (PRESTACIONES.includes(c.concepto)) g.prestaciones.push(c);
 		else if (SEGURIDAD.includes(c.concepto)) g.seguridadSocial.push(c);
 	}

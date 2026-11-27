@@ -297,8 +297,8 @@ export interface HojaNominaDTO {
 	aplicaAjusteGeopark?: boolean;
 	ajusteRecargosCompletos?: boolean;
 	/**
-	 * Si el desprendible de esta liquidación imprime las tablas de recargos:
-	 * la segunda página, con el desglose hora a hora de cada planilla.
+	 * Si el desprendible de esta liquidación imprime las páginas de detalle:
+	 * el desglose hora a hora y la planilla de control de días laborados.
 	 *
 	 * Es `mostrar_recargos` de la liquidación y por defecto vale `true`. Se
 	 * cambia desde el carril del canvas y solo afecta al papel: los recargos

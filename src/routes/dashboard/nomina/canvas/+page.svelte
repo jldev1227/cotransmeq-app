@@ -1473,7 +1473,7 @@
 	}
 
 	/**
-	 * Enciende o apaga las tablas de recargos de unas liquidaciones.
+	 * Controla las páginas de detalle del desprendible de unas liquidaciones.
 	 *
 	 * Va por REST y no por el socket del canvas aunque `mostrar_recargos` esté
 	 * registrado como `flag` parcheable: no es una celda de la hoja, así que no
@@ -1489,7 +1489,7 @@
 		if (!ids.length || cambiandoTablas) return;
 		cambiandoTablas = true;
 		await conOverlay(
-			visible ? 'Mostrando las tablas de recargos' : 'Ocultando las tablas de recargos',
+			visible ? 'Mostrando el desglose' : 'Ocultando el desglose',
 			detalle,
 			async () => {
 				await toggleDesprendibleTablasVisible(ids, visible);
@@ -1498,8 +1498,8 @@
 				const cuantas = ids.length === 1 ? detalle : `${ids.length} desprendibles`;
 				toast.success(
 					visible
-						? `${cuantas}: el desglose de recargos vuelve al desprendible.`
-						: `${cuantas}: el desprendible sale sin el desglose de recargos.`,
+						? `${cuantas}: el desglose vuelve al desprendible.`
+						: `${cuantas}: el desprendible sale sin el desglose.`,
 					{ description: 'No cambia lo que se paga: los recargos siguen en el devengado.' }
 				);
 			}
@@ -1584,12 +1584,12 @@
 		},
 		{
 			id: 'tablas-recargos',
-			label: 'Tablas de recargos',
+			label: 'Desglose del desprendible',
 			hint: hojaActiva?.liquidacionId
 				? tablasEnHojaActiva
-					? `El desprendible de ${hojaActiva.nombre} lleva el desglose de recargos.`
-					: `El desprendible de ${hojaActiva.nombre} sale SIN el desglose de recargos.`
-				: 'Decide si el desprendible imprime el desglose de recargos.',
+					? `El desprendible de ${hojaActiva.nombre} incluye el desglose de planillas.`
+					: `El desprendible de ${hojaActiva.nombre} sale sin el desglose de planillas.`
+				: 'Decide si el desprendible imprime los desgloses de planillas y recorridos.',
 			icon: iconoTablasRecargos,
 			/// Cuántas hojas del periodo salen sin el desglose. Sin esto, apagarlo
 			/// en una hoja y olvidarlo no se ve desde ningún sitio.
@@ -1986,8 +1986,9 @@
 {#snippet panelTablasRecargos()}
 	<div class="trec">
 		<p class="trec-intro">
-			El desglose hora a hora de cada planilla, que va en la segunda página del
-			desprendible. Apagarlo <strong>no cambia lo que se paga</strong>: los
+			El desprendible incluye el desglose hora a hora de cada planilla en la segunda
+			página. Este interruptor también muestra u oculta la planilla de recorridos
+			con los días laborados. Apagarlo <strong>no cambia lo que se paga</strong>: los
 			recargos siguen sumando en la primera página.
 		</p>
 

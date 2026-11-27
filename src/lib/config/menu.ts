@@ -89,13 +89,6 @@ export const MENU_ITEMS: MenuItem[] = [
 		href: '/dashboard/capacitaciones/gestion'
 	},
 	{
-		id: 'recorridos',
-		label: 'Recorridos y días laborados',
-		icon: Route,
-		badge: null,
-		href: '/dashboard/conductores/recorridos'
-	},
-	{
 		id: 'clientes',
 		label: 'Clientes',
 		icon: Building2,

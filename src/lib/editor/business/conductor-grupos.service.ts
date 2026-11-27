@@ -17,7 +17,7 @@ import type { ConceptoDescuento } from '$lib/api/liquidaciones-terceros-descuent
  * invisible. Por eso BONIFICACION_TURNO_DOBLE entra aquí a la vez que se
  * empieza a generar en el servidor.
  */
-const SALARIOS = [
+export const CONCEPTOS_SALARIOS_FIJOS = [
   'SALARIO',
   'AUXILIO_TRANSPORTE',
   'BONIFICACION',
@@ -28,6 +28,17 @@ const SALARIOS = [
 const PRESTACIONES_CON_AUX = ['CESANTIAS', 'INTERESES_CESANTIAS', 'PRIMA'];
 const PRESTACIONES_SIN_AUX = ['VACACIONES'];
 const SEGURIDAD = ['SALUD', 'PENSION', 'ARP', 'PARAFISCALES'];
+const CONCEPTOS_CONDUCTOR_FIJOS = new Set([
+	...CONCEPTOS_SALARIOS_FIJOS,
+	...PRESTACIONES_CON_AUX,
+	...PRESTACIONES_SIN_AUX,
+	...SEGURIDAD
+]);
+
+/** Distingue filas añadidas a mano de los conceptos estándar del conductor. */
+export function esConceptoConductorDinamico(c: Pick<ConceptoDescuento, 'tipo' | 'concepto'>): boolean {
+	return c.tipo === 'COSTO_LABORAL' && !CONCEPTOS_CONDUCTOR_FIJOS.has(c.concepto);
+}
 
 export interface ConductorGrupo {
   conductorId: string | null;
@@ -85,7 +96,8 @@ export function getConductorGrupos(conceptos: ConceptoDescuento[]): ConductorGru
     const g = map.get(key)!;
     g.conceptos.push(c);
     g.totalConductor += c.valor_total || 0;
-    if (SALARIOS.includes(c.concepto)) g.salarios.push(c);
+    if (CONCEPTOS_SALARIOS_FIJOS.includes(c.concepto) || esConceptoConductorDinamico(c))
+      g.salarios.push(c);
     else if (
       PRESTACIONES_CON_AUX.includes(c.concepto) ||
       PRESTACIONES_SIN_AUX.includes(c.concepto)
